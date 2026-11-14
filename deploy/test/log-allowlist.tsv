@@ -6,3 +6,4 @@ agent-debug	^sendSyncMessageWithoutResponse@interface_impl\.h: Received error fr
 agent-debug	^executeHealthCheck@health_check_manager\.cc: Failed to send periodic health check patch to the fog	No Fog: the health check of the cloud is not sent, by design
 agent-debug	^loadAccessToken@agent_details\.cc: Failed to open session token file	No Fog, no token of a session: the agent runs without registration, by design
 nginxions	^nginx: \[lua\] crowdsec\.lua:N: Allow\(\): \[Crowdsec\] denied '<ip>' with '(ban|captcha)'	The bouncer logs each refused request at the error level: smoke attacks and bans the tester on purpose
+crowdsec	^No matching files for pattern /does/not/exist$	The official image of CrowdSec writes this placeholder into acquis.yaml; the sources of NginxionS are in acquis.d
