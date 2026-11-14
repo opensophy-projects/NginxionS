@@ -923,6 +923,40 @@ $CURL "$ADMIN/api/nginxions/analytics/requests?path=/smoke-known&limit=5" | grep
 sleep 16
 known=$($CURL "$ADMIN/api/nginxions/analytics/requests?path=/smoke-known&limit=1" | grep -o '"total": *[0-9]*' | grep -o '[0-9]*$')
 [ "$known" = 1 ] || fail "one request is stored $known times in the request log"
+# what an engineer checks by hand: as many rows as nginx served, no request lost or stored twice, and an attack of
+# the agent is one event (a duplicate or a lost line of a log reader shows here)
+run_id=$(date +%s)
+for i in $(seq 1 20); do
+  curl -sS --max-time 10 -o /dev/null -H 'Host: test.local' "$HTTP/smoke-count-$run_id?n=$i" || true
+done
+for i in $(seq 1 3); do
+  curl -sS --max-time 10 -o /dev/null -H 'Host: test.local' "$HTTP/smoke-attack-$run_id$SQLI&n=$i" || true
+done
+for i in $(seq 1 30); do
+  counted=$($CURL "$ADMIN/api/nginxions/analytics/requests?path=/smoke-count-$run_id&limit=1" \
+    | grep -o '"total": *[0-9]*' | grep -o '[0-9]*$')
+  [ "${counted:-0}" -ge 20 ] && break
+  sleep 2
+done
+# two more rounds of the readers: a row stored twice shows up late
+sleep 12
+counted=$($CURL "$ADMIN/api/nginxions/analytics/requests?path=/smoke-count-$run_id&limit=1" \
+  | grep -o '"total": *[0-9]*' | grep -o '[0-9]*$')
+[ "$counted" = 20 ] || fail "20 requests served by nginx, $counted in the request log"
+for i in $(seq 1 3); do
+  for j in $(seq 1 30); do
+    events=$($CURL "$ADMIN/api/nginxions/events?kind=security&host=test.local&q=smoke-attack-$run_id&limit=20")
+    echo "$events" | grep -q "n=$i\"" && break
+    [ "$j" = 30 ] && fail "the attack $i is not an event: $(echo "$events" | head -c 300)"
+    sleep 2
+  done
+done
+sleep 12
+events=$($CURL "$ADMIN/api/nginxions/events?kind=security&host=test.local&q=smoke-attack-$run_id&limit=20")
+for i in $(seq 1 3); do
+  n=$(echo "$events" | grep -o "\"query\": *\"[^\"]*n=$i\"" | wc -l)
+  [ "$n" = 1 ] || fail "the attack $i is $n events: $(echo "$events" | head -c 600)"
+done
 $CURL "$ADMIN/api/nginxions/analytics/requests?q=smoke-unknown&status=4xx,5xx,2xx,3xx&maxMs=60000&limit=5" \
   | grep -q '"not-a-host.local"' || fail "Events → Requests: search and filters miss the request"
 $CURL "$ADMIN/api/nginxions/analytics/requests/export?format=csv&q=smoke-unknown" | grep -q 'not-a-host.local' \

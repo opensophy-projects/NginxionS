@@ -34,6 +34,7 @@
 | DAST | **Nuclei** | известные CVE, открытые панели и файлы, ошибки конфигурации | `ci.yml` → `images` |
 | TLS | **testssl.sh** | протоколы, шифры, HSTS, известные атаки на TLS — интерфейса (:81) и прокси-хоста (:443) | `ci.yml` → `images` |
 | nginx | **gixy** | работающая конфигурация nginx (`nginx -T`): SSRF, инъекции заголовков, обход `alias` | `ci.yml` → `images` |
+| Эксплуатация | **audit-logs** (`scripts/audit-logs.mjs`) | после теста закрытого контура: ошибки и предупреждения всех контейнеров, debug-логов агента (`/var/log/nano_agent`) и nginx, сведённые к сигнатурам. Известные — в `deploy/test/log-allowlist.tsv`, у каждой причина. Новые — в Summary прогона и в `reports/logs/log-audit.md` (пока отчёт; `LOG_AUDIT=gate` — блокирует) | `ci.yml` → `images` |
 | Качество | **jscpd**, покрытие тестами | дублирование кода, покрытие backend (`node --test`), frontend (vitest) и Go-сервисов агента (`scripts/test-go.sh`) | `security.yml` |
 
 Код агента NginxionS (`openappsec/`: агент, attachment, shared storage, tuning, smartsync) — наш код: его проверяют те
@@ -44,6 +45,9 @@
 К ним добавляются проверки, которые были и раньше: biome, tsc, тесты (backend, frontend, Go-сервисы агента —
 `scripts/test-go.sh`, C++ unit-тесты агента — `ctest` при сборке образа `nginxions-openappsec`, образ не собирается,
 если тест упал), shellcheck, `compose config`, закрытый контур.
+
+Smoke сверяет данные так же, как инженер руками: 20 запросов, отданных nginx, — ровно 20 строк в журнале запросов,
+каждая из трёх помеченных атак — ровно одно событие агента (дубль или потеря строки при чтении логов видны сразу).
 
 DAST (`scripts/test-dast.sh`) поднимает прод-стек, настраивает его как администратор в GUI (`deploy/test/dast-setup.sh`:
 первый админ, корневой CA и серверный сертификат PKI NginxionS, прокси-хост `dast.local` с TLS, HTTP/2, HSTS и фильтром

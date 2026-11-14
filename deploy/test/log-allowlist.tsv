@@ -1,0 +1,8 @@
+# Errors and warnings of the test stack that are not bugs (scripts/audit-logs.mjs, run by scripts/test-airgap.sh).
+# source (a container, agent-debug, or * for any) <TAB> regular expression of the signature <TAB> why it is expected.
+# A signature has no times, addresses or numbers (N). Add a line only with the reason it is expected, never to make
+# a run pass: an unexplained error is a bug to fix.
+agent-debug	^sendSyncMessageWithoutResponse@interface_impl\.h: Received error from server\. .*NginxionS: the agent has no cloud	The agent of NginxionS has no Fog (openappsec/agent): its calls to the cloud end here, by design
+agent-debug	^executeHealthCheck@health_check_manager\.cc: Failed to send periodic health check patch to the fog	No Fog: the health check of the cloud is not sent, by design
+agent-debug	^loadAccessToken@agent_details\.cc: Failed to open session token file	No Fog, no token of a session: the agent runs without registration, by design
+nginxions	^nginx: \[lua\] crowdsec\.lua:N: Allow\(\): \[Crowdsec\] denied '<ip>' with '(ban|captcha)'	The bouncer logs each refused request at the error level: smoke attacks and bans the tester on purpose
