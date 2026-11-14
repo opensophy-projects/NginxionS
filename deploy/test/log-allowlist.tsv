@@ -7,3 +7,8 @@ agent-debug	^executeHealthCheck@health_check_manager\.cc: Failed to send periodi
 agent-debug	^loadAccessToken@agent_details\.cc: Failed to open session token file	No Fog, no token of a session: the agent runs without registration, by design
 nginxions	^nginx: \[lua\] crowdsec\.lua:N: Allow\(\): \[Crowdsec\] denied '<ip>' with '(ban|captcha)'	The bouncer logs each refused request at the error level: smoke attacks and bans the tester on purpose
 crowdsec	^No matching files for pattern /does/not/exist$	The official image of CrowdSec writes this placeholder into acquis.yaml; the sources of NginxionS are in acquis.d
+postgres	^postgres: database "iNdatatubeschemasecurityeventlogsvN" does not exist$	The tuning service creates its database with the first log of the agent: the first open fails by design (smartsync-tuning datatube.go InsertLog)
+postgres	^postgres: relation "appsec" does not exist$	The tuning service creates its table with the first log: the first insert fails by design, then the table is made
+postgres	^postgres: no partition of relation "appsec" found for row$	The table of the tuning service has a partition per UTC day, made by the first insert of the day (and a day ahead): that insert fails once by design
+postgres	^postgres: duplicate key value violates unique constraint "pg_database_datname_index"$	Parallel first logs create the database at once; the loser opens the one the other made (NginxionS: InsertLog does not drop its log)
+postgres	^postgres: relation "appsec_p_N_N_N" already exists$	Parallel writers create the partition of a day at once; the loser inserts into it (NginxionS: InsertLog does not drop its log)
