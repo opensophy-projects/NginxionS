@@ -33,6 +33,10 @@ cleanup() {
         grep -h -A 40 "^exceptions:" /etc/cp/conf/local_policy.yaml 2> /dev/null | head -n 60;
         grep -o "\"exceptions\": *\[.\{0,2000\}" /tmp/local_appsec.policy 2> /dev/null | head -c 2000; echo;
         grep -ho "\"exception\": *\[.\{0,2000\}" /etc/cp/conf/*/*.policy 2> /dev/null | sort -u | head -c 3000; echo;
+        echo "--- rules of local_policy.yaml (their exceptions) and the overrides the WAF of the agent applies ---";
+        grep -h -A 60 "^policies:" /etc/cp/conf/local_policy.yaml 2> /dev/null | head -n 80;
+        grep -ho "\"overrides\": *\[.\{0,3000\}" /etc/cp/conf/waap/*.policy /etc/cp/conf/*/*.policy 2> /dev/null \
+          | sort -u | head -c 4000; echo;
         echo "--- orchestration: checks of updates, policies applied ---";
         grep -h "check update\|Check update\|NginxionS\|apply\|Failed\|econfiguration" /var/log/nano_agent/cp-nano-orchestration.dbg* \
           2> /dev/null | tail -n 40' || true
