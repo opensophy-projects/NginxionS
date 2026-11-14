@@ -123,6 +123,10 @@ jobs:
         run: scripts/test-go.sh
       - name: converter of Snort signatures of the agent (JavaScript = Python of upstream)
         run: node --test openappsec/agent/nodes/http_transaction_handler/package/snort_to_ips_local.test.mjs
+      - name: Lua modules in nginx (File Security), with LuaJIT
+        run: |
+          sudo apt-get install -y -qq luajit > /dev/null
+          scripts/test-lua.sh
       - name: audit of the logs of the test stack (scripts/audit-logs.mjs)
         run: node --test scripts/audit-logs.test.mjs
       - name: file tree
@@ -245,6 +249,12 @@ jobs:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
           NGINXIONS_VERSION: ${{ env.VERSION }}
         run: scripts/test-airgap.sh
+      - name: WAF score (GoTestWAF against a protected host, closed network)
+        env:
+          NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          NGINXIONS_VERSION: ${{ env.VERSION }}
+          OUT: reports/waf
+        run: scripts/test-waf-score.sh
       - name: image scan (Trivy, Syft SBOM, Grype, Dockle)
         env:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
