@@ -65,9 +65,19 @@ local function severity_of(name)
   return "medium"
 end
 
---- an archive, by its first bytes: zip (and its documents), gzip, bzip2, xz, 7-Zip, RAR, cab, tar
+--- a document of Office (OOXML) or OpenDocument is a zip, but a file to scan, not an archive: its first entry is
+--- [Content_Types].xml or mimetype
+local function is_document(head)
+  if head:sub(1, 4) ~= "PK\3\4" or #head < 31 then return false end
+  local b1, b2 = head:byte(27, 28)
+  local name = head:sub(31, 30 + b1 + b2 * 256)
+  return name == "[Content_Types].xml" or name == "mimetype"
+end
+
+--- an archive, by its first bytes: zip, gzip, bzip2, xz, 7-Zip, RAR, cab, tar
 local function is_archive(head)
   if not head or #head < 4 then return false end
+  if is_document(head) then return false end
   local four = head:sub(1, 4)
   if four == "PK\3\4" or four == "PK\5\6" or head:sub(1, 2) == "\31\139" or head:sub(1, 3) == "BZh"
     or head:sub(1, 6) == "\253" .. "7zXZ\0" or head:sub(1, 6) == "7z\188\175\39\28" or head:sub(1, 4) == "Rar!"
@@ -291,7 +301,7 @@ function M.check()
   end
   -- the deep static analysis (threatEmulationEnabled of the practice): off, its findings are left out
   local deep = verdict ~= "OK" and (verdict:match("^Heuristics%.OLE2%.ContainsMacros")
-    or verdict:match("^Heuristics%.Broken%.") or verdict:match("^Heuristics%.PartitionIntersection"))
+    or verdict:match("^Heuristics%.Broken%.") or verdict:match("^Heuristics%.%u+Partition"))
   if deep then
     if not rule.deep then
       verdict = "OK"

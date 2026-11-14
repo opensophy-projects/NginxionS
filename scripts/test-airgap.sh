@@ -113,6 +113,31 @@ if [[ " ${services[*]} " == *" openappsec "* ]]; then
   fi
 fi
 
+if [[ " ${services[*]} " == *" openappsec "* ]]; then
+  # smoke set the log trigger to syslog on localhost:5514 (UDP) and 127.0.0.1:5515 (TCP): the agent sends to the relay
+  # of NginxionS (waf/syslog.js), which forwards to both. The listeners run in the network of the agent.
+  echo "==> syslog of the agent reaches every server through the relay of NginxionS"
+  "${compose[@]}" exec -T -d nginxions node -e '
+    const fs = require("node:fs");
+    require("node:dgram").createSocket("udp4").on("message", (m) => fs.appendFileSync("/tmp/syslog-udp", m + "\n"))
+      .bind(5514, "127.0.0.1");
+    require("node:net").createServer((c) => c.on("data", (d) => fs.appendFileSync("/tmp/syslog-tcp", d)))
+      .listen(5515, "127.0.0.1");
+    setTimeout(() => process.exit(0), 180000);'
+  for i in $(seq 1 45); do
+    "${compose[@]}" exec -T nginxions curl -s -o /dev/null --max-time 5 -H 'Host: test.local' \
+      "http://127.0.0.1/?id=1%27%20OR%20%271%27=%271" || true
+    got=$("${compose[@]}" exec -T nginxions sh -c 'test -s /tmp/syslog-udp && test -s /tmp/syslog-tcp && echo yes' || true)
+    [ "$got" = yes ] && break
+    [ "$i" = 45 ] && { echo "FAIL: syslog of the agent did not reach both servers through the relay"; \
+      "${compose[@]}" exec -T nginxions sh -c 'ls -la /tmp/syslog-* 2>&1; head -c 300 /tmp/syslog-* 2>&1' || true; exit 1; }
+    sleep 2
+  done
+  # TCP is framed by octet counting, as the agent does it: "<length> <message>"
+  "${compose[@]}" exec -T nginxions sh -c 'head -c 200 /tmp/syslog-tcp' | grep -Eq '^[0-9]+ ' \
+    || { echo "FAIL: syslog over TCP is not framed by octet counting"; exit 1; }
+fi
+
 nginx_timeouts() {
   "${compose[@]}" logs --no-color nginxions 2>&1 | grep -c "Reached timeout during attempt to signal nano service" || true
 }
