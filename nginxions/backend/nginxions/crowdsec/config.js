@@ -332,6 +332,24 @@ export const renderAllowlist = (s) => {
 	return docs([{ name: "nginxions/allowlist", description: "Allowlist of NginxionS", whitelist }]);
 };
 
+/**
+ * parsers/s02-enrich/nginxions-policy-engines.yaml: the refusals of Anti-Bot and Schema Validation of the WAF policy
+ * (DropRequest of waf/engines.js, "NginxionS ..." as their rule) stay alerts (WAF -> Events) but no scenario counts
+ * them. crowdsecurity/appsec-vpatch bans an IP after two distinct rules in a minute: two requests against an OpenAPI
+ * file with different errors would ban a client for hours, which the engines of open-appsec never do.
+ */
+export const renderEnginesWhitelist = () =>
+	docs([
+		{
+			name: "nginxions/policy-engines",
+			description: "Refusals of the engines of the WAF policy of NginxionS ban no one",
+			whitelist: {
+				reason: "NginxionS: Anti-Bot and Schema Validation refuse a request, they do not ban",
+				expression: ["evt.Meta.log_type == 'appsec-block' && evt.Meta.rule_name startsWith 'NginxionS'"],
+			},
+		},
+	]);
+
 /** scenarios/nginxions-openappsec-prevent.yaml: N requests of an IP blocked by open-appsec in M minutes */
 export const renderScenario = (s) => {
 	const { enabled, events, minutes } = s.openappsec_ban;
