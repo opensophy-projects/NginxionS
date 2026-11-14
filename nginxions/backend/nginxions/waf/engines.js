@@ -85,8 +85,10 @@ export const forAgent = (doc) => ({
 	...doc,
 	threatPreventionPractices: list(doc.threatPreventionPractices).map((p) => {
 		const out = { ...p };
+		// only the mode: the agent reads antiBot.injectedUris and validatedUris as strings, the {uri} objects of
+		// v1beta2 made it refuse the whole policy (it kept the previous one); the rest is of no use to it either
 		for (const engine of NOT_IN_AGENT) {
-			if (out[engine]) out[engine] = { ...out[engine], overrideMode: "inactive" };
+			if (out[engine]) out[engine] = { overrideMode: "inactive" };
 		}
 		return out;
 	}),
