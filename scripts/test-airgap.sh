@@ -14,8 +14,28 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-nginxions-airgap}"
 compose=(docker compose -f deploy/compose.yaml -f deploy/test/compose.airgap.yaml)
 read -r -a services <<< "${SERVICES:-nginxions openappsec crowdsec clamav}"
 
+# every error and warning of the stack, compared with deploy/test/log-allowlist.tsv (scripts/audit-logs.mjs): the
+# report is in reports/logs and in the summary of the run; LOG_AUDIT=gate fails the test on a new one
+audit_logs() {
+  out=reports/logs
+  mkdir -p "$out"
+  for svc in $("${compose[@]}" ps -a --services 2> /dev/null); do
+    "${compose[@]}" logs --no-color --no-log-prefix "$svc" > "$out/$svc.log" 2>&1 || true
+  done
+  if [ -n "$("${compose[@]}" ps -q openappsec 2> /dev/null)" ]; then
+    "${compose[@]}" exec -T openappsec sh -c 'cat /var/log/nano_agent/*.dbg* /var/log/nano_agent/*.err 2> /dev/null' \
+      > "$out/agent-debug.log" 2>&1 || true
+  fi
+  if command -v node > /dev/null; then
+    node scripts/audit-logs.mjs "$out" --out "$out" ${LOG_AUDIT:+$([ "$LOG_AUDIT" = gate ] && echo --gate)}
+  else
+    echo "log audit skipped: no node"
+  fi
+}
+
 cleanup() {
   status=$?
+  audit_logs || true
   if [ $status -ne 0 ]; then
     echo "--- logs (failure) ---"
     "${compose[@]}" logs --no-color --tail 80 || true
