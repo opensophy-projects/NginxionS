@@ -752,10 +752,10 @@ func (qa *Adapter) InsertLog(ctx context.Context, message *models.AgentMessage) 
 	log.WithContext(ctx).Infof("insert statement: %v", stmtStr)
 	conn, err := qa.driver.Open(qa.dbName)
 	if err != nil {
-		errCreateDB := qa.createDB(ctx)
-		if errCreateDB != nil {
-			log.WithContext(ctx).Warnf("failed to create db, err: %v", errCreateDB)
-			return errors.Wrap(err, "failed to open connection to DB")
+		// NginxionS: the first logs come in parallel; when another writer created the database first, this one gets
+		// "duplicate key ... pg_database_datname_index" and dropped its log. The database exists then: it is opened.
+		if errCreateDB := qa.createDB(ctx); errCreateDB != nil {
+			log.WithContext(ctx).Warnf("failed to create db (another writer may have), err: %v", errCreateDB)
 		}
 		conn, err = qa.driver.Open(qa.dbName)
 		if err != nil {
@@ -766,9 +766,11 @@ func (qa *Adapter) InsertLog(ctx context.Context, message *models.AgentMessage) 
 	affected, err := executeStmt(ctx, conn, stmtStr, args)
 	if err != nil {
 		log.WithContext(ctx).Infof("encounter error: %v on first insertion attempt", err)
-		err = qa.createTablePartition(ctx, conn, message)
-		if err != nil {
-			return errors.Wrap(err, "failed to create table")
+		// NginxionS: a parallel writer creating the same table or partition makes this one fail ("already exists");
+		// the insert is tried again all the same, its failure is the error
+		if errCreate := qa.createTablePartition(ctx, conn, message); errCreate != nil {
+			log.WithContext(ctx).Warnf("failed to create the table or its partition (another writer may have), err: %v",
+				errCreate)
 		}
 		affected, err = executeStmt(ctx, conn, stmtStr, args)
 		if err != nil {
