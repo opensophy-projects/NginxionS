@@ -387,6 +387,9 @@ Security есть только в Premium-версии. NginxionS выполня
 - Detect записывает отказ в события и пропускает запрос.
 - Файл, который использует практика, удалить нельзя. Файл, которого нет в NginxionS, становится
   предупреждением политики. Новая загрузка файла с тем же именем перезагружает CrowdSec.
+- Отказы Anti-Bot и Schema Validation остаются оповещениями CrowdSec (видны в событиях), но не банят адрес: их
+  исключает парсер `nginxions/policy-engines` (`parsers/s02-enrich/nginxions-policy-engines.yaml`). Иначе сценарий
+  хаба `crowdsecurity/appsec-vpatch` банил бы клиента на часы за два запроса с разными ошибками схемы за минуту.
 
 ### 8.4. File Security: ClamAV
 
