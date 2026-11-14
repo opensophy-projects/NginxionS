@@ -13,6 +13,7 @@ import {
 	fatalMessages,
 	renderAcquis,
 	renderAllowlist,
+	renderEnginesWhitelist,
 	renderConfigLocal,
 	renderProfiles,
 	renderScenario,
@@ -30,13 +31,15 @@ const HEALTH_TIMEOUT_MS = Number(process.env.NGINXIONS_CROWDSEC_HEALTH_TIMEOUT_M
 const SETTLE_MS = Number(process.env.NGINXIONS_CROWDSEC_SETTLE_MS || 4000);
 
 // files whose change a reload picks up; config.yaml.local (LAPI, AppSec listener...) needs a restart
-const RELOADED = ["acquis", "profiles", "allowlist", "scenario", "simulation", "policy"];
+const RELOADED = ["acquis", "profiles", "allowlist", "engines", "scenario", "simulation", "policy"];
 
 /** files NginxionS owns in the config volume */
 const FILES = {
 	acquis: "acquis.d/nginxions.yaml",
 	profiles: "profiles.yaml",
 	allowlist: "parsers/s02-enrich/nginxions-allowlist.yaml",
+	// refusals of the engines of the WAF policy ban no one
+	engines: "parsers/s02-enrich/nginxions-policy-engines.yaml",
 	scenario: "scenarios/nginxions-openappsec-prevent.yaml",
 	simulation: "nginxions-simulation.yaml",
 	config: "config.yaml.local",
@@ -84,6 +87,7 @@ export const render = async (settings) => {
 		acquis: renderAcquis(s),
 		profiles: renderProfiles(s),
 		allowlist: renderAllowlist(s),
+		engines: renderEnginesWhitelist(),
 		scenario: renderScenario(s),
 		simulation: renderSimulation(s),
 		config: renderConfigLocal(s, { registrationToken: await registrationToken() }),

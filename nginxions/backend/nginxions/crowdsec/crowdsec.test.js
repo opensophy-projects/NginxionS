@@ -15,6 +15,7 @@ import {
 	normalizeIpOrCidr,
 	renderAcquis,
 	renderAllowlist,
+	renderEnginesWhitelist,
 	renderBouncer,
 	renderConfigLocal,
 	renderNginx,
@@ -344,4 +345,11 @@ test("the engines of the WAF policy turn AppSec on with the appsec-config of the
 	);
 	assert.deepEqual(on.appsec.configs, ["crowdsecurity/appsec-default"]);
 	assert.deepEqual(on.appsec.policy, ["nginxions/policy"]);
+});
+
+test("refusals of Anti-Bot and Schema Validation stay alerts but ban no one", () => {
+	const [parser] = YAML.parseAllDocuments(renderEnginesWhitelist()).map((d) => d.toJS());
+	assert.equal(parser.name, "nginxions/policy-engines");
+	// the rule of a refusal is the reason of DropRequest in waf/engines.js
+	assert.match(parser.whitelist.expression[0], /rule_name startsWith 'NginxionS'/);
 });
