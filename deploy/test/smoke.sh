@@ -1391,6 +1391,21 @@ EOF
   wait_page / 403 "test.local for an address banned for its attacks"
   api_json "$ADMIN/api/nginxions/crowdsec/decisions/delete" -d "{\"values\": [\"$client_ip\"]}" > /dev/null
   wait_page / 200 "test.local after the unban"
+
+  step "WAF -> Policy: syslog to several servers and by name goes through the relay of NginxionS"
+  # localhost (a name, UDP) and 127.0.0.1 over TCP: the agent sends to one IPv4 server itself, so these go to the relay
+  # of the backend on 127.0.0.1:79xx (waf/syslog.js); scripts/test-airgap.sh listens on both and checks the messages
+  syslog=$(post_json POST /objects '{"kind": "log_trigger", "name": "smoke-syslog", "spec": {"logDestination": {
+    "logToAgent": true, "syslogService": [{"address": "localhost", "port": 5514, "proto": "udp"},
+    {"address": "127.0.0.1", "port": 5515, "proto": "tcp"}]}}}' | new_id)
+  [ -n "$syslog" ] || fail "the log trigger with syslog was not created"
+  # stays on test.local to the end: scripts/test-airgap.sh sends an attack and reads what the servers got
+  host_objects "{\"triggers\": [$syslog]}"
+  for i in $(seq 1 30); do
+    $CURL "$ADMIN/api/nginxions/waf/policy" | grep -q 'port: 7900' && break
+    [ "$i" = 30 ] && fail "the policy of the agent does not send syslog to the relay: $($CURL "$ADMIN/api/nginxions/waf/policy" | grep -A4 syslog)"
+    sleep 2
+  done
 fi
 
 step "CrowdSec: a blocklist file becomes decisions, the allowlist and bad lines are left out"

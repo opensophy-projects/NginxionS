@@ -419,7 +419,9 @@ Security есть только в Premium-версии. NginxionS выполня
   - высокая — Trojan, Downloader, Dropper, Loader, Infostealer, Keylogger, Spyware, Malware, Macro, Coinminer, Webshell;
   - низкая — PUA, Adware, Joke;
   - средняя — эвристика, фишинг, упаковщики, тестовые файлы (EICAR) и остальное.
-- Архивы (`archiveInspection`), их узнают по первым байтам (zip и документы Office, gzip, bzip2, xz, 7-Zip, RAR, cab, tar):
+- Архивы (`archiveInspection`), их узнают по первым байтам (zip, gzip, bzip2, xz, 7-Zip, RAR, cab, tar). Документы
+  Office и OpenDocument — тоже zip, но это файлы: они проверяются всегда (по первому файлу внутри: `[Content_Types].xml`
+  или `mimetype`):
   - `extractArchiveFiles: false` (по умолчанию) — архив не распаковывается и не проверяется, как у агента;
   - `true` — clamd распаковывает и проверяет архив не больше `scanMaxFileSize`, более крупный проходит без проверки;
   - `archivedFilesWithinArchivedFiles` — действие для zip-архива, в котором лежит архив (по именам его файлов);
