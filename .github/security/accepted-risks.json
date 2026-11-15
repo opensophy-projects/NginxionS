@@ -281,6 +281,22 @@
 			"kind": "false-positive",
 			"tool": "codeql-js",
 			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/waf/files.js",
+			"reason": "a signature database of ClamAV the administrator uploads (waf_policy:manage): its name must match [a-z0-9][a-z0-9_-]{0,63}.(cvd|cld|cud) (no path), its content must start with the ClamAV-VDB header; written to the fixed directory of clamd as .tmp and renamed",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/waf/schemas.js",
+			"reason": "an OpenAPI file the administrator uploads (waf_policy:manage): checkName allows a plain file name (.yaml, .yml, .json, no '..' or '/'), describe() parses it as OpenAPI first; written 0600 to the fixed directory of the schemas (0700) as .tmp and renamed",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
 			"where": "nginxions/backend/nginxions/pki/openssl.js",
 			"reason": "inputs of openssl written as 0600 files of a private temporary directory, removed afterwards",
 			"until": "2027-05-01"

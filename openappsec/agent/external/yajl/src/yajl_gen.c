@@ -210,7 +210,8 @@ yajl_gen_integer(yajl_gen g, long long int number)
 {
     char i[32];
     ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
-    sprintf(i, "%lld", number);
+    /* NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string) */
+    snprintf(i, sizeof(i), "%lld", number);
     g->print(g->ctx, i, (unsigned int)strlen(i));
     APPENDED_ATOM;
     FINAL_NEWLINE;
@@ -230,9 +231,11 @@ yajl_gen_double(yajl_gen g, double number)
     ENSURE_VALID_STATE; ENSURE_NOT_KEY;
     if (isnan(number) || isinf(number)) return yajl_gen_invalid_number;
     INSERT_SEP; INSERT_WHITESPACE;
-    sprintf(i, "%.20g", number);
+    /* NginxionS: bounded writes (Semgrep nginxions-agent-unsafe-string) */
+    snprintf(i, sizeof(i), "%.20g", number);
     if (strspn(i, "0123456789-") == strlen(i)) {
-        strcat(i, ".0");
+        size_t len = strlen(i);
+        snprintf(i + len, sizeof(i) - len, ".0");
     }
     g->print(g->ctx, i, (unsigned int)strlen(i));
     APPENDED_ATOM;

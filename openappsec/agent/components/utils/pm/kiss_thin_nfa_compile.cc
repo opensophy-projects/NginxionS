@@ -192,8 +192,9 @@ state_name(const kiss_thin_nfa_state_t *state)
         const char *state_name;
         // Only the root makes sense. But deal with a missing pattern text anyway
         state_name = (state->flags & THIN_NFA_STATE_ROOT) ? "ROOT" : "INVALID";
-        strcpy(p, state_name);
-        p += strlen(state_name);
+        // NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string)
+        snprintf(p, MAX_STATE_NAME_LEN-(p-name), "%s", state_name);
+        p += strlen(p);
     } else {
         u_int i;
         // Normal state - use the relevant prefix of the pattern text

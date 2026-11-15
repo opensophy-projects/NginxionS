@@ -92,14 +92,9 @@ yajl_render_error_string(yajl_handle hand, const unsigned char * jsonText,
         }
         str = (unsigned char *) YA_MALLOC(&(hand->alloc), memneeded + 2);
         if (!str) return NULL;
-        str[0] = 0;
-        strcat((char *) str, errorType);
-        strcat((char *) str, " error");
-        if (errorText != NULL) {
-            strcat((char *) str, ": ");
-            strcat((char *) str, errorText);
-        }
-        strcat((char *) str, "\n");
+        /* NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string) */
+        snprintf((char *) str, memneeded + 2, "%s error%s%s\n", errorType,
+                 errorText != NULL ? ": " : "", errorText != NULL ? errorText : "");
     }
 
     /* now we append as many spaces as needed to make sure the error
@@ -128,15 +123,11 @@ yajl_render_error_string(yajl_handle hand, const unsigned char * jsonText,
         text[i++] = '\n';
         text[i] = 0;
         {
-            char * newStr = (char *)
-                YA_MALLOC(&(hand->alloc), (unsigned int)(strlen((char *) str) +
-                                                         strlen((char *) text) +
-                                                         strlen(arrow) + 1));
+            size_t newLen = strlen((char *) str) + strlen((char *) text) + strlen(arrow) + 1;
+            char * newStr = (char *) YA_MALLOC(&(hand->alloc), (unsigned int) newLen);
             if (newStr) {
-                newStr[0] = 0;
-                strcat((char *) newStr, (char *) str);
-                strcat((char *) newStr, text);
-                strcat((char *) newStr, arrow);
+                /* NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string) */
+                snprintf(newStr, newLen, "%s%s%s", (char *) str, text, arrow);
             }
             YA_FREE(&(hand->alloc), str);
             str = (unsigned char *) newStr;

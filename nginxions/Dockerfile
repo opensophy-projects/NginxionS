@@ -240,7 +240,7 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 ARG TARGETARCH
 ARG LEGO_VERSION=v4.35.2
 # libraries raised over the ones of the release: their versions have known vulnerabilities (Trivy, docs/DEVSECOPS.md)
-ARG LEGO_UPGRADES="golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.85.0 github.com/go-jose/go-jose/v4@v4.1.9 software.sslmate.com/src/go-pkcs12@v0.7.2"
+ARG LEGO_UPGRADES="golang.org/x/crypto@v0.58.1-0.20261009181718-2f1f834330b2 golang.org/x/net@v0.62.0 golang.org/x/text@v0.43.0 google.golang.org/grpc@v1.85.0 github.com/go-jose/go-jose/v4@v4.1.9 software.sslmate.com/src/go-pkcs12@v0.7.2 go.opentelemetry.io/otel@v1.47.0 go.opentelemetry.io/otel/trace@v1.47.0 go.opentelemetry.io/otel/metric@v1.47.0"
 WORKDIR /build
 RUN apk add --no-cache file && \
     export GOTOOLCHAIN=local GOFLAGS=-trimpath GOPATH=/go && \
