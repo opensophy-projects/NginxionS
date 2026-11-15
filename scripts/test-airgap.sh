@@ -137,10 +137,10 @@ echo "==> networks: from the edge, internal services and the local ports of open
 "${compose[@]}" run --rm -T --entrypoint sh tester -c '
   bad=""
   for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
-    curl -s -o /dev/null --max-time 4 "telnet://$t" < /dev/null
-    rc=$?
-    # 6: no such name on this network, 7: refused; anything else reached it (or hung on it)
-    case $rc in 6|7) ;; *) bad="$bad $t(curl $rc)" ;; esac
+    # the time of the TCP connection: 0 when none was made (no such name on this network, refused, dropped); a server
+    # that waits for its client keeps curl until the timeout, so its exit code does not tell
+    tc=$(curl -s -o /dev/null -w "%{time_connect}" --connect-timeout 3 --max-time 4 "telnet://$t" < /dev/null)
+    case "$tc" in 0|0.0*|0,0*|"") ;; *) bad="$bad $t(connected in ${tc}s)" ;; esac
   done
   [ -z "$bad" ] || { echo "FAIL: reachable from the edge network:$bad"; exit 1; }
   echo "    none reachable"' || { echo "FAIL: the networks of the stack are not isolated"; exit 1; }
