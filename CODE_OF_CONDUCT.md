@@ -165,6 +165,7 @@ flowchart LR
 - **`.github/`**
   - `workflows/ci.yml` — CI: быстрые проверки на каждый push; полный прогон (сборка образов, закрытый контур, скан
     образов, DAST, отчёт безопасности, публикация на Docker Hub) на `work`, тегах, PR, `security/**`, `[full]`
+  - `workflows/nightly.yml` — каждую ночь: долгий фаззинг парсеров (`fuzz.test.mjs`, Lua File Security), опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке, отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
   - `workflows/security-weekly.yml` — каждую неделю: ветка `security/<дата>` от `work`, полный CI на ней, issue с
     отчётом, удаление веток старше 8 недель
   - `workflows/training.yml` — обучение модели WAF: ветки `training/**`, `[train]` в коммите или кнопка; модель,
@@ -174,7 +175,8 @@ flowchart LR
   - `actionlint.yaml` — настройки actionlint (метки раннеров)
   - **`security/`** — настройки сканеров
     - `tools.env` — образы и версии всех сканеров, закреплённые по digest
-    - `semgrep.yml` — правила Semgrep для NginxionS: таймауты запросов, shell, сырой HTML, SQL из шаблонов
+    - `semgrep.yml` — правила Semgrep для NginxionS: таймауты запросов, shell, сырой HTML, SQL из шаблонов; из наших ошибок — регулярные выражения из переменных, секреты в логах, shell из Lua nginx, сокет Docker и privileged в compose, небезопасные строки C в агенте
+    - `waf-baseline.json` — базовая оценка WAF (GoTestWAF) и допуск: ниже — тест `waf-score` падает
     - `gitleaks.toml` — Gitleaks: стандартные правила и места с примерами вместо секретов
     - `codeql.yml` — CodeQL: что не код продукта
     - `hadolint.yaml` — hadolint: отключённые правила с причинами
@@ -184,12 +186,14 @@ flowchart LR
 
 ### `deploy/` — запуск стека
 
-- `compose.yaml` — прод-стек: `nginxions`, `openappsec`, `crowdsec`, `postgres` и разовый `nginxions-init`
+- `compose.yaml` — прод-стек: `nginxions`, `openappsec`, `crowdsec`, `clamav`, `postgres` и разовый `nginxions-init`
 - `compose.dev.yaml` — надстройка для разработки: dev-образ, синхронизация backend, генератор атак
 - `.env` — закреплённые версии образов и реестр
 - **`init/`**
   - `nginxions-init.sh` — разовый старт: секреты, каталоги томов, офлайн-снимок hub CrowdSec
   - `postgres-init.sh` — базы и пользователи postgres при первом запуске
+- **`clamav/`**
+  - `nginxions-clamav.sh` — запуск контейнера `clamav`: clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению
 - **`openappsec/`** — образ `nginxions-openappsec`
   - `Dockerfile` — агент open-appsec (C++), shared storage и tuning (Go) из исходников корневого `openappsec/`, `nginxions-control`
   - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning, `nginxions-control`
@@ -197,7 +201,12 @@ flowchart LR
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
   - `compose.airgap.yaml` — стек без выхода в интернет
-  - `smoke.sh` — сценарии проверки всех функций на этом стеке
+  - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
+  - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
+  - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
+  - `upgrade-check.sh` — данные теста обновления (`seed`) и их проверка после обновления (`verify`)
+  - `waf-score-setup.sh` — подготовка стека для оценки WAF: админ, хост `test.local` под WAF в режиме блокировки
+  - `log-allowlist.tsv` — известные ошибки и предупреждения тестового стека, каждая с причиной, почему это не баг (`scripts/audit-logs.mjs`)
   - `compose.dast.yaml` — стек для DAST: сайт за прокси-хостом и контейнер настройки
   - `dast-setup.sh` — настройка стека для DAST как в GUI: админ, сертификат PKI, прокси-хост с TLS
   - `compose.training.yaml` — стенд обучения модели WAF: сайт за прокси-хостом, выгрузка признаков агента
@@ -215,12 +224,18 @@ flowchart LR
 - **`agent/`** — агент (C++): без облака вовсе (не регистрируется, не подключается к Fog, отказывается слать
   сообщения и скачивать файлы с хостов open-appsec/Check Point, ходит к локальным tuning и shared storage без
   токена); политика из GUI (`apply-policy`) применяется за секунды, а не на следующей проверке обновлений; лимиты для хостов без схемы и с портом, правила лимитов локальной политики (без `action` и `match`);
+  локальная политика v1beta2 применяется полностью (`docs/WAF-POLICY.md`: перенаправление, действие, условия и
+  ответ правил лимитов, лимит на ассет, доверенные источники без идентификатора, все файлы Snort, протокол
+  syslog/CEF), unit-тесты секций — `components/security_apps/local_policy_mgmt_gen/local_policy_mgmt_gen_ut/`;
   выгрузка признаков модели для обучения (только на стенде обучения, `docs/MODEL.md`); модель
   `components/security_apps/waap/resources/waap.data` — продвинутая модель Check Point («Advanced model, V2.0»,
   лицензия внутри файла) с заголовками браузеров (`Sec-Fetch-*`, `Priority`…) среди чистых заголовков сигнатур;
   конвертер сигнатур Snort на JavaScript (`nodes/http_transaction_handler/package/snort_to_ips_local.mjs`: в образе
   нет Python; питоновский оригинал upstream лежит рядом как эталон для теста `snort_to_ips_local.test.mjs` с
-  правилами `testdata/snort-rules.txt`)
+  правилами `testdata/snort-rules.txt`); IPS загружает открытые (не зашифрованные Check Point) сигнатуры, свои
+  сигнатуры NginxionS — `nginxions/ips-protections.json` (правила виртуальных патчей хаба CrowdSec, MIT, перевод
+  `scripts/update-ips-signatures.mjs`; ctest `ips_ut` проверяет, что каждая загружается); генератор локальной
+  политики кладёт их в секцию IPS, когда практика включает `intrusionPrevention`
 - **`attachment/`** — модуль nginx для связи с агентом (`libngx_module.so` образа `nginxions`, контекст сборки
   `attachment`; изменения бывшего патча NPMplus `attachment.patch`: только модуль nginx, zlib-ng)
 - **`smartsync-shared-files/`** — shared storage (Go): файлы обучения и `decisions.data`; пути REST API не выходят
@@ -236,7 +251,21 @@ flowchart LR
 ### `scripts/` — инструменты разработчика
 
 - `build-images.sh` — локальная сборка всех образов (тег `local/<имя>:dev`)
-- `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh`
+- `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh` (все группы или `SMOKE_GROUPS`), затем проверки после него
+- `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `waf-score`, `upgrade`, `chaos`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
+- `ci-level.mjs` (+ `ci-level.test.mjs`) — глубина прогона CI по событию, сообщению коммита и изменённым файлам: `fast`/`full`/`extended`, какие тесты стека (`[smoke:waf]`, `[dast]`…), нужен ли CodeQL C++ и Go (инкрементальный скан)
+- `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
+- `flaky-report.mjs` (+ тест) — флейки smoke: по `steps.json` последних прогонов CI (ночной workflow) — какие шаги падали, какие падали и проходили на одном коммите, самые долгие
+- `fuzz.test.mjs` — фаззинг парсеров недоверенного ввода: конвертер правил Snort агента, экспертный фрагмент политики (YAML), объекты и импорт политики; `FUZZ_ITERATIONS` (300 в CI, 40 000 ночью), `FUZZ_SEED` повторяет случай
+- `check.sh` — быстрая часть CI на своей машине одной командой (`--changed` — только затронутое, `--install-hook` — git pre-push)
+- `test-upgrade.sh` — тест обновления: стек опубликованного `develop` наполняется данными, затем образы этой сборки встают на те же тома, и всё должно остаться и работать
+- `test-policy-contract.sh` — контрактный тест политики: политики, которые пишет бэкенд, по одной подаются агенту из образа; каждая должна примениться как написана
+- `policy-contract.mjs` — политики контрактного теста (`write`) и сверка того, что из них сделал агент (`check`)
+- `test-chaos.sh` — отказы частей стека: убитый агент, backend, остановленные CrowdSec и PostgreSQL; сайт должен работать, а после восстановления — снова блокировать атаки и не терять события
+- `test-soak.sh` — длительный прогон под смешанной нагрузкой (ночной): рост памяти, базы и логов, 5xx, задержка, блокировка атак
+- `test-waf-score.sh`, `waf-score.mjs` — оценка WAF: GoTestWAF (атаки и легитимные запросы) против хоста в режиме блокировки в закрытом контуре, сводка в Summary прогона
+- `test-lua.sh`, `lua/` — тесты Lua-модулей nginx (File Security) на LuaJIT с подставным nginx: вердикты clamd, критичность, архивы, документы Office, файлы без имени, эмуляция угроз
+- `audit-logs.mjs` — разбор логов тестового стека: ошибки и предупреждения контейнеров, debug-логов агента и nginx сводятся к сигнатурам и сверяются с `deploy/test/log-allowlist.tsv`; новые — в отчёт CI
 - `test-go.sh` — `go vet` и `go test` Go-сервисов агента (`openappsec/`) в Go-образе их Dockerfile, покрытие для отчёта
 - `check-i18n.mjs` — проверка CI: у каждой строки `en` есть `ru`, в разметке нет текста мимо переводов
 - `crowdsec-hub-snapshot.sh` — снимок hub CrowdSec для серверов без интернета
@@ -249,6 +278,7 @@ flowchart LR
   пространства имён хоста, сокет Docker, root, запись в корень
 - `security-report.mjs` — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
 - `sarif-accepted.mjs` — убирает из SARIF принятые риски и подавленные в коде находки перед загрузкой в Code scanning
+- `update-ips-signatures.mjs` — сигнатуры IPS агента из правил виртуальных патчей хаба CrowdSec (`openappsec/agent/nginxions/ips-protections.json`; коммит хаба — `CROWDSEC_HUB_REF` в `deploy/openappsec/sources.env`)
 - `upgrade-from-npmos.sh` — перенос томов стека времён названия NPMOS (`npmos_*`) в NginxionS: копия томов, имена секретов, роль и база Postgres
 - `train-model.sh` — цикл обучения модели WAF на настоящем агенте: штатная модель, обучение, установка новой как
   в GUI, сравнение и решение о выпуске (`docs/MODEL.md`)
@@ -274,6 +304,8 @@ flowchart LR
 - `TESTING-DEVELOP.md` — как развернуть develop-версию и что проверить руками
 - `CHECKLIST.md` — полная проверка всех функций
 - `DEVSECOPS.md` — проверки безопасности в CI: сканеры, политика блокировки, отчёт, SBOM, принятые риски
+- `WAF-POLICY.md` — политика WAF: аудит полей v1beta2 по коду агента и целевая полностью рабочая политика (фаза 11)
+- `WAF-POLICY-GUIDE.md` — руководство пользователя по политике WAF: блоки, исключения, ограничение частоты, предпросмотр, версии, импорт, обучение и снимки
 - `MODEL.md` — модель WAF NginxionS: как устроена модель open-appsec, данные, обучение, проверка, выпуск
 - `ROADMAP.md` — план разработки по фазам
 - `LEARNING-RESEARCH.md` — исследование обучения агента open-appsec (перед фазой 8)
@@ -299,6 +331,7 @@ flowchart LR
   - `usr/local/nginx/html/nginxions-mtls-denied.html` — страница «нужен клиентский сертификат»
   - `usr/local/lua/nginxions/nginxions_block_page.lua` — подстановка настроек в страницу блокировки
   - `usr/local/lua/nginxions/nginxions_error_page.lua` — подстановка кода и текста в страницу ошибок
+  - `usr/local/lua/nginxions/nginxions_files.lua` — File Security: тело загрузки потоком в clamd (INSTREAM), отказ или запись находки
   - `etc/nginxions/crowdsec-ban.html`, `crowdsec-captcha.html` — страницы бана и капчи баунсера CrowdSec
 - **`backend/`** — API на Node.js
   - `index.js` — запуск: миграции, затем `bootstrap` модулей NginxionS (ACME, WAF, PKI, CrowdSec, GeoIP…), фоновые задачи
@@ -323,7 +356,7 @@ flowchart LR
     - `stream-ports.js` — один входящий порт (диапазон) на протокол у потоков
     - **`acme/`** — `servers.js` (ACME-серверы: пресеты и свои, EAB), `lego.js` (второй ACME-клиент), `certs.js` (сертификаты NPMplus с сервером из настроек)
     - **`audit/`** — `index.js`: журнал аудита со страницами и фильтрами
-    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим)
+    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
       - `lapi.js` — клиент локального API CrowdSec (LAPI)
@@ -337,6 +370,7 @@ flowchart LR
     - **`events/`** — события и аналитика
       - `ingest.js` — фоновый приём: лог агента open-appsec, лог запросов nginx, обслуживание таблиц
       - `tail.js` — чтение того, что агент дописал в лог с прошлого раза
+      - `jsonlog.js` — чтение журнала nginx из JSON-строк (отказы mTLS, находки File Security) в события
       - `normalize.js` — запись лога агента → строка события
       - `store.js` — хранение: дневные разделы, агрегаты, срок хранения
       - `index.js` — Аналитика → События: фильтры, страницы, общая лента «Все»
@@ -353,6 +387,7 @@ flowchart LR
       - `model.js` — чистые функции обучения (без базы)
       - `appsec.js` — клиенты shared storage и tuning
       - `policy.js` — исключения из разметки в политике (мгновенный эффект)
+      - `snapshots.js` — снимки обученного состояния агента: ежедневно и по кнопке, сдвиг нормы, откат, скачивание и загрузка
     - **`migration/`** — перенос из NPM, NPMplus и open-appsec-npm
       - `index.js` — порядок переноса и отчёт
       - `source.js` — что лежит в резервной копии и где
@@ -373,12 +408,20 @@ flowchart LR
     - **`waf/`** — open-appsec
       - `index.js` — включение attachment в nginx
       - `agent.js` — состояние агента
+      - `metrics.js` — метрики агента (его служба prometheus на 127.0.0.1:7465)
       - `agent-settings.js` — настройки агента и ML-модели
-      - `policy.js` — сборка `local_policy.yaml` и его запись
+      - `policy.js` — сборка `local_policy.yaml` (всегда v1beta2) и его запись
+      - `applied.js` — что агент применяет на самом деле: его конфигурация (через nginxions-control) против сгенерированной политики
       - `hosts.js` — режимы WAF хостов и их location
       - `hosts-code.js` — политика хоста как код (YAML)
+      - `trial.js` — пробный режим хоста: блокировка на N часов только в журнале, отчёт и решение; `trial-model.js` — его состояния без базы (для тестов)
       - `custom.js`, `expert.js` — свои YAML-фрагменты поверх политики (режим эксперта)
-      - **`objects/`** — `model.js` (объекты политики в терминах v1beta2), `store.js` (хранение и сборка политики), `api.js` (объекты, политика по умолчанию, предпросмотр), `format.js` (запись в v1beta1 или v1beta2), `schema-v1beta2.json` (схема политики), `examples/` (примеры политик open-appsec для тестов)
+      - `engines.js` — движки практики, которые выполняет AppSec CrowdSec (`antiBot`: проверка браузера; `schemaValidation`: запросы по OpenAPI): appsec-config `nginxions/policy` из правил политики, для агента они выключены
+      - `schemas.js` — файлы OpenAPI для `schemaValidation`: загрузка, проверка, копирование в данные CrowdSec
+      - `files.js` — File Security практики (ClamAV): правила по хостам для nginx, запуск clamd, сигнатуры, находки → события
+      - `syslog.js` — ретранслятор syslog/CEF: серверы триггера журнала, которые агент не обслуживает сам (несколько, по имени, IPv6), получают сообщения через NginxionS на 127.0.0.1
+      - **`ips/`** — `vpatch.js` (правило виртуального патча CrowdSec → сигнатуры IPS агента: зоны запроса → контексты IPS, значения → data/pcre)
+      - **`objects/`** — `model.js` (объекты политики в терминах v1beta2 и проверка «нет молчаливых полей»), `store.js` (хранение и сборка политики), `api.js` (объекты, политика по умолчанию, предпросмотр, импорт), `format.js` (v1beta2 для агента, v1beta1 для импорта и экспорта), `compare.js` (сравнение применённой агентом конфигурации с политикой), `simulate.js` (пробный прогон изменения на недавних событиях WAF), `contract.js` (политики контрактного теста с агентом: встроенные объекты, примеры, политика со всеми видами объектов), `schema-v1beta2.json` (схема политики), `examples/` (примеры политик open-appsec для тестов)
     - **`migrations/`** — миграции таблиц `nginxions_*` (по одной на изменение схемы, имя начинается с даты)
 - **`frontend/`** — интерфейс на React + Vite
   - `src/App.tsx`, `src/Router.tsx`, `src/pages/`, `src/modals/`, `src/components/`, `src/hooks/` — код NPMplus; наши правки помечены `NginxionS:`
@@ -413,7 +456,7 @@ flowchart LR
       - `AuditLog/` — журнал аудита
       - `Crowdsec/` — Блокировки и CrowdSec: решения (`Decisions.tsx`), срабатывания (`Triggers.tsx`), hub (`Hub.tsx`), блок-листы (`Blocklists.tsx`), настройки (`Settings.tsx`)
       - `AgentOpenappsec/` — Агенты → open-appsec: политика, хосты, обучение
-      - `WafAgent/` — состояние и настройки агента (`AgentSettings.tsx`)
+      - `WafAgent/` — состояние, метрики (`AgentMetrics.tsx`), настройки агента (`AgentSettings.tsx`), File Security / ClamAV (`FileSecurity.tsx`)
       - `WafPolicy/`, `WafExpert/` — политика из объектов и режим эксперта
       - `BlockPage/` — Агенты → Страница блокировки с предпросмотром
       - `Certificates/` — реестр всех сертификатов
@@ -427,9 +470,9 @@ flowchart LR
     - **`acme/`** — ACME-серверы (`AcmeServers.tsx`), поля сервера и DNS (`AcmeFields.tsx`), API
     - **`certs/`** — выпуск ACME (`AcmeCertificateModal.tsx`), свой CSR (`CsrModal.tsx`), полный лог ошибки (`AcmeLog.tsx`)
     - **`crowdsec/`** — окна бана (`BanModal.tsx`), заблокированного адреса (`DecisionModal.tsx`), блок-листа (`BlocklistModal.tsx`), профиля (`ProfileModal.tsx`); подписи (`labels.ts`), API
-    - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), API
+    - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), пробный режим хоста (`TrialModal.tsx`), что выучил агент (`LearnedModal.tsx`), снимки обучения (`SnapshotsModal.tsx`), API
     - **`notifications/`** — канал (`ChannelModal.tsx`), правило (`RuleModal.tsx`), быстрая настройка (`SetupModal.tsx`), API
     - **`pki/`** — CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
-    - **`policy/`** — редактор политики: объект (`ObjectModal.tsx`, поля в `fields.ts`), ссылки на объекты (`RefsEditor.tsx`), просмотр изменения (`Review.tsx`, `ReviewModal.tsx`), код (`CodePane.tsx`), импорт (`ImportModal.tsx`), имена встроенных объектов (`names.ts`), API
+    - **`policy/`** — редактор политики: объект (`ObjectModal.tsx`, поля в `fields.ts`), файлы OpenAPI практики (`SchemaFiles.tsx`), ссылки на объекты (`RefsEditor.tsx`), просмотр изменения (`Review.tsx`, `ReviewModal.tsx`), код (`CodePane.tsx`), импорт (`ImportModal.tsx`), имена встроенных объектов (`names.ts`), API
     - **`rbac/`** — роль (`RoleModal.tsx`), хосты роли (`HostPicker.tsx`), роли пользователя (`UserRolesModal.tsx`, `UserRoleBadges.tsx`), подписи (`labels.ts`), хуки и API
     - **`system/`** — Настройки: env-настройки (`EnvSection.tsx`, `sections.tsx`), GeoIP (`Geoip.tsx`), перенос (`Migration.tsx`), API

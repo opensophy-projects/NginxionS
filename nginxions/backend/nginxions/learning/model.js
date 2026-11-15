@@ -3,7 +3,7 @@
 // The queue groups events the agent is not sure about by host, URL, parameter and indicators, so that a group
 // is labelled at once. A label is benign, malicious or dismiss, for some of: the value of the parameter, its
 // name, the URL, the sources. The agent reads labels from tuning/decisions.data of each asset in the shared
-// storage (every 30 min, TuningDecision.cc): benign counts as another trusted source of learning (a benign
+// storage (every minute in NginxionS, TuningDecision.cc): benign counts as another trusted source of learning (a benign
 // source weighs as many sources), malicious keeps the request out of learning. Instantly (optional), benign
 // becomes an exception (accept) for the host until the model has learnt, malicious an exception (drop) and/or
 // a ban of the sources in CrowdSec.
@@ -309,3 +309,117 @@ export const suggestionOf = (raw, asset) => ({
 		? raw.metrics.map((m) => ({ name: String(m.metric ?? m.name ?? ""), value: m.count ?? m.value }))
 		: [],
 });
+
+// ------------------------------------------------------------------ what the agent learned
+
+/** the files of what the agent learned (control/learning.js) and what each holds */
+export const LEARNED_KINDS = {
+	"5.data": "indicators",
+	"4.data": "types",
+	"7.data": "trustedIndicators",
+	"9.data": "trustedTypes",
+};
+const MAX_LEARNED = 500;
+
+/** the confident sets of a file of the agent, wherever cereal put them */
+const confidentSets = (data, depth = 0) => {
+	if (!data || typeof data !== "object" || depth > 4) return null;
+	if (Object.hasOwn(data, "confident_sets")) return data.confident_sets;
+	for (const value of Object.values(data)) {
+		const found = confidentSets(value, depth + 1);
+		if (found) return found;
+	}
+	return null;
+};
+
+/**
+ * What a file of the agent says is normal: [{param, values}] (ConfidenceCalculator: confident_sets, a cereal map of
+ * key → pair(set of values, time); the key is the parameter, the values indicators or types)
+ */
+export const learnedOf = (data) => {
+	const sets = confidentSets(data);
+	const entries = Array.isArray(sets)
+		? sets.map((e) => [e?.key, e?.value])
+		: sets && typeof sets === "object"
+			? Object.entries(sets)
+			: [];
+	return entries
+		.map(([param, value]) => {
+			const values = Array.isArray(value?.first) ? value.first : Array.isArray(value) ? value : [];
+			return { param: String(param ?? ""), values: values.map(String).sort() };
+		})
+		.filter((e) => e.param && e.values.length)
+		.sort((a, b) => a.param.localeCompare(b.param))
+		.slice(0, MAX_LEARNED);
+};
+
+/** the learned folders of the agent of a host: the folder of each asset, and of its instances below it */
+export const learnedFolders = (assets, folders) =>
+	folders.filter((f) => assets.some((a) => f.asset === a || f.asset.startsWith(`${a}/`)));
+
+// ------------------------------------------------------------------ snapshots: the size of what was learned, its shift
+/** the kinds of learned files counted in a snapshot: what the WAF counts as normal (not 11.data, scanners left out) */
+export const COUNTED_FILES = Object.keys(LEARNED_KINDS);
+// a sharp shift of the norm of an asset between two snapshots: at least this many entries more (or fewer), and at
+// least this part of what it had (poisoning teaches many new "normal" values at once; a reset drops them)
+export const SHIFT_MIN_ENTRIES = 30;
+export const SHIFT_RATIO = 0.5;
+
+/** the size of what a file of the agent says is normal: parameters and their values (all of them, unlike learnedOf) */
+export const learnedCount = (data) => {
+	const sets = confidentSets(data);
+	const entries = Array.isArray(sets)
+		? sets.map((e) => e?.value)
+		: sets && typeof sets === "object"
+			? Object.values(sets)
+			: [];
+	let params = 0;
+	let values = 0;
+	for (const value of entries) {
+		const list = Array.isArray(value?.first) ? value.first : Array.isArray(value) ? value : [];
+		if (!list.length) continue;
+		params += 1;
+		values += list.length;
+	}
+	return { params, values };
+};
+
+/**
+ * The size of a snapshot per asset: [{asset, params, values}]
+ * @param {{asset: string, name: string, data: any}[]} files  the parsed learned files
+ */
+export const summarize = (files) => {
+	const assets = new Map();
+	for (const f of files) {
+		const sum = assets.get(f.asset) ?? { asset: f.asset, params: 0, values: 0 };
+		if (COUNTED_FILES.includes(f.name)) {
+			const { params, values } = learnedCount(f.data);
+			sum.params += params;
+			sum.values += values;
+		}
+		assets.set(f.asset, sum);
+	}
+	return [...assets.values()].sort((a, b) => a.asset.localeCompare(b.asset));
+};
+
+/**
+ * The assets whose norm shifted sharply from one snapshot to the next: [{asset, before, after, direction}]. An asset
+ * new in the later snapshot is not a shift (the agent starts learning it).
+ * @param {{asset: string, values: number}[]} before
+ * @param {{asset: string, values: number}[]} after
+ */
+export const shiftOf = (before, after) => {
+	const was = new Map(before.map((a) => [a.asset, a.values]));
+	const now = new Map(after.map((a) => [a.asset, a.values]));
+	const out = [];
+	for (const asset of new Set([...was.keys(), ...now.keys()])) {
+		if (!was.has(asset)) continue;
+		const b = was.get(asset);
+		const a = now.get(asset) ?? 0;
+		const change = Math.abs(a - b);
+		if (change >= SHIFT_MIN_ENTRIES && change >= b * SHIFT_RATIO) {
+			out.push({ asset, before: b, after: a, direction: a > b ? "growth" : "drop" });
+		}
+	}
+	return out.sort((x, y) => x.asset.localeCompare(y.asset));
+};

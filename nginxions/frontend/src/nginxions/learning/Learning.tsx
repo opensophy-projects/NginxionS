@@ -9,7 +9,9 @@ import { useSearchParams } from "react-router-dom";
 import { LoadingPage } from "src/components";
 import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
-import { setWafHost } from "../api";
+import { setWafHost, simulateWafHost } from "../api";
+import { showConfirmModal } from "../modals/ConfirmModal";
+import { SimulationNote } from "../policy/Review";
 import eventStyles from "../pages/WafEvents/Events.module.css";
 import hostStyles from "../pages/Hosts/Hosts.module.css";
 import { useCan } from "../rbac/hooks";
@@ -21,12 +23,17 @@ import {
 	getLearningHosts,
 	getQueue,
 	type LearningHost,
+	getLearningSnapshots,
 	type QueueGroup,
 	type Reason,
+	recentShift,
 	type Suggestion,
 	undoLabel,
 } from "./api";
 import { showLabelModal } from "./LabelModal";
+import { showLearnedModal } from "./LearnedModal";
+import { ShiftList, SNAPSHOTS_KEY, showSnapshotsModal } from "./SnapshotsModal";
+import { showStartTrialModal, showTrialReportModal } from "./TrialModal";
 import styles from "./Learning.module.css";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
@@ -60,25 +67,39 @@ function Readiness({ host }: { host: LearningHost }) {
 	);
 }
 
-function Hosts({ manage }: { manage: boolean }) {
+function Hosts({ manage, label, restore }: { manage: boolean; label: boolean; restore: boolean }) {
 	const refresh = useRefresh();
 	const { data, isLoading, isError, error } = useQuery({
 		queryKey: ["nginxions-learning-hosts"],
 		queryFn: getLearningHosts,
 		refetchInterval: 60000,
 	});
+	// a sharp shift of what the agent learned between its last two snapshots (snapshots of learning)
+	const snapshots = useQuery({ queryKey: [SNAPSHOTS_KEY], queryFn: getLearningSnapshots, refetchInterval: 300000 });
+	const shifted = snapshots.data ? recentShift(snapshots.data.snapshots) : null;
 	const [busy, setBusy] = useState<number | null>(null);
 
+	const switchToPrevent = async (host: LearningHost) => {
+		await setWafHost(host.id, {
+			enabled: true,
+			mode: "prevent-learn",
+			minimumConfidence: host.minimumConfidence as any,
+		});
+		showSuccess(t("nginxions.learning.prevent.done", { name: host.name }));
+		refresh();
+	};
+
+	// first what blocking would have done with the events of the last 7 days (dry run), then the switch
 	const prevent = async (host: LearningHost) => {
 		setBusy(host.id);
 		try {
-			await setWafHost(host.id, {
-				enabled: true,
-				mode: "prevent-learn",
-				minimumConfidence: host.minimumConfidence as any,
+			const simulation = await simulateWafHost(host.id, "prevent-learn", "7d");
+			showConfirmModal({
+				tTitle: "nginxions.learning.prevent.check",
+				tConfirm: "nginxions.learning.prevent",
+				onConfirm: () => switchToPrevent(host),
+				children: <SimulationNote simulation={simulation} />,
 			});
-			showSuccess(t("nginxions.learning.prevent.done", { name: host.name }));
-			refresh();
 		} catch (err: any) {
 			showError(err.message);
 		}
@@ -96,7 +117,20 @@ function Hosts({ manage }: { manage: boolean }) {
 						<T id="nginxions.learning.hosts.text" />
 					</p>
 				</div>
+				<button
+					type="button"
+					className="btn btn-sm"
+					onClick={() => showSnapshotsModal({ label, manage: restore })}
+				>
+					<T id="nginxions.learning.snapshots.open" />
+				</button>
 			</div>
+			{shifted && (
+				<Alert variant="warning">
+					<T id="nginxions.learning.snapshots.warning" data={{ time: dateTime(shifted.takenOn) }} />
+					<ShiftList snapshot={shifted} />
+				</Alert>
+			)}
 			{data?.error && (
 				<Alert variant="warning">
 					<T id="nginxions.learning.tuning-error" data={{ error: data.error }} />
@@ -150,6 +184,13 @@ function Hosts({ manage }: { manage: boolean }) {
 											</td>
 											<td>
 												<Readiness host={h} />
+												<button
+													type="button"
+													className="btn btn-link btn-sm p-0 ms-2"
+													onClick={() => showLearnedModal({ host: h })}
+												>
+													<T id="nginxions.learning.learned.open" />
+												</button>
 												{h.stats && (
 													<div className={styles.muted}>
 														<T
@@ -190,22 +231,63 @@ function Hosts({ manage }: { manage: boolean }) {
 												)}
 											</td>
 											<td className="text-end">
-												{h.readyToPrevent ? (
-													manage ? (
+												{h.trial ? (
+													// a trial of blocking: running, or over and waiting for a decision
+													<div className={styles.trial}>
+														<span className={styles.muted}>
+															<T
+																id={`nginxions.learning.trial.${h.trial.state === "running" ? "until" : "over"}`}
+																data={{ time: dateTime(h.trial.endsOn) }}
+															/>
+														</span>
 														<button
 															type="button"
-															className="btn btn-sm btn-primary"
-															disabled={busy === h.id}
-															onClick={() => prevent(h)}
+															className={cn(
+																"btn btn-sm",
+																h.trial.state !== "running" && "btn-primary",
+															)}
+															onClick={() =>
+																showTrialReportModal({
+																	host: h,
+																	manage,
+																	onDone: refresh,
+																})
+															}
 														>
-															<T id="nginxions.learning.prevent" />
+															<T id="nginxions.learning.trial.report" />
 														</button>
-													) : (
-														<span className={styles.ready}>
-															<T id="nginxions.learning.ready" />
-														</span>
-													)
-												) : null}
+													</div>
+												) : (
+													<div className={styles.trial}>
+														{h.readyToPrevent &&
+															(manage ? (
+																<button
+																	type="button"
+																	className="btn btn-sm btn-primary"
+																	disabled={busy === h.id}
+																	onClick={() => prevent(h)}
+																>
+																	<T id="nginxions.learning.prevent" />
+																</button>
+															) : (
+																<span className={styles.ready}>
+																	<T id="nginxions.learning.ready" />
+																</span>
+															))}
+														{manage && !String(h.mode).startsWith("prevent") && (
+															<button
+																type="button"
+																className="btn btn-sm"
+																title={t("nginxions.learning.trial.start.text")}
+																onClick={() =>
+																	showStartTrialModal({ host: h, onDone: refresh })
+																}
+															>
+																<T id="nginxions.learning.trial.start" />
+															</button>
+														)}
+													</div>
+												)}
 											</td>
 										</tr>
 									))
@@ -746,7 +828,7 @@ export function LearningTab() {
 				<T id="nginxions.learning.description" />
 			</p>
 			<Queue label={label} />
-			<Hosts manage={can("proxy_hosts", "manage")} />
+			<Hosts manage={can("proxy_hosts", "manage")} label={label} restore={label && can("waf_policy", "manage")} />
 			<History label={label} />
 		</div>
 	);

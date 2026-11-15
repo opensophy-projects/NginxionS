@@ -12,6 +12,8 @@ import internalAuditLog from "../../internal/audit-log.js";
 import { isPostgres } from "../../lib/config.js";
 import errs from "../../lib/error.js";
 import { global as logger } from "../../logger.js";
+import control from "../control/client.js";
+import { openTrials } from "../waf/trial.js";
 import { EVENT_TABLE } from "../events/store.js";
 import { scheduleRegenerate } from "../waf/policy.js";
 import * as appsec from "./appsec.js";
@@ -29,6 +31,9 @@ import {
 	mergeDecisions,
 	statsOf,
 	suggestionOf,
+	LEARNED_KINDS,
+	learnedFolders,
+	learnedOf,
 } from "./model.js";
 import { LABEL_TABLE, parseLabel } from "./policy.js";
 
@@ -608,11 +613,53 @@ const internalLearning = {
 	 * groups labelled benign before and after the label (false positives that are gone), recommendation.
 	 * @param {Access} access
 	 */
+	/**
+	 * What the agent learned on a host: the statistics of the tuning service and, per asset, what its WAF counts as
+	 * normal (indicators and types of values per parameter, also those learned from trusted sources), read from the
+	 * files of the agent through nginxions-control.
+	 * @param {Access} access
+	 * @param {number} hostId
+	 */
+	learned: async (access, hostId) => {
+		await access.can("waf_learning:view");
+		await access.can("proxy_hosts:get", hostId);
+		const host = await hostById(hostId);
+		if (!host) throw new errs.ItemNotFoundError(hostId);
+		const tenant = await getTenant();
+		const stats = [];
+		let error = null;
+		for (const asset of host.assets) {
+			try {
+				const raw = await appsec.getStatistics(tenant, asset);
+				if (raw) stats.push(statsOf(raw));
+			} catch (err) {
+				error = err.message;
+			}
+		}
+		const assets = [];
+		try {
+			for (const folder of learnedFolders(host.assets, await control.listAgentLearning())) {
+				const learned = {};
+				for (const [name, kind] of Object.entries(LEARNED_KINDS)) {
+					if (!folder.files.some((f) => f.name === name)) continue;
+					const file = await control.getAgentLearning(folder.asset, name);
+					learned[kind] = learnedOf(file?.data);
+				}
+				const updated = folder.files.map((f) => f.modifiedAt).sort();
+				assets.push({ asset: folder.asset, updatedOn: updated.at(-1) ?? null, ...learned });
+			}
+		} catch (err) {
+			error = err.message;
+		}
+		return { id: host.id, name: host.name, stats: hostStats(stats), assets, error };
+	},
+
 	hosts: async (access) => {
 		await access.can("waf_learning:view");
 		const hosts = (await wafHosts()).filter((h) => h.enabled);
 		const tenant = await getTenant();
 		const labels = await activeLabels();
+		const trials = await openTrials();
 		const now = Date.now();
 		let error = null;
 		const result = [];
@@ -666,6 +713,8 @@ const internalLearning = {
 				enforced,
 				falsePositives: { before, after },
 				queue: (await queueGroups("7d", host.id, hosts)).length,
+				// the open trial of blocking (waf/trial.js)
+				trial: trials.get(host.id) ?? null,
 				// ready to block: the tuning service says so (prevent critical or high) while the host only detects
 				readyToPrevent:
 					!!best &&

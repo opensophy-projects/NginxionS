@@ -22,6 +22,7 @@ import { geoAvailable, writeGeoConf } from "./geo/index.js";
 import internalGeoip from "./geoip/index.js";
 import internalHosts, { HOST_OBJECTS } from "./hosts.js";
 import internalLearning from "./learning/index.js";
+import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
@@ -31,10 +32,14 @@ import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
 import internalWafAgent from "./waf/agent-settings.js";
 import internalWafExpert from "./waf/expert.js";
+import internalWafFiles, { MAX_SIGNATURE_BYTES } from "./waf/files.js";
 import internalWafHosts from "./waf/hosts.js";
 import internalWafHostCode from "./waf/hosts-code.js";
 import internalWaf from "./waf/index.js";
-import internalWafObjects from "./waf/objects/api.js";
+import { getAgentMetrics } from "./waf/metrics.js";
+import internalWafObjects, { simulateHostMode } from "./waf/objects/api.js";
+import internalWafSchemas from "./waf/schemas.js";
+import internalWafTrial from "./waf/trial.js";
 
 const router = express.Router({
 	caseSensitive: true,
@@ -475,6 +480,74 @@ router
 	);
 
 /**
+ * GET /api/nginxions/waf/hosts/:host_id/simulate?mode=prevent-learn&period=7d — what the WAF events of the host of
+ * the period would have become in that mode (dry run, nothing is saved)
+ */
+router
+	.route("/waf/hosts/:host_id/simulate")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(
+		handle(async (req, res) => {
+			const query = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["mode"],
+					properties: {
+						mode: {
+							type: "string",
+							enum: ["prevent-learn", "detect-learn", "prevent", "detect", "inactive"],
+						},
+						period: { type: "string", enum: ["1h", "24h", "7d"] },
+					},
+				},
+				req.query,
+			);
+			return simulateHostMode(res.locals.access, Number(req.params.host_id), query.mode, query.period);
+		}),
+	);
+
+/**
+ * GET  /api/nginxions/waf/hosts/:host_id/trial — the open trial of blocking of the host and its report
+ * POST /api/nginxions/waf/hosts/:host_id/trial — {hours}: blocking is tried on the log only for that long
+ * PUT  /api/nginxions/waf/hosts/:host_id/trial — {enable}: closes it, switching the host to blocking or not
+ */
+router
+	.route("/waf/hosts/:host_id/trial")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalWafTrial.get(res.locals.access, Number(req.params.host_id))))
+	.post(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["hours"],
+					properties: { hours: { type: "integer", minimum: 1, maximum: 168 } },
+				},
+				req.body,
+			);
+			return internalWafTrial.start(res.locals.access, Number(req.params.host_id), data);
+		}),
+	)
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["enable"],
+					properties: { enable: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalWafTrial.finish(res.locals.access, Number(req.params.host_id), data);
+		}),
+	);
+
+/**
  * GET /api/nginxions/waf/hosts/:host_id/code — the WAF policy of a host as YAML (objects by name)
  * PUT /api/nginxions/waf/hosts/:host_id/code — {content, dry_run?}: checked, or applied as the GUI does
  */
@@ -574,6 +647,20 @@ router
 	.put(handle((req, res) => internalWafAgent.uploadModel(res.locals.access, req, req.query.apply !== "false")))
 	.delete(handle((req, res) => internalWafAgent.removeModel(res.locals.access, req.query.apply !== "false")));
 
+/**
+ * GET /api/nginxions/waf/agent/metrics — metrics of the agent (its prometheus nano service), parsed
+ */
+router
+	.route("/waf/agent/metrics")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(
+		handle(async (_, res) => {
+			await res.locals.access.can("waf_policy:view");
+			return getAgentMetrics();
+		}),
+	);
+
 const language = { enum: ["ru", "en"] };
 /** config of a channel by type (secrets: omitted or null keeps the stored one) */
 const CHANNEL_CONFIG = {
@@ -662,6 +749,8 @@ const ruleSchema = (create) => ({
 				"cert_expiry",
 				"host_problem",
 				"learning_queue",
+				"waf_trial",
+				"learning_shift",
 			],
 		},
 		enabled: { type: "boolean" },
@@ -1457,6 +1546,64 @@ router
 	.delete(handle((req, res) => internalWafObjects.delete(res.locals.access, req.params.object_id)));
 
 /**
+ * File Security: ClamAV (waf/files.js)
+ * GET /api/nginxions/waf/files — clamd, the hosts that check uploads, uploaded signatures, settings
+ * PUT /api/nginxions/waf/files — {online_updates}: freshclam (needs the internet) on or off
+ * PUT /api/nginxions/waf/files/signatures/:name — body: a signature database of ClamAV (main.cvd, daily.cld...)
+ */
+router
+	.route("/waf/files")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalWafFiles.status(res.locals.access)))
+	.put(handle((req, res) => internalWafFiles.setSettings(res.locals.access, req.body)));
+
+router
+	.route("/waf/files/signatures/:name")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		express.raw({ type: () => true, limit: MAX_SIGNATURE_BYTES }),
+		handle((req, res) =>
+			internalWafFiles.uploadSignatures(res.locals.access, String(req.params.name), rawBytes(req)),
+		),
+	);
+
+/**
+ * OpenAPI files of schemaValidation (waf/schemas.js)
+ * GET    /api/nginxions/waf/policy/schemas — the files, with the practices that name them
+ * PUT    /api/nginxions/waf/policy/schemas/:name — body: the file (YAML or JSON, up to 5 MB)
+ * GET    /api/nginxions/waf/policy/schemas/:name — the file
+ * DELETE /api/nginxions/waf/policy/schemas/:name — a file no practice names
+ */
+router
+	.route("/waf/policy/schemas")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalWafSchemas.list(res.locals.access)));
+
+router
+	.route("/waf/policy/schemas/:name")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		express.raw({ type: () => true, limit: "6mb" }),
+		handle((req, res) => internalWafSchemas.upload(res.locals.access, String(req.params.name), rawBytes(req))),
+	)
+	.get(async (req, res, next) => {
+		try {
+			const name = String(req.params.name);
+			const content = await internalWafSchemas.download(res.locals.access, name);
+			res.set("Content-Type", name.endsWith(".json") ? "application/json" : "application/yaml");
+			res.set("Content-Disposition", `attachment; filename="${name}"`);
+			res.send(content);
+		} catch (err) {
+			next(err);
+		}
+	})
+	.delete(handle((req, res) => internalWafSchemas.remove(res.locals.access, String(req.params.name))));
+
+/**
  * PUT /api/nginxions/waf/policy/default — {mode, threatPreventionPractices?: [id], ..., customResponse?: id}
  */
 router
@@ -1495,6 +1642,8 @@ router
 							required: ["id", "objects"],
 							properties: { id: { type: "integer", minimum: 1 }, objects: wafHostObjects },
 						},
+						// the period of the dry run on recent events
+						simulate: { type: "string", enum: ["1h", "24h", "7d"] },
 					},
 				},
 				req.body,
@@ -2742,5 +2891,68 @@ router
 	.options((_, res) => res.sendStatus(204))
 	.all(jwtdecode())
 	.get(handle((_req, res) => internalLearning.hosts(res.locals.access)));
+
+/**
+ * GET /api/nginxions/learning/hosts/:host_id/learned — what the agent learned on a host (statistics, normal indicators
+ * and types of values per parameter)
+ */
+router
+	.route("/learning/hosts/:host_id/learned")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalLearning.learned(res.locals.access, Number(req.params.host_id))));
+
+/**
+ * Snapshots of what the agent learned (learning/snapshots.js)
+ * GET    /api/nginxions/learning/snapshots — the snapshots, the newest first, with the shift from the one before
+ * POST   /api/nginxions/learning/snapshots — a snapshot now
+ * POST   /api/nginxions/learning/snapshots/upload — body: a snapshot file (application/octet-stream), kept as a snapshot
+ * POST   /api/nginxions/learning/snapshots/:snapshot_id/restore — the snapshot in place of the learned state (the agent
+ *        and nginxions restart)
+ * GET    /api/nginxions/learning/snapshots/:snapshot_id/download — the snapshot file
+ * DELETE /api/nginxions/learning/snapshots/:snapshot_id
+ */
+router
+	.route("/learning/snapshots")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalLearningSnapshots.list(res.locals.access)))
+	.post(handle((_req, res) => internalLearningSnapshots.take(res.locals.access), 201));
+
+router
+	.route("/learning/snapshots/upload")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		express.raw({ type: () => true, limit: "100mb" }),
+		handle((req, res) => internalLearningSnapshots.upload(res.locals.access, rawBytes(req)), 201),
+	);
+
+router
+	.route("/learning/snapshots/:snapshot_id/restore")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalLearningSnapshots.restore(res.locals.access, String(req.params.snapshot_id))));
+
+router
+	.route("/learning/snapshots/:snapshot_id/download")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(async (req, res, next) => {
+		try {
+			const file = await internalLearningSnapshots.download(res.locals.access, String(req.params.snapshot_id));
+			res.set("Content-Type", "application/gzip");
+			res.set("Content-Disposition", `attachment; filename="${file.name}"`);
+			res.send(file.content);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+router
+	.route("/learning/snapshots/:snapshot_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.delete(handle((req, res) => internalLearningSnapshots.remove(res.locals.access, String(req.params.snapshot_id))));
 
 export default router;

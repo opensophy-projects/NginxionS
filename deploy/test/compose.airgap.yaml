@@ -28,11 +28,15 @@ services:
     # a one-time job: its script is mounted
     healthcheck:
       test: ["CMD", "test", "-f", "/smoke.sh"]
+    environment:
+      SMOKE_GROUPS: ${SMOKE_GROUPS:-all}
     # fail loudly if the script is not mounted (a missing bind source becomes an empty directory)
     entrypoint: ["/bin/sh", "-c", 'test -f /smoke.sh || { echo "smoke.sh not mounted" >&2; exit 1; }; exec /bin/sh /smoke.sh "$$@"', "--"]
     volumes:
       # relative paths resolve from deploy/, the directory of the first compose file
       - ./test/smoke.sh:/smoke.sh:ro
+      # its groups (SMOKE_GROUPS: all, or a list such as "waf crowdsec")
+      - ./test/smoke:/smoke.d:ro
       # phase 5: an example of open-appsec imported through WAF -> Policy
       - ../nginxions/backend/nginxions/waf/objects/examples/example.yaml:/examples/v1beta2-example.yaml:ro
       # migration: a backup of Nginx Proxy Manager 2.16 (with WAF rules of open-appsec-npm)

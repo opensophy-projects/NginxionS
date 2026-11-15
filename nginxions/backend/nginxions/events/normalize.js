@@ -94,6 +94,10 @@ export const classify = (raw, nodeId = "local") => {
 	}
 
 	const action = str(data.securityAction, 32);
+	const ips =
+		(Array.isArray(raw.eventTags) && raw.eventTags.includes("IPS")) ||
+		data.incidentType === "IPS" ||
+		data.matchedSignatureCVE !== undefined;
 	let rawText = JSON.stringify(raw, noNul);
 	if (rawText.length > MAX_RAW) {
 		// request bodies and headers make an event big; the rest is kept
@@ -111,9 +115,11 @@ export const classify = (raw, nodeId = "local") => {
 			name,
 			severity: str(raw.eventSeverity, 32),
 			priority: str(raw.eventPriority, 32),
-			confidence: str(pick("eventConfidence"), 32),
+			confidence: str(pick("eventConfidence") ?? data.matchedSignatureConfidence, 32),
 			action,
-			incident_type: str(data.waapIncidentType, 100),
+			// an event of the IPS (signatures of NginxionS): the agent tags it "IPS" and puts the CWE of the signature in
+			// waapIncidentType; the CVEs and the CWE are its indicators
+			incident_type: str(ips ? "IPS" : (data.waapIncidentType ?? data.incidentType), 100),
 			source_ip: str(data.sourceIP ?? data.sourceIp, 64),
 			source_port: int(data.sourcePort),
 			proxy_ip: str(data.proxyIP ?? data.proxyIp, 255),
@@ -127,7 +133,12 @@ export const classify = (raw, nodeId = "local") => {
 			location: str(data.matchedLocation, 64),
 			parameter: str(data.matchedParameter, MAX_TEXT),
 			sample: str(data.matchedSample, MAX_TEXT),
-			indicators: str(data.waapFoundIndicators, MAX_TEXT),
+			indicators: str(
+				ips
+					? [data.matchedSignatureCVE, data.waapIncidentType].filter((v) => v && v !== "IPS").join(", ")
+					: (data.waapFoundIndicators ?? data.matchedSignatureCVE),
+				MAX_TEXT,
+			),
 			score: scoreOf(data.waapFinalScore),
 			rule: str(pick("ruleName")),
 			practice: str(pick("practiceName")),

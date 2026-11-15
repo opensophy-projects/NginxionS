@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// NginxionS: the socket of a backend that crashed (see app.listen below)
+import { rmSync } from "node:fs";
 import app from "./app.js";
 import internalNginx from "./internal/nginx.js";
 import internalCertificate from "./internal/certificate.js";
@@ -7,17 +9,21 @@ import internalIpRanges from "./internal/ip_ranges.js";
 import { global as logger } from "./logger.js";
 import { migrateUp } from "./migrate.js";
 // NginxionS: ACME servers, open-appsec policy and agent settings from the database, security events of the agent, CRLs of
-// the PKI
+// the PKI, snapshots of what the agent learned
 import { bootstrap as bootstrapAcmeServers } from "./nginxions/acme/servers.js";
 import { bootstrap as bootstrapBlockPage } from "./nginxions/block-page.js";
 import { bootstrap as bootstrapCrowdsec } from "./nginxions/crowdsec/index.js";
 import { bootstrap as bootstrapGeo } from "./nginxions/geo/index.js";
 import { start as startEventIngest } from "./nginxions/events/ingest.js";
 import { start as startLearning } from "./nginxions/learning/index.js";
+import { start as startLearningSnapshots } from "./nginxions/learning/snapshots.js";
+// NginxionS: findings of File Security of the WAF policy (ClamAV) → security events
+import { startFilesLog } from "./nginxions/waf/files.js";
 import { start as startNotifications } from "./nginxions/notifications/index.js";
 import { bootstrap as bootstrapPki } from "./nginxions/pki/index.js";
 import { bootstrap as bootstrapWafAgent } from "./nginxions/waf/agent-settings.js";
 import { bootstrap as bootstrapWafPolicy } from "./nginxions/waf/policy.js";
+import { start as startWafTrials } from "./nginxions/waf/trial.js";
 import { getCompiledSchema } from "./schema/index.js";
 import setup from "./setup.js";
 
@@ -41,6 +47,9 @@ async function appStart() {
 			.then(bootstrapGeo)
 			.then(startEventIngest)
 			.then(startLearning)
+			.then(startLearningSnapshots)
+			.then(startFilesLog)
+			.then(startWafTrials)
 			.then(startNotifications)
 			.then(getCompiledSchema)
 			.then(() => {
@@ -56,6 +65,10 @@ async function appStart() {
 				internalCertificate.initTimer();
 				internalNginx.reload();
 
+				// NginxionS: a backend killed (out of memory, kill -9) leaves its socket behind: the next one, started by
+				// launch.sh, failed to listen (EADDRINUSE) again and again, and the interface never came back
+				// (scripts/test-chaos.sh). Only one backend runs in the container: the file is no live socket.
+				rmSync("/run/npmplus.sock", { force: true });
 				const server = app.listen("/run/npmplus.sock", () => {
 					logger.info(`Backend PID ${process.pid} listening on unix socket...`);
 
@@ -69,6 +82,11 @@ async function appStart() {
 				});
 				// NginxionS: nginx keeps idle connections to the backend up to 60 s; Node closed them after 5 s,
 				// and a request nginx sent on a connection just being closed failed with 502 (Broken pipe)
+				// NginxionS: a failure to listen ends the process, launch.sh starts the backend again
+				server.on("error", (err) => {
+					logger.error(`Backend could not listen on unix socket: ${err.message}`);
+					process.exit(1);
+				});
 				server.keepAliveTimeout = 65000;
 				server.headersTimeout = 66000;
 			})

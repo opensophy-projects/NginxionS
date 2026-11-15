@@ -11,8 +11,11 @@ import { type AgentStatus, applyWafPolicy, setWafEnabled, type WafPolicyState, t
 import { useWafStatus } from "../../hooks";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showWafPolicyModal } from "../../modals/WafPolicyModal";
+import { AppliedCheckNote } from "../../policy/Review";
 import { useCan } from "../../rbac/hooks";
+import { AgentMetricsCard } from "./AgentMetrics";
 import { AgentSettingsCard } from "./AgentSettings";
+import { FileSecurityCard } from "./FileSecurity";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
@@ -104,6 +107,9 @@ function PolicyCard({ policy }: { policy?: WafPolicyState }) {
 								<T id="nginxions.waf.policy-not-sent" /> ({policy.applied.error})
 							</span>
 						)}
+					</Row>
+					<Row label="nginxions.waf.policy-check">
+						{policy?.check ? <AppliedCheckNote check={policy.check} /> : "—"}
 					</Row>
 				</div>
 			</div>
@@ -223,7 +229,9 @@ function WafAgentPage() {
 		<>
 			<WafCard status={data} />
 			<AgentCard agent={data.agent} />
+			<AgentMetricsCard />
 			<AgentSettingsCard />
+			<FileSecurityCard />
 			<PolicyCard policy={data.policy} />
 		</>
 	);

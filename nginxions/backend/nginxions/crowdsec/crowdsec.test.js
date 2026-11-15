@@ -15,6 +15,7 @@ import {
 	normalizeIpOrCidr,
 	renderAcquis,
 	renderAllowlist,
+	renderEnginesWhitelist,
 	renderBouncer,
 	renderConfigLocal,
 	renderNginx,
@@ -23,6 +24,7 @@ import {
 	renderSimulation,
 	requiredItems,
 	unwantedItems,
+	withPolicy,
 } from "./config.js";
 import * as hub from "./hub.js";
 import { machineId, parseMetrics } from "./lapi.js";
@@ -318,4 +320,36 @@ test("simulation: all but the exclusions, or only the listed scenarios", () => {
 		YAML.parse(renderConfigLocal(normalize({}), { registrationToken: "x" })).config_paths.simulation_path,
 		"/etc/crowdsec/nginxions-simulation.yaml",
 	);
+});
+
+test("the engines of the WAF policy turn AppSec on with the appsec-config of the policy", () => {
+	const s = normalize({});
+	assert.equal(withPolicy(s, { engines: [] }), s);
+	const engines = [
+		{ host: "a.example", path: "", antiBot: { mode: "prevent", injected: [], validated: [] }, schema: null },
+	];
+	const off = withPolicy(s, { engines }, { goodBots: true });
+	assert.equal(off.appsec.enabled, true);
+	assert.deepEqual(off.appsec.configs, []);
+	assert.equal(off.appsec.policy.at(-1), "nginxions/policy");
+	assert.ok(off.appsec.policy.includes("crowdsecurity/appsec-bot-challenge-exclude-search-engines"));
+	const acquis = YAML.parseAllDocuments(renderAcquis(off)).map((d) => d.toJSON());
+	assert.deepEqual(acquis.find((a) => a.source === "appsec").appsec_configs.at(-1), "nginxions/policy");
+	// AppSec on in CrowdSec -> Settings: its configs first; no challenge, no good bots
+	const on = withPolicy(
+		normalize({ appsec: { enabled: true } }),
+		{
+			engines: [{ ...engines[0], antiBot: { mode: "detect", injected: [], validated: [] } }],
+		},
+		{ goodBots: true },
+	);
+	assert.deepEqual(on.appsec.configs, ["crowdsecurity/appsec-default"]);
+	assert.deepEqual(on.appsec.policy, ["nginxions/policy"]);
+});
+
+test("refusals of Anti-Bot and Schema Validation stay alerts but ban no one", () => {
+	const [parser] = YAML.parseAllDocuments(renderEnginesWhitelist()).map((d) => d.toJS());
+	assert.equal(parser.name, "nginxions/policy-engines");
+	// the rule of a refusal is the reason of DropRequest in waf/engines.js
+	assert.match(parser.whitelist.expression[0], /rule_name startsWith 'NginxionS'/);
 });

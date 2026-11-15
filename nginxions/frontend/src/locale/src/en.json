@@ -3135,10 +3135,10 @@
 		"defaultMessage": "Effect"
 	},
 	"nginxions.learning.effects.benign": {
-		"defaultMessage": "The agent takes the label within 30 minutes and learns from it over the next cycles (hours). To stop blocking at once, add an exception for the host until the model has learnt."
+		"defaultMessage": "The agent takes the label within a minute and learns from it over the next cycles (hours). To stop blocking at once, add an exception for the host until the model has learnt."
 	},
 	"nginxions.learning.effects.malicious": {
-		"defaultMessage": "The agent takes the label within 30 minutes: these requests no longer count in learning. Blocking at once is optional."
+		"defaultMessage": "The agent takes the label within a minute: these requests no longer count in learning. Blocking at once is optional."
 	},
 	"nginxions.learning.effects.tuning": {
 		"defaultMessage": "A suggestion of the tuning service of open-appsec: it writes the decision for the agent itself."
@@ -3206,6 +3206,45 @@
 	"nginxions.learning.last": {
 		"defaultMessage": "Last"
 	},
+	"nginxions.learning.learned.error": {
+		"defaultMessage": "Not everything could be read: {error}"
+	},
+	"nginxions.learning.learned.indicators": {
+		"defaultMessage": "Normal indicators ({count} parameters)"
+	},
+	"nginxions.learning.learned.more": {
+		"defaultMessage": "Show {count} more"
+	},
+	"nginxions.learning.learned.none": {
+		"defaultMessage": "The agent has not written what it learned for this host yet: it saves its learning periodically, once it has seen traffic."
+	},
+	"nginxions.learning.learned.nothing": {
+		"defaultMessage": "Nothing learned yet for this part of the host."
+	},
+	"nginxions.learning.learned.open": {
+		"defaultMessage": "What it learned"
+	},
+	"nginxions.learning.learned.stats": {
+		"defaultMessage": "Seen: {requests} requests from {sources} sources on {urls} URLs, {legitimate} of them legitimate. Readiness: {readiness}."
+	},
+	"nginxions.learning.learned.text": {
+		"defaultMessage": "The WAF does not change its model: it learns which indicators of attacks and which types of values are normal for each parameter of the application, and stops counting them there. A parameter is learned from enough different sources over several intervals; from trusted sources at once."
+	},
+	"nginxions.learning.learned.title": {
+		"defaultMessage": "What the agent learned on {name}"
+	},
+	"nginxions.learning.learned.trustedIndicators": {
+		"defaultMessage": "Indicators from trusted sources ({count} parameters)"
+	},
+	"nginxions.learning.learned.trustedTypes": {
+		"defaultMessage": "Types from trusted sources ({count} parameters)"
+	},
+	"nginxions.learning.learned.types": {
+		"defaultMessage": "Normal types of values ({count} parameters)"
+	},
+	"nginxions.learning.learned.updated": {
+		"defaultMessage": "· updated {time}"
+	},
 	"nginxions.learning.mode": {
 		"defaultMessage": "Mode"
 	},
@@ -3226,6 +3265,9 @@
 	},
 	"nginxions.learning.prevent": {
 		"defaultMessage": "Switch to prevention"
+	},
+	"nginxions.learning.prevent.check": {
+		"defaultMessage": "Switch to blocking: what it would have done"
 	},
 	"nginxions.learning.prevent.done": {
 		"defaultMessage": "{name}: prevention on"
@@ -3341,6 +3383,99 @@
 	"nginxions.learning.severity": {
 		"defaultMessage": "Severity"
 	},
+	"nginxions.learning.snapshots.delete.text": {
+		"defaultMessage": "The snapshot of {time} is removed for good."
+	},
+	"nginxions.learning.snapshots.delete.title": {
+		"defaultMessage": "Remove this snapshot?"
+	},
+	"nginxions.learning.snapshots.download": {
+		"defaultMessage": "Download"
+	},
+	"nginxions.learning.snapshots.empty": {
+		"defaultMessage": "No snapshot yet: the first one is taken a day after the agent starts learning, or now with the button below."
+	},
+	"nginxions.learning.snapshots.learned": {
+		"defaultMessage": "Learned"
+	},
+	"nginxions.learning.snapshots.learned.value": {
+		"defaultMessage": "{values} values, {assets} assets"
+	},
+	"nginxions.learning.snapshots.open": {
+		"defaultMessage": "Snapshots of learning"
+	},
+	"nginxions.learning.snapshots.reason": {
+		"defaultMessage": "Why"
+	},
+	"nginxions.learning.snapshots.reason.auto": {
+		"defaultMessage": "Daily"
+	},
+	"nginxions.learning.snapshots.reason.before-restore": {
+		"defaultMessage": "Before a restore"
+	},
+	"nginxions.learning.snapshots.reason.import": {
+		"defaultMessage": "Uploaded"
+	},
+	"nginxions.learning.snapshots.reason.manual": {
+		"defaultMessage": "Manual"
+	},
+	"nginxions.learning.snapshots.restore": {
+		"defaultMessage": "Restore"
+	},
+	"nginxions.learning.snapshots.restore.text": {
+		"defaultMessage": "What the agent learned is replaced by the snapshot of {time}; what it learned since is kept as a snapshot first. The agent and NginxionS restart: about a minute without the WAF and this page."
+	},
+	"nginxions.learning.snapshots.restore.title": {
+		"defaultMessage": "Restore this snapshot?"
+	},
+	"nginxions.learning.snapshots.restored": {
+		"defaultMessage": "The snapshot is restored: the agent and NginxionS restart"
+	},
+	"nginxions.learning.snapshots.restored-on": {
+		"defaultMessage": "restored {time}"
+	},
+	"nginxions.learning.snapshots.shift": {
+		"defaultMessage": "Shift from the snapshot before"
+	},
+	"nginxions.learning.snapshots.shift.drop": {
+		"defaultMessage": "{asset}: shrank from {before} to {after}"
+	},
+	"nginxions.learning.snapshots.shift.first": {
+		"defaultMessage": "the first snapshot"
+	},
+	"nginxions.learning.snapshots.shift.growth": {
+		"defaultMessage": "{asset}: grew from {before} to {after}"
+	},
+	"nginxions.learning.snapshots.shift.none": {
+		"defaultMessage": "no sharp shift"
+	},
+	"nginxions.learning.snapshots.source": {
+		"defaultMessage": "taken {time}"
+	},
+	"nginxions.learning.snapshots.take": {
+		"defaultMessage": "Take a snapshot"
+	},
+	"nginxions.learning.snapshots.taken": {
+		"defaultMessage": "Taken"
+	},
+	"nginxions.learning.snapshots.taken-now": {
+		"defaultMessage": "The snapshot is taken"
+	},
+	"nginxions.learning.snapshots.text": {
+		"defaultMessage": "NginxionS takes a snapshot of the learned state of the agent every day (the last {keep} are kept) and when you ask, and compares each with the one before. A snapshot restored replaces the learned state: the agent and NginxionS restart (about a minute), the state before is kept as a snapshot first. Snapshots are in the data volume of NginxionS, so its backup holds them; a downloaded snapshot is uploaded on another NginxionS to move what was learned."
+	},
+	"nginxions.learning.snapshots.title": {
+		"defaultMessage": "Snapshots of what the agent learned"
+	},
+	"nginxions.learning.snapshots.upload": {
+		"defaultMessage": "Upload a snapshot"
+	},
+	"nginxions.learning.snapshots.uploaded": {
+		"defaultMessage": "The snapshot is uploaded: restore it to use it"
+	},
+	"nginxions.learning.snapshots.warning": {
+		"defaultMessage": "What the agent learned shifted sharply in the snapshot of {time}. A sudden growth can be poisoning (attacks learned as normal traffic); Snapshots of learning restores an earlier state."
+	},
 	"nginxions.learning.submit.benign": {
 		"defaultMessage": "Mark legitimate"
 	},
@@ -3355,6 +3490,66 @@
 	},
 	"nginxions.learning.suggestions.text": {
 		"defaultMessage": "open-appsec finds them itself on busy hosts (many different sources)."
+	},
+	"nginxions.learning.trial.cancel": {
+		"defaultMessage": "Stop the trial"
+	},
+	"nginxions.learning.trial.closed": {
+		"defaultMessage": "{name}: trial closed, the mode is unchanged"
+	},
+	"nginxions.learning.trial.dismiss": {
+		"defaultMessage": "Do not switch"
+	},
+	"nginxions.learning.trial.finished.text": {
+		"defaultMessage": "The trial ran from {from} to {to}. What blocking would have done with the WAF events of the host:"
+	},
+	"nginxions.learning.trial.hours": {
+		"defaultMessage": "Duration"
+	},
+	"nginxions.learning.trial.hours.1": {
+		"defaultMessage": "1 hour"
+	},
+	"nginxions.learning.trial.hours.168": {
+		"defaultMessage": "7 days"
+	},
+	"nginxions.learning.trial.hours.24": {
+		"defaultMessage": "24 hours"
+	},
+	"nginxions.learning.trial.hours.6": {
+		"defaultMessage": "6 hours"
+	},
+	"nginxions.learning.trial.hours.72": {
+		"defaultMessage": "3 days"
+	},
+	"nginxions.learning.trial.none": {
+		"defaultMessage": "The host has no trial of blocking."
+	},
+	"nginxions.learning.trial.over": {
+		"defaultMessage": "Trial over {time}"
+	},
+	"nginxions.learning.trial.report": {
+		"defaultMessage": "Report"
+	},
+	"nginxions.learning.trial.report.title": {
+		"defaultMessage": "Trial of blocking on {name}: report"
+	},
+	"nginxions.learning.trial.running.text": {
+		"defaultMessage": "The trial runs from {from} to {to}. What blocking would have done with the WAF events of the host so far:"
+	},
+	"nginxions.learning.trial.start": {
+		"defaultMessage": "Trial of blocking"
+	},
+	"nginxions.learning.trial.start.text": {
+		"defaultMessage": "Nothing is blocked: the host keeps its mode, and for the hours you choose NginxionS judges its WAF events as blocking would. Then you get a report and decide whether to switch."
+	},
+	"nginxions.learning.trial.start.title": {
+		"defaultMessage": "Trial of blocking on {name}"
+	},
+	"nginxions.learning.trial.started": {
+		"defaultMessage": "{name}: trial of blocking started"
+	},
+	"nginxions.learning.trial.until": {
+		"defaultMessage": "Trial until {time}"
 	},
 	"nginxions.learning.ttl": {
 		"defaultMessage": "Remove the exception after"
@@ -4250,6 +4445,15 @@
 	"nginxions.notifications.rule.learning_queue.params": {
 		"defaultMessage": "from {threshold} groups"
 	},
+	"nginxions.notifications.rule.learning_shift": {
+		"defaultMessage": "Sharp shift of what the WAF learned"
+	},
+	"nginxions.notifications.rule.learning_shift.hint": {
+		"defaultMessage": "What the agent counts as normal on a site grew or shrank sharply between two snapshots of learning: a sudden growth can be poisoning."
+	},
+	"nginxions.notifications.rule.learning_shift.params": {
+		"defaultMessage": "after a daily or manual snapshot"
+	},
 	"nginxions.notifications.rule.new": {
 		"defaultMessage": "New rule"
 	},
@@ -4279,6 +4483,15 @@
 	},
 	"nginxions.notifications.rule.type": {
 		"defaultMessage": "What to watch"
+	},
+	"nginxions.notifications.rule.waf_trial": {
+		"defaultMessage": "Trial of blocking is over"
+	},
+	"nginxions.notifications.rule.waf_trial.hint": {
+		"defaultMessage": "A trial of blocking on a host ended: its report waits in Agents → open-appsec → Learning."
+	},
+	"nginxions.notifications.rule.waf_trial.params": {
+		"defaultMessage": "when a trial ends"
 	},
 	"nginxions.notifications.rules": {
 		"defaultMessage": "Rules"
@@ -4355,11 +4568,17 @@
 	"nginxions.notifications.setup.why.learning_queue": {
 		"defaultMessage": "The WAF agent has doubtful requests to label: legitimate ones stop being blocked."
 	},
+	"nginxions.notifications.setup.why.learning_shift": {
+		"defaultMessage": "Attacks learned as normal traffic would stop being blocked: compare the snapshots and restore an earlier one."
+	},
 	"nginxions.notifications.setup.why.policy_error": {
 		"defaultMessage": "A changed WAF policy did not apply: the agent keeps the previous one."
 	},
 	"nginxions.notifications.setup.why.service_down": {
 		"defaultMessage": "A container of NginxionS stopped or keeps restarting."
+	},
+	"nginxions.notifications.setup.why.waf_trial": {
+		"defaultMessage": "A trial of blocking ended: decide whether the host should block."
 	},
 	"nginxions.notifications.status.firing": {
 		"defaultMessage": "Problem"
@@ -5219,14 +5438,38 @@
 	"nginxions.policy.builtin.nginxions-strict.hint": {
 		"defaultMessage": "Blocks from a lower confidence and checks more: fewer missed attacks, more false positives"
 	},
+	"nginxions.policy.check.asset": {
+		"defaultMessage": "host {name} is not protected"
+	},
+	"nginxions.policy.check.drift": {
+		"defaultMessage": "The agent applies the policy differently from what NginxionS wrote:"
+	},
+	"nginxions.policy.check.ok": {
+		"defaultMessage": "The agent applies the policy as NginxionS wrote it."
+	},
+	"nginxions.policy.check.pending": {
+		"defaultMessage": "The agent has not applied the last change yet."
+	},
+	"nginxions.policy.check.rate-limit": {
+		"defaultMessage": "rate limit {name}"
+	},
+	"nginxions.policy.check.response": {
+		"defaultMessage": "custom response {name}"
+	},
+	"nginxions.policy.check.unknown": {
+		"defaultMessage": "What the agent applies could not be read."
+	},
 	"nginxions.policy.condition.add": {
 		"defaultMessage": "Add condition"
 	},
 	"nginxions.policy.condition.hint": {
-		"defaultMessage": "Conditions with the same field match any of their values; different fields must all match."
+		"defaultMessage": "Values of one field with «is» match any of them, with «is not» none of them; different fields must all match. Header names and values are compared in lower case. Method, headers, place of the parameter, indicator and the operators are of NginxionS (x-nginxions): the agent of open-appsec does not have them."
 	},
 	"nginxions.policy.condition.key": {
 		"defaultMessage": "Field"
+	},
+	"nginxions.policy.condition.op": {
+		"defaultMessage": "Operator"
 	},
 	"nginxions.policy.condition.value": {
 		"defaultMessage": "Value"
@@ -5267,6 +5510,12 @@
 	"nginxions.policy.edit": {
 		"defaultMessage": "Edit"
 	},
+	"nginxions.policy.enforcement.endpointOnly": {
+		"defaultMessage": "Only the routes of the files"
+	},
+	"nginxions.policy.enforcement.fullSchema": {
+		"defaultMessage": "The whole API: a route that is not in the files is refused too"
+	},
 	"nginxions.policy.export": {
 		"defaultMessage": "Export"
 	},
@@ -5290,6 +5539,15 @@
 	},
 	"nginxions.policy.f.additionalSuspiciousEventsLogging.responseCode": {
 		"defaultMessage": "Response code"
+	},
+	"nginxions.policy.f.antiBot.injectedUris": {
+		"defaultMessage": "Pages a browser gets the check on, one path per line (empty, with no paths below: every page)"
+	},
+	"nginxions.policy.f.antiBot.overrideMode": {
+		"defaultMessage": "Mode (prevent: the challenge and refusals; detect: refusals are only logged)"
+	},
+	"nginxions.policy.f.antiBot.validatedUris": {
+		"defaultMessage": "Paths that need a passed check (requests without it are refused), one per line"
 	},
 	"nginxions.policy.f.appsecLogging.allWebRequests": {
 		"defaultMessage": "All requests (a lot of data)"
@@ -5315,8 +5573,80 @@
 	"nginxions.policy.f.extendedLogging.urlQuery": {
 		"defaultMessage": "URL query"
 	},
+	"nginxions.policy.f.fileSecurity.archiveInspection.archivedFilesWhereContentExtractionFailed": {
+		"defaultMessage": "Action for an archive that could not be extracted (encrypted, over the limits)"
+	},
+	"nginxions.policy.f.fileSecurity.archiveInspection.archivedFilesWithinArchivedFiles": {
+		"defaultMessage": "Action for an archive inside an archive"
+	},
+	"nginxions.policy.f.fileSecurity.archiveInspection.extractArchiveFiles": {
+		"defaultMessage": "Extract and scan archives (off: an archive passes unscanned)"
+	},
+	"nginxions.policy.f.fileSecurity.archiveInspection.scanMaxFileSize": {
+		"defaultMessage": "Largest archive to extract"
+	},
+	"nginxions.policy.f.fileSecurity.archiveInspection.scanMaxFileSizeUnit": {
+		"defaultMessage": "Unit of the archive size"
+	},
+	"nginxions.policy.f.fileSecurity.highConfidenceEventAction": {
+		"defaultMessage": "Action for a virus of high confidence (malware signatures)"
+	},
+	"nginxions.policy.f.fileSecurity.largeFileInspection.fileSizeLimit": {
+		"defaultMessage": "Largest upload that is checked"
+	},
+	"nginxions.policy.f.fileSecurity.largeFileInspection.fileSizeLimitUnit": {
+		"defaultMessage": "Unit of the size"
+	},
+	"nginxions.policy.f.fileSecurity.largeFileInspection.filesExceedingSizeLimitAction": {
+		"defaultMessage": "Action for a larger upload (not checked)"
+	},
+	"nginxions.policy.f.fileSecurity.lowConfidenceEventAction": {
+		"defaultMessage": "Action for low confidence (heuristics)"
+	},
+	"nginxions.policy.f.fileSecurity.mediumConfidenceEventAction": {
+		"defaultMessage": "Action for medium confidence (potentially unwanted programs, PUA)"
+	},
+	"nginxions.policy.f.fileSecurity.minSeverityLevel": {
+		"defaultMessage": "Lowest severity of a virus (below it passes)"
+	},
+	"nginxions.policy.f.fileSecurity.overrideMode": {
+		"defaultMessage": "Mode"
+	},
+	"nginxions.policy.f.fileSecurity.threatEmulationEnabled": {
+		"defaultMessage": "Threat emulation: the deep static analysis of ClamAV (Office macros, broken executables and media) instead of the sandbox of Check Point"
+	},
+	"nginxions.policy.f.fileSecurity.unnamedFilesAction": {
+		"defaultMessage": "Action for a file with no name (a binary upload with no name in Content-Disposition or the path)"
+	},
 	"nginxions.policy.f.httpResponseCode": {
 		"defaultMessage": "HTTP code"
+	},
+	"nginxions.policy.f.intrusionPrevention.highConfidenceEventAction": {
+		"defaultMessage": "Action for signatures of high confidence"
+	},
+	"nginxions.policy.f.intrusionPrevention.lowConfidenceEventAction": {
+		"defaultMessage": "Action for signatures of low confidence"
+	},
+	"nginxions.policy.f.intrusionPrevention.maxPerformanceImpact": {
+		"defaultMessage": "Maximum performance impact of a signature"
+	},
+	"nginxions.policy.f.intrusionPrevention.mediumConfidenceEventAction": {
+		"defaultMessage": "Action for signatures of medium confidence"
+	},
+	"nginxions.policy.f.intrusionPrevention.minCveYear": {
+		"defaultMessage": "Signatures of vulnerabilities from the year"
+	},
+	"nginxions.policy.f.intrusionPrevention.minSeverityLevel": {
+		"defaultMessage": "Minimum severity of a signature"
+	},
+	"nginxions.policy.f.intrusionPrevention.overrideMode": {
+		"defaultMessage": "Mode"
+	},
+	"nginxions.policy.f.logDestination.cefService": {
+		"defaultMessage": "CEF"
+	},
+	"nginxions.policy.f.logDestination.syslogService": {
+		"defaultMessage": "Syslog"
 	},
 	"nginxions.policy.f.messageBody": {
 		"defaultMessage": "Text of the page"
@@ -5341,6 +5671,15 @@
 	},
 	"nginxions.policy.f.redirectUrl": {
 		"defaultMessage": "Redirect to"
+	},
+	"nginxions.policy.f.schemaValidation.enforcementLevel": {
+		"defaultMessage": "What is checked"
+	},
+	"nginxions.policy.f.schemaValidation.files": {
+		"defaultMessage": "OpenAPI files (a request valid against one of them passes)"
+	},
+	"nginxions.policy.f.schemaValidation.overrideMode": {
+		"defaultMessage": "Mode"
 	},
 	"nginxions.policy.f.snortSignatures.files": {
 		"defaultMessage": "Files of signatures in the agent, one per line"
@@ -5381,11 +5720,8 @@
 	"nginxions.policy.f.webAttacks.protections.openRedirect": {
 		"defaultMessage": "Open redirect"
 	},
-	"nginxions.policy.format.v1": {
-		"defaultMessage": "The agent gets the policy in v1beta1 (as open-appsec-npm): every exception of a rule applies."
-	},
 	"nginxions.policy.format.v2": {
-		"defaultMessage": "The policy uses features of v1beta2 only, so the agent gets v1beta2:"
+		"defaultMessage": "The agent gets the policy in v1beta2 and applies every field of it."
 	},
 	"nginxions.policy.from-template": {
 		"defaultMessage": "Fill from template"
@@ -5393,11 +5729,26 @@
 	"nginxions.policy.h.additionalSuspiciousEventsLogging": {
 		"defaultMessage": "Suspicious requests"
 	},
+	"nginxions.policy.h.antiBot": {
+		"defaultMessage": "Anti-Bot: browser check (AppSec of CrowdSec)"
+	},
 	"nginxions.policy.h.appsecLogging": {
 		"defaultMessage": "Events"
 	},
 	"nginxions.policy.h.extendedLogging": {
 		"defaultMessage": "Details"
+	},
+	"nginxions.policy.h.fileSecurity": {
+		"defaultMessage": "File Security: uploads checked by ClamAV"
+	},
+	"nginxions.policy.h.intrusionPrevention": {
+		"defaultMessage": "IPS: signatures of known vulnerabilities (CVE)"
+	},
+	"nginxions.policy.h.logDestination": {
+		"defaultMessage": "Send to a log server"
+	},
+	"nginxions.policy.h.schemaValidation": {
+		"defaultMessage": "Schema Validation: requests checked against OpenAPI (AppSec of CrowdSec)"
 	},
 	"nginxions.policy.h.snortSignatures": {
 		"defaultMessage": "Snort signatures"
@@ -5417,6 +5768,15 @@
 	"nginxions.policy.identifier.values": {
 		"defaultMessage": "Names, separated by commas"
 	},
+	"nginxions.policy.impact.high": {
+		"defaultMessage": "High"
+	},
+	"nginxions.policy.impact.low": {
+		"defaultMessage": "Low"
+	},
+	"nginxions.policy.impact.medium": {
+		"defaultMessage": "Medium"
+	},
 	"nginxions.policy.import": {
 		"defaultMessage": "Import"
 	},
@@ -5431,6 +5791,9 @@
 	},
 	"nginxions.policy.import.create": {
 		"defaultMessage": "New objects: {count}"
+	},
+	"nginxions.policy.import.dropped": {
+		"defaultMessage": "Left out (Kubernetes, the Check Point cloud, engines of the Premium edition, extra practices of a rule):"
 	},
 	"nginxions.policy.import.file": {
 		"defaultMessage": "File local_policy.yaml"
@@ -5459,8 +5822,23 @@
 	"nginxions.policy.key.countryName": {
 		"defaultMessage": "Country"
 	},
+	"nginxions.policy.key.headerName": {
+		"defaultMessage": "Header name"
+	},
+	"nginxions.policy.key.headerValue": {
+		"defaultMessage": "Header value"
+	},
 	"nginxions.policy.key.hostName": {
 		"defaultMessage": "Host name"
+	},
+	"nginxions.policy.key.indicator": {
+		"defaultMessage": "Indicator of the attack"
+	},
+	"nginxions.policy.key.method": {
+		"defaultMessage": "Method"
+	},
+	"nginxions.policy.key.paramLocation": {
+		"defaultMessage": "Place of the parameter"
 	},
 	"nginxions.policy.key.paramName": {
 		"defaultMessage": "Parameter name"
@@ -5600,6 +5978,15 @@
 	"nginxions.policy.none": {
 		"defaultMessage": "None"
 	},
+	"nginxions.policy.op.equals": {
+		"defaultMessage": "is"
+	},
+	"nginxions.policy.op.exist": {
+		"defaultMessage": "is present"
+	},
+	"nginxions.policy.op.not-equals": {
+		"defaultMessage": "is not"
+	},
 	"nginxions.policy.previewing": {
 		"defaultMessage": "Building the policy…"
 	},
@@ -5608,6 +5995,9 @@
 	},
 	"nginxions.policy.rate.add": {
 		"defaultMessage": "Add rule"
+	},
+	"nginxions.policy.rate.condition-add": {
+		"defaultMessage": "Add condition"
 	},
 	"nginxions.policy.rate.limit": {
 		"defaultMessage": "Limit"
@@ -5623,18 +6013,6 @@
 	},
 	"nginxions.policy.rate.uri": {
 		"defaultMessage": "URI"
-	},
-	"nginxions.policy.reason.file-security": {
-		"defaultMessage": "file security of practice {name}"
-	},
-	"nginxions.policy.reason.ips": {
-		"defaultMessage": "IPS of practice {name}"
-	},
-	"nginxions.policy.reason.rate-limit": {
-		"defaultMessage": "rate limits of {name}"
-	},
-	"nginxions.policy.reason.redirect": {
-		"defaultMessage": "redirect of response {name}"
 	},
 	"nginxions.policy.remove": {
 		"defaultMessage": "Remove"
@@ -5684,6 +6062,99 @@
 	"nginxions.policy.saved": {
 		"defaultMessage": "Policy applied"
 	},
+	"nginxions.policy.schemas.bad-name": {
+		"defaultMessage": "The file name must end in .yaml, .yml or .json"
+	},
+	"nginxions.policy.schemas.delete": {
+		"defaultMessage": "Delete"
+	},
+	"nginxions.policy.schemas.download": {
+		"defaultMessage": "Download"
+	},
+	"nginxions.policy.schemas.empty": {
+		"defaultMessage": "No OpenAPI files yet: upload one."
+	},
+	"nginxions.policy.schemas.info": {
+		"defaultMessage": "{title}, OpenAPI {version}, {paths} paths"
+	},
+	"nginxions.policy.schemas.missing": {
+		"defaultMessage": "{name}: no such file in NginxionS, upload it again"
+	},
+	"nginxions.policy.schemas.upload": {
+		"defaultMessage": "Upload an OpenAPI file"
+	},
+	"nginxions.policy.schemas.used": {
+		"defaultMessage": "Used by {practices}"
+	},
+	"nginxions.policy.service.add": {
+		"defaultMessage": "Add server"
+	},
+	"nginxions.policy.service.address": {
+		"defaultMessage": "IP address or name"
+	},
+	"nginxions.policy.service.hint": {
+		"defaultMessage": "Any number of servers, by IPv4, IPv6 or name. The agent sends to one IPv4 server itself; the rest goes through NginxionS: the agent sends to 127.0.0.1, NginxionS to each server over UDP or TCP."
+	},
+	"nginxions.policy.service.port": {
+		"defaultMessage": "Port"
+	},
+	"nginxions.policy.service.proto": {
+		"defaultMessage": "Protocol"
+	},
+	"nginxions.policy.severity.critical": {
+		"defaultMessage": "Critical"
+	},
+	"nginxions.policy.severity.high": {
+		"defaultMessage": "High"
+	},
+	"nginxions.policy.severity.low": {
+		"defaultMessage": "Low"
+	},
+	"nginxions.policy.severity.medium": {
+		"defaultMessage": "Medium"
+	},
+	"nginxions.policy.simulation.count": {
+		"defaultMessage": "Events"
+	},
+	"nginxions.policy.simulation.error": {
+		"defaultMessage": "The dry run on recent events is not available."
+	},
+	"nginxions.policy.simulation.limited": {
+		"defaultMessage": "Only the latest events were checked."
+	},
+	"nginxions.policy.simulation.none": {
+		"defaultMessage": "Dry run: none of the {events} WAF events of {period} would be treated differently."
+	},
+	"nginxions.policy.simulation.period.1h": {
+		"defaultMessage": "the last hour"
+	},
+	"nginxions.policy.simulation.period.24h": {
+		"defaultMessage": "the last 24 hours"
+	},
+	"nginxions.policy.simulation.period.7d": {
+		"defaultMessage": "the last 7 days"
+	},
+	"nginxions.policy.simulation.period.trial": {
+		"defaultMessage": "the hours of the trial"
+	},
+	"nginxions.policy.simulation.request": {
+		"defaultMessage": "Request"
+	},
+	"nginxions.policy.simulation.source": {
+		"defaultMessage": "Source"
+	},
+	"nginxions.policy.simulation.summary": {
+		"defaultMessage": "Of {events} events, {changed} would be treated differently: {pass} let through, {block} blocked, {detect} only logged."
+	},
+	"nginxions.policy.simulation.title": {
+		"defaultMessage": "Dry run on the WAF events of {period}"
+	},
+	"nginxions.policy.simulation.unknown": {
+		"defaultMessage": "{count} events could not be judged (a condition the events do not record, such as the country code)."
+	},
+	"nginxions.policy.simulation.verdict": {
+		"defaultMessage": "Now → after the change"
+	},
 	"nginxions.policy.subtitle": {
 		"defaultMessage": "The open-appsec policy made of objects: practices, rate limits, log triggers, responses, exceptions. Hosts use the default policy, a template or their own objects."
 	},
@@ -5705,8 +6176,14 @@
 	"nginxions.policy.template.strict": {
 		"defaultMessage": "Strict"
 	},
-	"nginxions.policy.v2-hint": {
-		"defaultMessage": "Needs local_policy.yaml v1beta2"
+	"nginxions.policy.verdict.block": {
+		"defaultMessage": "blocked"
+	},
+	"nginxions.policy.verdict.detect": {
+		"defaultMessage": "logged"
+	},
+	"nginxions.policy.verdict.pass": {
+		"defaultMessage": "passes"
 	},
 	"nginxions.policy.version.created": {
 		"defaultMessage": "Created: {kind} {name}"
@@ -5735,8 +6212,14 @@
 	"nginxions.policy.view": {
 		"defaultMessage": "View"
 	},
+	"nginxions.policy.warning.extra": {
+		"defaultMessage": "Rule {rule}: the agent applies the first object of {name} only."
+	},
 	"nginxions.policy.warning.missing": {
 		"defaultMessage": "Rule {rule} refers to {name}, which does not exist (expert fragment?): the agent ignores it."
+	},
+	"nginxions.policy.warning.unsupported": {
+		"defaultMessage": "Object {rule}: {name} is not in the agent of NginxionS and does nothing. Turn it off."
 	},
 	"nginxions.rbac.action.apply": {
 		"defaultMessage": "Apply"
@@ -7469,6 +7952,42 @@
 	"nginxions.waf.expert.versions": {
 		"defaultMessage": "Versions"
 	},
+	"nginxions.waf.files.off": {
+		"defaultMessage": "Off: no practice has File Security on"
+	},
+	"nginxions.waf.files.on": {
+		"defaultMessage": "On, uploads of {hosts} host(s) are checked"
+	},
+	"nginxions.waf.files.online": {
+		"defaultMessage": "Update the signatures online (freshclam, needs the internet)"
+	},
+	"nginxions.waf.files.saved": {
+		"defaultMessage": "Saved, ClamAV restarts"
+	},
+	"nginxions.waf.files.signatures": {
+		"defaultMessage": "Signatures"
+	},
+	"nginxions.waf.files.starting": {
+		"defaultMessage": "Starting: ClamAV is loading its signatures (uploads pass until then)"
+	},
+	"nginxions.waf.files.state": {
+		"defaultMessage": "State"
+	},
+	"nginxions.waf.files.text": {
+		"defaultMessage": "Uploads to the hosts whose practice has File Security on are checked by ClamAV before they reach the server. ClamAV runs only while a practice needs it: its signatures take about 1 GB of memory."
+	},
+	"nginxions.waf.files.title": {
+		"defaultMessage": "File Security (ClamAV)"
+	},
+	"nginxions.waf.files.upload": {
+		"defaultMessage": "Upload signatures (main.cvd, daily.cvd…)"
+	},
+	"nginxions.waf.files.uploaded": {
+		"defaultMessage": "Uploaded in NginxionS: {files}"
+	},
+	"nginxions.waf.files.uploaded-now": {
+		"defaultMessage": "Signatures uploaded, ClamAV restarts with them"
+	},
 	"nginxions.waf.host-description": {
 		"defaultMessage": "The WAF analyses every request to this host with machine learning. Start in Detect-Learn: the model learns your normal traffic and only logs attacks; switch to Prevent-Learn when the events look right."
 	},
@@ -7507,6 +8026,27 @@
 	},
 	"nginxions.waf.location.off": {
 		"defaultMessage": "Off"
+	},
+	"nginxions.waf.metrics": {
+		"defaultMessage": "Metrics of the agent"
+	},
+	"nginxions.waf.metrics.labels": {
+		"defaultMessage": "Labels"
+	},
+	"nginxions.waf.metrics.name": {
+		"defaultMessage": "Metric"
+	},
+	"nginxions.waf.metrics.none": {
+		"defaultMessage": "The agent has no metrics yet: its services report them a minute or two after the start."
+	},
+	"nginxions.waf.metrics.search": {
+		"defaultMessage": "Search metrics"
+	},
+	"nginxions.waf.metrics.unreachable": {
+		"defaultMessage": "The metrics service of the agent does not answer"
+	},
+	"nginxions.waf.metrics.value": {
+		"defaultMessage": "Value"
 	},
 	"nginxions.waf.minimum-confidence": {
 		"defaultMessage": "Minimum confidence to block"
@@ -7576,6 +8116,9 @@
 	},
 	"nginxions.waf.policy-apply": {
 		"defaultMessage": "Apply now"
+	},
+	"nginxions.waf.policy-check": {
+		"defaultMessage": "In the agent"
 	},
 	"nginxions.waf.policy-generated": {
 		"defaultMessage": "Generated"

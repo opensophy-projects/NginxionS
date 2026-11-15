@@ -178,7 +178,13 @@ protected:
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
-            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            // NginxionS: an agent with no cloud has no tenant; the shared storage and the tuning service refuse an empty
+            // X-Tenant-Id ("Missing X-Tenant-Id"), so decisions.data of the labels of NginxionS was never read. "local" is the
+            // tenant NginxionS writes with (learning/appsec.js); the path of the file does not depend on it.
+            req_md.insertHeader(
+                "X-Tenant-Id",
+                agentDetails->getTenantId().empty() ? std::string("local") : agentDetails->getTenantId()
+            );
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             auto req_status = messaging->sendSyncMessage(
@@ -241,7 +247,13 @@ protected:
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
-            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            // NginxionS: an agent with no cloud has no tenant; the shared storage and the tuning service refuse an empty
+            // X-Tenant-Id ("Missing X-Tenant-Id"), so decisions.data of the labels of NginxionS was never read. "local" is the
+            // tenant NginxionS writes with (learning/appsec.js); the path of the file does not depend on it.
+            req_md.insertHeader(
+                "X-Tenant-Id",
+                agentDetails->getTenantId().empty() ? std::string("local") : agentDetails->getTenantId()
+            );
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             return messaging->sendSyncMessageWithoutResponse(

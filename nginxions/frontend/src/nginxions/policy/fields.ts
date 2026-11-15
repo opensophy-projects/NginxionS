@@ -16,23 +16,39 @@ export const EXCEPTION_KEYS = [
 	"countryCode",
 	"countryName",
 	"sourceIdentifier",
+	// x-nginxions: keys the WAF of the agent matches beyond v1beta2 (docs/WAF-POLICY.md 5.2)
+	"method",
+	"headerName",
+	"headerValue",
+	"paramLocation",
+	"indicator",
 ];
+
+/** operators of a condition of an exception (x-nginxions); exist has no value */
+export const EXCEPTION_OPS = ["equals", "not-equals", "exist"];
+
+/** keys of a condition of a rate limit rule: what the rate limit engine of the agent matches */
+export const RATE_LIMIT_KEYS = ["sourceIp", "url", "sourceIdentifier", "countryCode", "countryName"];
 
 export type Field = {
 	path: string;
 	/** shown only for these values of the specification */
 	showIf?: (spec: Record<string, any>) => boolean;
-	/** needs local_policy.yaml v1beta2 (see the warning of the format) */
-	v2?: boolean;
 } & (
 	| { type: "select"; options: string[]; modes?: boolean /** locale prefix of the options */; labels?: string }
 	| { type: "bool" }
 	| { type: "number"; min?: number; max?: number }
 	| { type: "text" | "textarea" }
 	| { type: "strings" }
+	/** paths, one per line: [{uri}] in the policy (antiBot) */
+	| { type: "uris" }
+	/** OpenAPI files of WAF -> Policy (schemaValidation.files): chosen, uploaded */
+	| { type: "schemas" }
 	| { type: "conditions" }
 	| { type: "rateRules" }
 	| { type: "identifiers" }
+	/** one log server of a list (the agent sends to one): address, port, protocol */
+	| { type: "service" }
 	| { type: "names"; kind: Kind }
 	| { type: "heading" }
 );
@@ -55,12 +71,90 @@ export const FIELDS: Record<Kind, Field[]> = {
 		{ path: "webAttacks.maxHeaderSizeBytes", type: "number", min: 1 },
 		{ path: "webAttacks.maxBodySizeKb", type: "number", min: 1 },
 		{ path: "webAttacks.maxObjectDepth", type: "number", min: 1 },
+		// IPS of the agent with the signatures of NginxionS (CrowdSec virtual patching rules, docs/WAF-POLICY.md)
+		{ path: "intrusionPrevention", type: "heading" },
+		{ path: "intrusionPrevention.overrideMode", type: "select", options: MODES, modes: true },
+		{
+			path: "intrusionPrevention.minSeverityLevel",
+			type: "select",
+			options: ["low", "medium", "high", "critical"],
+			labels: "nginxions.policy.severity.",
+		},
+		{
+			path: "intrusionPrevention.maxPerformanceImpact",
+			type: "select",
+			options: ["low", "medium", "high"],
+			labels: "nginxions.policy.impact.",
+		},
+		{ path: "intrusionPrevention.minCveYear", type: "number", min: 1999, max: 2121 },
+		{ path: "intrusionPrevention.highConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		{ path: "intrusionPrevention.mediumConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		{ path: "intrusionPrevention.lowConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		// AppSec of CrowdSec runs them for the agent (waf/engines.js of the backend)
+		{ path: "antiBot", type: "heading" },
+		{ path: "antiBot.overrideMode", type: "select", options: MODES, modes: true },
+		{ path: "antiBot.injectedUris", type: "uris" },
+		{ path: "antiBot.validatedUris", type: "uris" },
+		{ path: "schemaValidation", type: "heading" },
+		{ path: "schemaValidation.overrideMode", type: "select", options: MODES, modes: true },
+		{
+			path: "schemaValidation.enforcementLevel",
+			type: "select",
+			options: ["fullSchema", "endpointOnly"],
+			labels: "nginxions.policy.enforcement.",
+		},
+		{ path: "schemaValidation.files", type: "schemas" },
+		// nginx with ClamAV runs it (waf/files.js of the backend)
+		{ path: "fileSecurity", type: "heading" },
+		{ path: "fileSecurity.overrideMode", type: "select", options: MODES, modes: true },
+		{ path: "fileSecurity.highConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		{ path: "fileSecurity.mediumConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		{ path: "fileSecurity.lowConfidenceEventAction", type: "select", options: ACTIONS, modes: true },
+		{
+			path: "fileSecurity.minSeverityLevel",
+			type: "select",
+			options: ["low", "medium", "high", "critical"],
+			labels: "nginxions.policy.severity.",
+		},
+		{ path: "fileSecurity.unnamedFilesAction", type: "select", options: ACTIONS, modes: true },
+		{ path: "fileSecurity.threatEmulationEnabled", type: "bool" },
+		{ path: "fileSecurity.archiveInspection.extractArchiveFiles", type: "bool" },
+		{ path: "fileSecurity.archiveInspection.scanMaxFileSize", type: "number", min: 1 },
+		{
+			path: "fileSecurity.archiveInspection.scanMaxFileSizeUnit",
+			type: "select",
+			options: ["bytes", "KB", "MB", "GB"],
+		},
+		{
+			path: "fileSecurity.archiveInspection.archivedFilesWithinArchivedFiles",
+			type: "select",
+			options: ACTIONS,
+			modes: true,
+		},
+		{
+			path: "fileSecurity.archiveInspection.archivedFilesWhereContentExtractionFailed",
+			type: "select",
+			options: ACTIONS,
+			modes: true,
+		},
+		{ path: "fileSecurity.largeFileInspection.fileSizeLimit", type: "number", min: 1 },
+		{
+			path: "fileSecurity.largeFileInspection.fileSizeLimitUnit",
+			type: "select",
+			options: ["bytes", "KB", "MB", "GB"],
+		},
+		{
+			path: "fileSecurity.largeFileInspection.filesExceedingSizeLimitAction",
+			type: "select",
+			options: ACTIONS,
+			modes: true,
+		},
 		{ path: "snortSignatures", type: "heading" },
 		{ path: "snortSignatures.overrideMode", type: "select", options: MODES, modes: true },
 		{ path: "snortSignatures.files", type: "strings" },
 	],
 	access_control: [
-		{ path: "rateLimit.overrideMode", type: "select", options: ACTIONS, modes: true, v2: true },
+		{ path: "rateLimit.overrideMode", type: "select", options: ACTIONS, modes: true },
 		{ path: "rateLimit.rules", type: "rateRules" },
 	],
 	log_trigger: [
@@ -86,6 +180,9 @@ export const FIELDS: Record<Kind, Field[]> = {
 		{ path: "extendedLogging.urlQuery", type: "bool" },
 		{ path: "extendedLogging.httpHeaders", type: "bool" },
 		{ path: "extendedLogging.requestBody", type: "bool" },
+		{ path: "logDestination", type: "heading" },
+		{ path: "logDestination.syslogService", type: "service" },
+		{ path: "logDestination.cefService", type: "service" },
 	],
 	custom_response: [
 		{
@@ -97,7 +194,7 @@ export const FIELDS: Record<Kind, Field[]> = {
 		{ path: "httpResponseCode", type: "number", min: 100, max: 599, showIf: (s) => s.mode !== "redirect" },
 		{ path: "messageTitle", type: "text", showIf: (s) => s.mode === "block-page" },
 		{ path: "messageBody", type: "textarea", showIf: (s) => s.mode === "block-page" },
-		{ path: "redirectUrl", type: "text", showIf: (s) => s.mode === "redirect", v2: true },
+		{ path: "redirectUrl", type: "text", showIf: (s) => s.mode === "redirect" },
 		{ path: "redirectAddXEventId", type: "bool", showIf: (s) => s.mode === "redirect" },
 	],
 	exception: [
@@ -155,7 +252,14 @@ export const summary = (kind: Kind, spec: Record<string, any>): string[] => {
 		case "custom_response":
 			return [spec.mode, spec.mode === "redirect" ? spec.redirectUrl : spec.httpResponseCode].filter(Boolean);
 		case "exception":
-			return [spec.action, ...(spec.condition || []).map((c: any) => `${c.key}=${c.value}`)];
+			return [
+				spec.action,
+				...(spec.condition || []).map((c: any) =>
+					c.op === "exist"
+						? `${c.key}?`
+						: `${c.key}${c.op === "not-equals" || c.op === "not-in" ? "≠" : "="}${c.value}`,
+				),
+			];
 		case "trusted_sources":
 			return [`≥${spec.minNumOfSources}`, ...(spec.sourcesIdentifiers || [])];
 		case "source_identifiers":

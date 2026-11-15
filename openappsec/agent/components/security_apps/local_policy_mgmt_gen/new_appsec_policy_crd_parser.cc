@@ -32,10 +32,13 @@ NewParsedRule::load(cereal::JSONInputArchive &archive_in)
         archive_in);
     parseMandatoryAppsecJSONKey<vector<string>>("accessControlPractices", access_control_practices, archive_in);
     parseAppsecJSONKey<string>("mode", mode, archive_in);
-    if (valid_modes.count(mode) == 0) {
+    // NginxionS: a rule without a mode takes the one of the default rule (createPolicyElementsByRule); it threw
+    if (!mode.empty() && valid_modes.count(mode) == 0) {
         throw PolicyGenException("AppSec New Parsed Rule mode invalid: " + mode);
     }
-    parseAppsecJSONKey<string>("customResponse", custom_response, archive_in, "403");
+    // NginxionS: no default name ("403" named a response no policy has: an empty one, answered with no code, which the
+    // attachment answers by closing the connection); a rule without one takes the one of the default rule
+    parseAppsecJSONKey<string>("customResponse", custom_response, archive_in);
     parseAppsecJSONKey<string>("sourceIdentifiers", source_identifiers, archive_in);
     parseAppsecJSONKey<string>("trustedSources", trusted_sources, archive_in);
     parseAppsecJSONKey<string>("autoUpgrade", upgrade_settings, archive_in);
