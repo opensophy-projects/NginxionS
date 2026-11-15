@@ -10,7 +10,9 @@ export type RuleType =
 	| "service_down"
 	| "cert_expiry"
 	| "host_problem"
-	| "learning_queue";
+	| "learning_queue"
+	| "waf_trial"
+	| "learning_shift";
 export type Language = "ru" | "en";
 
 export interface EmailConfig {

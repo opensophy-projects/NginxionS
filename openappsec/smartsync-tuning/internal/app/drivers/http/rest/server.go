@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -128,7 +129,7 @@ func (a *AdapterBase) initServer(handler http.Handler) error {
 	}
 
 	if port > 0 {
-		server.Addr = ":" + strconv.Itoa(port)
+		server.Addr = listenHost() + ":" + strconv.Itoa(port)
 	}
 
 	a.server = server
@@ -245,4 +246,14 @@ func initJSONSchemaValidator(jvs JSONSchemaValidator, schemaFilePath string) err
 	}
 
 	return nil
+}
+
+// NginxionS: the service listens on 127.0.0.1 only (its callers, the agent and nginxions-control, share the network
+// namespace of the openappsec container); it listened on every address, so that any container of the edge network
+// reached it without authentication (scripts/test-airgap.sh checks it). SERVER_HOST changes it ("" = every address).
+func listenHost() string {
+	if host, ok := os.LookupEnv("SERVER_HOST"); ok {
+		return host
+	}
+	return "127.0.0.1"
 }

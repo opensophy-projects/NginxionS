@@ -14,7 +14,7 @@ NginxionS — форк NPMplus с встроенными open-appsec (ML-WAF) и
 | `nginxions/` | NPMplus (git subtree, upstream `ZoeyVid/NPMplus`) + наши изменения | см. «Изменения в upstream-коде» |
 | `nginxions/backend/nginxions/`, `nginxions/frontend/src/nginxions/` | Наш код (модули NginxionS) | Новый код — сюда |
 | `openappsec/` | Исходники агента NginxionS: open-appsec `agent/`, `attachment/`, `smartsync-shared-files/`, `smartsync-tuning/`, `smartsync/` (git subtree, upstream `openappsec/*`) | Свой код агента; изменения upstream-файлов — с меткой `NginxionS:`, как в `nginxions/` |
-| `deploy/` | `compose.yaml` (прод: `nginxions`, `openappsec`, `crowdsec`, `postgres` + разовый `nginxions-init`), `compose.dev.yaml`, `.env` (версии), `init/`, `openappsec/` (образ `nginxions-openappsec`), `test/` | |
+| `deploy/` | `compose.yaml` (прод: `nginxions`, `openappsec`, `crowdsec`, `clamav`, `postgres` + разовый `nginxions-init`), `compose.dev.yaml`, `.env` (версии), `init/`, `openappsec/` (образ `nginxions-openappsec`), `test/` | |
 | `docs/` | План, ADR, инвентаризация env | |
 
 ## Изменения в upstream-коде (`nginxions/`)
@@ -42,6 +42,8 @@ git subtree pull --prefix=nginxions https://github.com/ZoeyVid/NPMplus <tag> --s
 ## Команды проверки
 
 ```bash
+# всё быстрое сразу (то же, что задача CI «Lint, types, tests»); --changed — только затронутое
+scripts/check.sh
 # backend
 cd nginxions/backend && pnpm install --frozen-lockfile && pnpm biome ci . --assist-enabled=false \
   && node --test 'nginxions/**/*.test.js'
@@ -66,7 +68,7 @@ scripts/test-airgap.sh
 |---|---|---|
 | `nginxions` | `nginxions/Dockerfile` (+ стадия `crowdsec-seed`; контекст сборки `attachment=openappsec/attachment`) | долго: nginx, aws-lc, attachment из исходников |
 | `nginxions-openappsec` | `deploy/openappsec/Dockerfile`: агент (C++), shared storage и tuning (Go) из `openappsec/` (контекст сборки `openappsec=openappsec`), `nginxions-control` (контекст `control=nginxions/backend/nginxions/control`) | долго: C++ |
-| CrowdSec, Postgres | официальные образы, версии в `deploy/.env` | — |
+| CrowdSec, ClamAV, Postgres | официальные образы, версии в `deploy/.env` | — |
 
 Модель агента в образе — продвинутая модель Check Point (`openappsec/agent/components/security_apps/waap/resources/waap.data`, лицензия внутри
 файла). Модель WAF NginxionS обучается из неё в CI на настоящем агенте (`training.yml`: ветки `training/**` или `[train]` в коммите) и
@@ -97,7 +99,8 @@ cd nginxions/frontend && pnpm install && pnpm vite                              
 - Проверки безопасности в CI (SAST, секреты, SCA, SBOM, IaC, образы, DAST) и их политика — `docs/DEVSECOPS.md`; итог —
   в Summary прогона и в артефакте `security-report`. Находку исправляют; если нельзя — вносят в
   `.github/security/accepted-risks.json` с причиной и сроком. Ложное срабатывание Semgrep — `// nosemgrep: <правило> -- почему`.
-  На обычных ветках CI быстрый (без образов и DAST); полный прогон — `work`, теги, PR или `[full]` в сообщении
-  коммита; расширенный (тяжёлые сканеры) — ветки `security/**`, PR с меткой `security-scan`, Run workflow с уровнем
+  На обычных ветках CI быстрый (без образов и DAST); полный прогон — `work`, теги, PR, `[full]` в сообщении
+  коммита или изменение агента/`deploy/`/Dockerfile; только часть тестов стека — `[smoke:waf]`, `[dast]` и т. п.
+  (`scripts/ci-level.mjs`). Перед push — `scripts/check.sh` (быстрая часть CI локально); расширенный (тяжёлые сканеры) — ветки `security/**`, PR с меткой `security-scan`, Run workflow с уровнем
   `extended`.
 - Доступ к Docker — только у `nginxions-control` (в контейнере `openappsec`, сокет `/var/run/docker.sock`): белый список операций (список, логи, перезапуск, reload контейнеров стека с меткой `nginxions.managed`), токен, аудит, слушает только 127.0.0.1. Контейнер `nginxions`, принимающий трафик из интернета, сокета не получает.

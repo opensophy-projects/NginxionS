@@ -18,8 +18,18 @@ import {
 	setDefaultPolicy,
 	updateObject,
 } from "./api";
-import { EXCEPTION_KEYS, FIELDS, type Field, getPath, NEW_SPEC, setPath } from "./fields";
+import {
+	EXCEPTION_KEYS,
+	EXCEPTION_OPS,
+	FIELDS,
+	type Field,
+	getPath,
+	NEW_SPEC,
+	RATE_LIMIT_KEYS,
+	setPath,
+} from "./fields";
 import { Review } from "./Review";
+import { SchemaFiles } from "./SchemaFiles";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 
@@ -173,6 +183,29 @@ function FieldInput({
 					}
 				/>
 			);
+		case "uris":
+			// [{uri}] in the policy, one path a line in the form
+			return (
+				<textarea
+					id={id}
+					className="form-control font-monospace"
+					rows={3}
+					placeholder={EXAMPLE.uri}
+					value={(value || []).map((u: any) => (typeof u === "string" ? u : (u?.uri ?? ""))).join("\n")}
+					onChange={(e) =>
+						set(
+							field.path,
+							e.target.value
+								.split("\n")
+								.map((s) => s.trim())
+								.filter(Boolean)
+								.map((uri) => ({ uri })),
+						)
+					}
+				/>
+			);
+		case "schemas":
+			return <SchemaFiles id={id} value={value} onChange={(files) => set(field.path, files)} />;
 		case "names": {
 			const names: string[] = value || [];
 			const options = objects.filter((o) => o.kind === field.kind);
@@ -212,33 +245,60 @@ function FieldInput({
 						onChange={(rows) => set(field.path, rows)}
 						empty={() => ({ key: "sourceIp", value: "" })}
 						add="nginxions.policy.condition.add"
-						render={(row: any, setRow) => (
-							<>
-								<div className="col-5">
-									<select
-										className="form-select"
-										aria-label={t("nginxions.policy.condition.key")}
-										value={row.key}
-										onChange={(e) => setRow({ ...row, key: e.target.value })}
-									>
-										{EXCEPTION_KEYS.map((k) => (
-											<option key={k} value={k}>
-												{t(`nginxions.policy.key.${k}`)}
-											</option>
-										))}
-									</select>
-								</div>
-								<div className="col">
-									<input
-										className="form-control"
-										aria-label={t("nginxions.policy.condition.value")}
-										placeholder={row.key === "sourceIp" ? EXAMPLE.ip : ""}
-										value={row.value}
-										onChange={(e) => setRow({ ...row, value: e.target.value })}
-									/>
-								</div>
-							</>
-						)}
+						render={(row: any, setRow) => {
+							// in and not-in of an imported policy are shown as equals and not-equals: the same match
+							const op =
+								row.op === "in" ? "equals" : row.op === "not-in" ? "not-equals" : row.op || "equals";
+							return (
+								<>
+									<div className="col-4">
+										<select
+											className="form-select"
+											aria-label={t("nginxions.policy.condition.key")}
+											value={row.key}
+											onChange={(e) => setRow({ ...row, key: e.target.value })}
+										>
+											{EXCEPTION_KEYS.map((k) => (
+												<option key={k} value={k}>
+													{t(`nginxions.policy.key.${k}`)}
+												</option>
+											))}
+										</select>
+									</div>
+									<div className="col-3">
+										<select
+											className="form-select"
+											aria-label={t("nginxions.policy.condition.op")}
+											value={op}
+											onChange={(e) => {
+												const next = e.target.value;
+												const { op: _op, value: _value, ...rest } = row;
+												if (next === "exist") setRow({ ...rest, op: next });
+												else if (next === "equals") setRow({ ...rest, value: row.value ?? "" });
+												else setRow({ ...rest, op: next, value: row.value ?? "" });
+											}}
+										>
+											{EXCEPTION_OPS.map((o) => (
+												<option key={o} value={o}>
+													{t(`nginxions.policy.op.${o}`)}
+												</option>
+											))}
+										</select>
+									</div>
+									<div className="col">
+										{op !== "exist" && (
+											<input
+												className="form-control"
+												aria-label={t("nginxions.policy.condition.value")}
+												placeholder={row.key === "sourceIp" ? EXAMPLE.ip : ""}
+												value={row.value ?? ""}
+												onChange={(e) => setRow({ ...row, value: e.target.value })}
+											/>
+										)}
+									</div>
+								</>
+							);
+						}}
 					/>
 					<div className="form-hint">
 						<T id="nginxions.policy.condition.hint" />
@@ -298,9 +358,96 @@ function FieldInput({
 									))}
 								</select>
 							</div>
+							<div className="col-12 ps-4">
+								<Rows
+									rows={row.condition || []}
+									onChange={(condition) => setRow({ ...row, condition })}
+									empty={() => ({ key: "sourceIp", value: "" })}
+									add="nginxions.policy.rate.condition-add"
+									render={(c: any, setC) => (
+										<>
+											<div className="col-5">
+												<select
+													className="form-select form-select-sm"
+													aria-label={t("nginxions.policy.condition.key")}
+													value={c.key}
+													onChange={(e) => setC({ ...c, key: e.target.value })}
+												>
+													{RATE_LIMIT_KEYS.map((k) => (
+														<option key={k} value={k}>
+															{t(`nginxions.policy.key.${k}`)}
+														</option>
+													))}
+												</select>
+											</div>
+											<div className="col">
+												<input
+													className="form-control form-control-sm"
+													aria-label={t("nginxions.policy.condition.value")}
+													placeholder={c.key === "sourceIp" ? EXAMPLE.ip : ""}
+													value={c.value}
+													onChange={(e) => setC({ ...c, value: e.target.value })}
+												/>
+											</div>
+										</>
+									)}
+								/>
+							</div>
 						</>
 					)}
 				/>
+			);
+		case "service":
+			// any number of servers by IP address or name: what the agent cannot send itself goes through the relay
+			// of NginxionS (backend waf/syslog.js)
+			return (
+				<div>
+					<Rows
+						rows={(Array.isArray(value) ? value : value ? [value] : []) as Record<string, any>[]}
+						onChange={(rows) => set(field.path, rows)}
+						empty={() => ({ address: "", port: 514, proto: "udp" })}
+						add="nginxions.policy.service.add"
+						render={(service: any, setService) => (
+							<>
+								<div className="col-5">
+									<input
+										id={id}
+										className="form-control"
+										aria-label={t("nginxions.policy.service.address")}
+										placeholder={EXAMPLE.ip}
+										value={service.address ?? ""}
+										onChange={(e) => setService({ ...service, address: e.target.value.trim() })}
+									/>
+								</div>
+								<div className="col-3">
+									<input
+										type="number"
+										min={1}
+										max={65535}
+										className="form-control"
+										aria-label={t("nginxions.policy.service.port")}
+										value={service.port ?? 514}
+										onChange={(e) => setService({ ...service, port: Number(e.target.value) })}
+									/>
+								</div>
+								<div className="col">
+									<select
+										className="form-select"
+										aria-label={t("nginxions.policy.service.proto")}
+										value={service.proto ?? "udp"}
+										onChange={(e) => setService({ ...service, proto: e.target.value })}
+									>
+										<option value="udp">UDP</option>
+										<option value="tcp">TCP</option>
+									</select>
+								</div>
+							</>
+						)}
+					/>
+					<div className="form-hint">
+						<T id="nginxions.policy.service.hint" />
+					</div>
+				</div>
 			);
 		case "identifiers":
 			return (
@@ -378,11 +525,6 @@ function ObjectForm({
 						<div key={field.path} className="mb-3">
 							<label className="form-label" htmlFor={`policy-${field.path}`}>
 								<T id={`nginxions.policy.f.${field.path}`} />
-								{field.v2 && (
-									<span className="badge bg-purple-lt ms-2" title={t("nginxions.policy.v2-hint")}>
-										v1beta2
-									</span>
-								)}
 							</label>
 							<FieldInput field={field} spec={spec} set={set} objects={objects} />
 						</div>

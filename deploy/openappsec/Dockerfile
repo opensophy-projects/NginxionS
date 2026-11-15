@@ -89,9 +89,12 @@ FROM ${AGENT_RUNTIME}
 RUN apk add --no-cache nodejs
 COPY --from=shared-storage /out/ /opt/appsec-shared-storage/
 COPY --from=tuning /out/ /opt/appsec-tuning/
-COPY --from=control server.js watchdog.js /opt/nginxions-control/
+COPY --from=control server.js watchdog.js learning.js /opt/nginxions-control/
 RUN printf '{"type": "module"}\n' > /opt/nginxions-control/package.json && mkdir -p /db
 # the settings of WAF -> Agent (fail-open), applied at every start of the agent; then the services
+# the IPS signatures of NginxionS (CrowdSec virtual patching rules, scripts/update-ips-signatures.mjs): the local policy
+# gives them to the IPS when a practice turns it on (policy_maker_utils.cc)
+COPY --from=openappsec agent/nginxions/ips-protections.json /etc/cp/nginxions/ips-protections.json
 COPY agent/nginxions-entry.sh /nginxions-entry.sh
 COPY nginxions-openappsec.sh /nginxions-openappsec.sh
 RUN chmod 755 /nginxions-entry.sh /nginxions-openappsec.sh

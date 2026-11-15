@@ -55,7 +55,8 @@ const decisionsPath = (tenant, asset) =>
 	`${STORAGE_URL}/api/${tenant}/${asset}/tuning/decisions.data`.replace(/([^:])\/\/+/g, "$1/");
 
 /** @returns {Promise<{decisions: object[]}|null>}  null: no file yet */
-// an agent without a tenant reads /<asset>/… of the storage, which takes any tenant header
+// an agent without a tenant reads /<asset>/… of the storage with the tenant header "local" (NginxionS: i_serialize.h,
+// TuningDecisions.h; it sent an empty one, which the storage refused)
 export const getDecisions = (tenant, asset) => request("GET", decisionsPath(tenant, asset), tenant || "local");
 
 export const putDecisions = (tenant, asset, data) =>

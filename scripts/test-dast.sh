@@ -148,10 +148,11 @@ done
 # an empty report of Nuclei: nothing found
 [ -e "$out/nuclei.jsonl" ] || touch "$out/nuclei.jsonl"
 
-if [ "$DAST_LEVEL" = extended ]; then
-  echo "==> runtime of the containers"
-  scripts/check-runtime.sh "$COMPOSE_PROJECT_NAME" "$out/runtime.json"
+# every full run: what Docker really runs (privileges, namespaces, the Docker socket); the report decides what blocks
+echo "==> runtime of the containers"
+scripts/check-runtime.sh "$COMPOSE_PROJECT_NAME" "$out/runtime.json"
 
+if [ "$DAST_LEVEL" = extended ]; then
   # last: its fuzzing creates, changes and deletes objects. The session stays: tokens and the accounts' own
   # authentication are left out. Exit 1 = failures found (the report decides); a run without its report failed.
   echo "==> schemathesis (fuzzing of the API, $SCHEMATHESIS_IMAGE)"

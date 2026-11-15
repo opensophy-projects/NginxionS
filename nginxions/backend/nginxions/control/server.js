@@ -13,8 +13,17 @@ import { timingSafeEqual } from "node:crypto";
 //
 // No dependencies besides Node.js (the image copies this directory as is).
 import { readFileSync } from "node:fs";
+import { open } from "node:fs/promises";
 import http from "node:http";
 import { hostname } from "node:os";
+import {
+	LearningError,
+	listLearning,
+	MAX_SNAPSHOT_BYTES,
+	readLearning,
+	snapshotLearning,
+	stageRestore,
+} from "./learning.js";
 import { repairNamespaces } from "./watchdog.js";
 
 const PORT = Number.parseInt(process.env.NGINXIONS_CONTROL_PORT || "7080", 10);
@@ -25,6 +34,9 @@ const DOCKER_SOCKET = process.env.NGINXIONS_DOCKER_SOCKET || "/var/run/docker.so
 const OWN_SERVICE = process.env.NGINXIONS_CONTROL_SERVICE || "openappsec";
 const AGENT_PID_FILE = process.env.NGINXIONS_AGENT_PID_FILE || "/run/nginxions-agent.pid";
 const TOKEN_FILE = process.env.NGINXIONS_CONTROL_TOKEN_FILE || "/run/secrets/control_token";
+// the configuration the agent made of local_policy.yaml (local_policy_mgmt_gen.cc): what it applies
+const AGENT_POLICY_FILE = process.env.NGINXIONS_AGENT_POLICY_FILE || "/tmp/local_appsec.policy";
+const AGENT_POLICY_MAX_BYTES = 32 * 1024 * 1024;
 const DOCKER_TIMEOUT_MS = 15000;
 const MAX_LOG_LINES = 5000;
 // nginxions is restarted this long after nginxions-control has answered (see the restart route)
@@ -144,6 +156,28 @@ const listManaged = async () => {
 };
 
 /**
+ * The configuration the agent generated from local_policy.yaml, read only: NginxionS checks that the agent applies
+ * what it wrote (WAF -> Policy). null before the agent applied a policy.
+ */
+const agentPolicy = async () => {
+	let file;
+	try {
+		file = await open(AGENT_POLICY_FILE, "r");
+	} catch (err) {
+		if (err.code === "ENOENT") return { modifiedAt: null, policy: null };
+		throw err;
+	}
+	// size, time and content of the same open file: the agent may replace the file in between
+	try {
+		const info = await file.stat();
+		if (info.size > AGENT_POLICY_MAX_BYTES) throw new HttpError(413, "the policy of the agent is too large");
+		return { modifiedAt: info.mtime.toISOString(), policy: JSON.parse(await file.readFile("utf8")) };
+	} finally {
+		await file.close();
+	}
+};
+
+/**
  * Applications: running containers outside this stack in a network of nginxions, which nginx reaches by name. Read
  * only (name, image, addresses, ports): System -> Services offers to publish them as a proxy host.
  */
@@ -255,6 +289,19 @@ const agentUp = async (oldPid, timeoutMs = 120000) => {
 	return false;
 };
 
+/**
+ * This container: the agent process is restarted (a restart of the container would end this service in the middle of
+ * it); then the containers in its namespaces (nginxions), so that the nginx attachment attaches to the new agent.
+ */
+const restartOwn = async (container, entry) => {
+	const oldPid = restartAgentProcess();
+	if (!(await agentUp(oldPid))) audit({ ...entry, result: "agent slow to start" });
+	for (const dependent of (await listManaged()).filter((c) => c.networkMode === `container:${container.id}`)) {
+		await docker("POST", `/containers/${dependent.id}/restart?t=10`);
+		audit({ ...entry, result: "restarted dependent", dependent: dependent.service });
+	}
+};
+
 const authorized = (req) => {
 	const header = req.headers.authorization || "";
 	const given = Buffer.from(header.startsWith("Bearer ") ? header.slice(7) : "");
@@ -265,6 +312,30 @@ const send = (res, status, body) => {
 	res.writeHead(status, { "Content-Type": "application/json" });
 	res.end(JSON.stringify(body));
 };
+
+/** a JSON request body of at most `limit` bytes */
+const readJson = (req, limit) =>
+	new Promise((resolve, reject) => {
+		const chunks = [];
+		let size = 0;
+		req.on("data", (chunk) => {
+			size += chunk.length;
+			if (size > limit) {
+				reject(new HttpError(413, "Request body too large"));
+				req.destroy();
+				return;
+			}
+			chunks.push(chunk);
+		});
+		req.on("end", () => {
+			try {
+				resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+			} catch {
+				reject(new HttpError(400, "Invalid JSON"));
+			}
+		});
+		req.on("error", reject);
+	});
 
 const intParam = (value, fallback, max) => {
 	const n = Number.parseInt(value ?? "", 10);
@@ -293,6 +364,23 @@ const server = http.createServer(async (req, res) => {
 			result = await listManaged();
 		} else if (req.method === "GET" && url.pathname === "/v1/apps") {
 			result = await listApps();
+		} else if (req.method === "GET" && url.pathname === "/v1/agent/policy") {
+			result = await agentPolicy();
+		} else if (req.method === "GET" && url.pathname === "/v1/agent/learning") {
+			// what the agent learned, read only (learning.js)
+			result = await listLearning();
+		} else if (req.method === "GET" && url.pathname === "/v1/agent/learning/file") {
+			result = await readLearning(url.searchParams.get("asset") || "", url.searchParams.get("name") || "");
+		} else if (req.method === "GET" && url.pathname === "/v1/agent/learning/snapshot") {
+			// every learned file as it is, for a snapshot of NginxionS (learning/snapshots.js)
+			result = await snapshotLearning();
+		} else if (req.method === "POST" && url.pathname === "/v1/agent/learning/restore") {
+			// a snapshot back in place: staged, then put in place by the next start of the agent (nginxions-entry.sh);
+			// the agent and nginxions are restarted as by a restart of this service (base64: a third more than the files)
+			const files = await stageRestore(await readJson(req, Math.ceil(MAX_SNAPSHOT_BYTES * 1.4) + 65536));
+			const container = await findService(OWN_SERVICE);
+			after = () => restartOwn(container, entry);
+			result = { restored: files, restarting: true };
 		} else if (parts[0] === "v1" && parts[1] === "services" && parts.length >= 3) {
 			const service = decodeURIComponent(parts[2]);
 			const action = parts[3];
@@ -313,16 +401,7 @@ const server = http.createServer(async (req, res) => {
 				const dependentsOf = async (id) =>
 					(await listManaged()).filter((c) => c.networkMode === `container:${id}`);
 				if (container.service === OWN_SERVICE) {
-					// this container: the agent process is restarted (a restart of the container would end this
-					// service in the middle of it); then nginxions, so that the nginx attachment attaches to the new agent
-					after = async () => {
-						const oldPid = restartAgentProcess();
-						if (!(await agentUp(oldPid))) audit({ ...entry, result: "agent slow to start" });
-						for (const dependent of await dependentsOf(container.id)) {
-							await docker("POST", `/containers/${dependent.id}/restart?t=10`);
-							audit({ ...entry, result: "restarted dependent", dependent: dependent.service });
-						}
-					};
+					after = () => restartOwn(container, entry);
 					result = { service, restarted: false, restarting: true };
 				} else {
 					const doRestart = async () => {
@@ -364,7 +443,7 @@ const server = http.createServer(async (req, res) => {
 			);
 		}
 	} catch (err) {
-		const status = err instanceof HttpError ? err.status : 500;
+		const status = err instanceof HttpError || err instanceof LearningError ? err.status : 500;
 		audit({ ...entry, result: "error", status, error: err.message });
 		send(res, status, { error: err.message });
 	}

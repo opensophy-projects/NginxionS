@@ -1,8 +1,8 @@
 // NginxionS API client (/api/nginxions/*), see nginxions/backend/nginxions/routes.js
 import type { AuditLog } from "src/api/backend";
 import * as api from "src/api/backend/base";
-import type { HostObjects } from "./policy/api";
 import { isNotJson, notJsonError } from "./apiErrors";
+import type { HostObjects } from "./policy/api";
 
 export interface Service {
 	id: string;
@@ -74,6 +74,8 @@ export interface WafPolicyState {
 	generatedAt: string | null;
 	hosts: number;
 	applied: { ok: boolean; at: string; error: string | null } | null;
+	/** what the agent applies compared with the generated policy */
+	check?: import("./policy/api").AppliedCheck;
 }
 
 export interface WafStatus {
@@ -126,6 +128,14 @@ export const setWafHost = (
 	id: number,
 	data: WafSettings & { locations?: WafLocationSettings[]; objects?: HostObjects },
 ): Promise<WafHost> => api.put({ url: `/nginxions/waf/hosts/${id}`, data });
+
+/** dry run of another mode of a host on its WAF events of the period (nothing is saved) */
+export const simulateWafHost = (
+	id: number,
+	mode: string,
+	period: "1h" | "24h" | "7d" = "7d",
+): Promise<import("./policy/api").Simulation> =>
+	api.get({ url: `/nginxions/waf/hosts/${id}/simulate?mode=${encodeURIComponent(mode)}&period=${period}` });
 
 export const getWafPolicy = (): Promise<WafPolicyState & { content: string | null }> =>
 	api.get({ url: "/nginxions/waf/policy" });
@@ -518,6 +528,17 @@ export interface WafAgentState extends WafAgentSettings {
 
 export const getWafAgent = (): Promise<WafAgentState> => api.get({ url: "/nginxions/waf/agent" });
 
+/** metrics of the agent (its prometheus nano service) */
+export interface AgentMetric {
+	name: string;
+	help: string;
+	type: string;
+	samples: { labels: [string, string][]; value: number }[];
+}
+
+export const getWafAgentMetrics = (): Promise<{ reachable: boolean; metrics: AgentMetric[]; error: string | null }> =>
+	api.get({ url: "/nginxions/waf/agent/metrics" });
+
 export const setWafAgent = (data: WafAgentSettings, apply = true): Promise<WafAgentState> =>
 	api.put({ url: "/nginxions/waf/agent", data: { ...data, apply } });
 
@@ -537,6 +558,33 @@ export const uploadWafModel = async (file: File): Promise<WafAgentModel & { rest
 	if (!response.ok) {
 		throw new Error(payload.error?.message || response.statusText);
 	}
+	return payload;
+};
+
+/** File Security of the WAF policy: ClamAV (waf/files.js of the backend) */
+export interface WafFiles {
+	/** a practice has File Security on: clamd runs */
+	enabled: boolean;
+	/** proxy hosts that check uploads */
+	hosts: number;
+	/** the answer of clamd to VERSION (ClamAV x.y.z/database/date), null if it does not answer */
+	clamd: string | null;
+	/** signature files uploaded in NginxionS */
+	uploaded: string[];
+	settings: { online_updates: boolean };
+}
+export const getWafFiles = (): Promise<WafFiles> => api.get({ url: "/nginxions/waf/files" });
+export const setWafFiles = (settings: { online_updates: boolean }): Promise<{ online_updates: boolean }> =>
+	api.put({ url: "/nginxions/waf/files", data: settings });
+export const uploadClamavSignatures = async (file: File): Promise<{ name: string; size: number }> => {
+	const response = await fetch(`/api/nginxions/waf/files/signatures/${encodeURIComponent(file.name)}`, {
+		method: "PUT",
+		headers: { "Content-Type": "application/octet-stream" },
+		body: file,
+	});
+	if (isNotJson(response)) throw notJsonError(response);
+	const payload = await response.json().catch(() => ({ error: { message: response.statusText } }));
+	if (!response.ok) throw new Error(payload.error?.message || response.statusText);
 	return payload;
 };
 

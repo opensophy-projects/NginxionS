@@ -97,6 +97,10 @@ interface HostStats {
 	ready: boolean;
 	requests: number;
 	elapsed: string;
+	sources?: number;
+	urls?: number;
+	legitimate?: number;
+	malicious?: number;
 }
 
 export interface LearningHost {
@@ -110,7 +114,22 @@ export interface LearningHost {
 	falsePositives: { before: number; after: number };
 	queue: number;
 	readyToPrevent: boolean;
+	/** the open trial of blocking (running, or finished and waiting for a decision) */
+	trial: WafTrial | null;
 }
+
+/** trial mode of a host: blocking tried on the log only, then a report (waf/trial.js) */
+export interface WafTrial {
+	id: number;
+	hostId: number;
+	mode: string;
+	startedOn: string;
+	endsOn: string;
+	state: "running" | "finished" | "closed";
+	outcome: "enabled" | "dismissed" | "cancelled" | null;
+}
+
+export const TRIAL_HOURS = [1, 6, 24, 72, 168] as const;
 
 interface LabelInput {
 	key?: string;
@@ -148,3 +167,94 @@ export const undoLabel = (id: number): Promise<{ ok: boolean }> => api.del({ url
 
 export const getLearningHosts = (): Promise<{ hosts: LearningHost[]; tenant: string | null; error: string | null }> =>
 	api.get({ url: "/nginxions/learning/hosts" });
+
+export const getWafTrial = (
+	hostId: number,
+): Promise<{ trial: WafTrial | null; report: import("../policy/api").Simulation | null }> =>
+	api.get({ url: `/nginxions/waf/hosts/${hostId}/trial` });
+
+export const startWafTrial = (hostId: number, hours: number) =>
+	api.post({ url: `/nginxions/waf/hosts/${hostId}/trial`, data: { hours } });
+
+export const finishWafTrial = (hostId: number, enable: boolean) =>
+	api.put({ url: `/nginxions/waf/hosts/${hostId}/trial`, data: { enable } });
+
+/** what the WAF of the agent counts as normal for a parameter */
+export interface LearnedParam {
+	param: string;
+	values: string[];
+}
+
+export interface LearnedAsset {
+	asset: string;
+	updatedOn: string | null;
+	indicators?: LearnedParam[];
+	types?: LearnedParam[];
+	trustedIndicators?: LearnedParam[];
+	trustedTypes?: LearnedParam[];
+}
+
+/** what the agent learned on a host: statistics and, per asset, the normal indicators and types of parameters */
+export const getLearned = (
+	hostId: number,
+): Promise<{ id: number; name: string; stats: HostStats | null; assets: LearnedAsset[]; error: string | null }> =>
+	api.get({ url: `/nginxions/learning/hosts/${hostId}/learned` });
+
+// ---- snapshots of what the agent learned ----
+export type SnapshotReason = "auto" | "manual" | "before-restore" | "import";
+
+export interface LearningShift {
+	asset: string;
+	before: number;
+	after: number;
+	direction: "growth" | "drop";
+}
+
+export interface LearningSnapshot {
+	id: string;
+	takenOn: string;
+	reason: SnapshotReason;
+	userId: number;
+	size: number;
+	files: number;
+	assets: { asset: string; params: number; values: number }[];
+	shift: LearningShift[];
+	comparedWith: string | null;
+	sourceTakenOn: string | null;
+	restoredOn: string | null;
+}
+
+export const getLearningSnapshots = (): Promise<{ snapshots: LearningSnapshot[]; keepAuto: number }> =>
+	api.get({ url: "/nginxions/learning/snapshots" });
+
+export const takeLearningSnapshot = (): Promise<LearningSnapshot> => api.post({ url: "/nginxions/learning/snapshots" });
+
+export const restoreLearningSnapshot = (id: string): Promise<{ restored: string; before: string }> =>
+	api.post({ url: `/nginxions/learning/snapshots/${encodeURIComponent(id)}/restore` });
+
+export const deleteLearningSnapshot = (id: string) =>
+	api.del({ url: `/nginxions/learning/snapshots/${encodeURIComponent(id)}` });
+
+export const downloadLearningSnapshot = (id: string) =>
+	api.download(
+		{ url: `/nginxions/learning/snapshots/${encodeURIComponent(id)}/download` },
+		`nginxions-learning-${id}.json.gz`,
+	);
+
+export const uploadLearningSnapshot = async (file: File): Promise<LearningSnapshot> => {
+	const response = await fetch("/api/nginxions/learning/snapshots/upload", {
+		method: "POST",
+		headers: { "Content-Type": "application/octet-stream" },
+		body: file,
+	});
+	const payload = await response.json().catch(() => ({}));
+	if (!response.ok) throw new Error(payload?.error?.message || `HTTP ${response.status}`);
+	return payload;
+};
+
+/** the shift of the latest snapshot (automatic or manual) of the last two days: what the page warns about */
+export const recentShift = (snapshots: LearningSnapshot[], now = Date.now()) => {
+	const latest = snapshots.find((s) => s.reason === "auto" || s.reason === "manual");
+	if (!latest || now - new Date(latest.takenOn).getTime() > 2 * 24 * 3600 * 1000) return null;
+	return latest.shift.length ? latest : null;
+};
