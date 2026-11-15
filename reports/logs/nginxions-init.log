@@ -1,5 +1,0 @@
-nginxions-init: CrowdSec config seeded from the offline hub snapshot
-nginxions-init: CrowdSec data seeded
-nginxions-init: CrowdSec registration of NginxionS enabled
-nginxions-init: open-appsec default policy written
-nginxions-init: ready
