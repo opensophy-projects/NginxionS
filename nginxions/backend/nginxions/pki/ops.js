@@ -14,6 +14,7 @@ export const names = async (certPem) =>
 		const out = (
 			await openssl(["x509", "-in", file, "-noout", "-subject", "-issuer", "-nameopt", "RFC2253"])
 		).toString();
+		// nosemgrep: nginxions-regexp-from-variable -- name is "subject" or "issuer"
 		const field = (name) => out.match(new RegExp(`^${name}=\\s*(.*)$`, "m"))?.[1]?.trim() ?? "";
 		return { subject: field("subject"), issuer: field("issuer") };
 	});

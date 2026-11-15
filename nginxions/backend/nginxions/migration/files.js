@@ -28,10 +28,14 @@ export const rewriteRenewal = (text) =>
 		.replaceAll("/data/tls/certbot/credentials", "/tmp/certbot-credentials")
 		.replaceAll("/data/letsencrypt-acme-challenge", "/data/tls/certbot/acme-challenge");
 
+/** a name of a file of the backup as a literal of a regular expression (a "." of the name is no wildcard) */
+const literal = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /** the newest archive/<name>/<file>N.pem */
 const newest = (files, base) =>
 	files
-		.map((f) => ({ f, m: new RegExp(`^${base}(\\d+)\\.pem$`).exec(f) }))
+		// nosemgrep: nginxions-regexp-from-variable -- the name of the backup is escaped (literal)
+		.map((f) => ({ f, m: new RegExp(`^${literal(base)}(\\d+)\\.pem$`).exec(f) }))
 		.filter((x) => x.m)
 		.sort((a, b) => Number(b.m[1]) - Number(a.m[1]))[0]?.f ?? null;
 

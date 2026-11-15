@@ -1890,7 +1890,9 @@ PolicyMakerUtils::proccesSingleAppsecPolicy(
             local_appsec_policy_path
         );
     } catch (const PolicyGenException &e) {
-        dbgDebug(D_LOCAL_POLICY) << "Policy generation failed. Error: " << e.what();
+        // NginxionS: the reason a policy is refused, where an administrator (and the contract test of the policy,
+        // scripts/test-policy-contract.sh) can read it: it was logged at the debug level only
+        dbgWarning(D_LOCAL_POLICY) << "NginxionS: the local policy is refused: " << e.what();
         return "";
     }
 }

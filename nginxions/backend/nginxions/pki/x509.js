@@ -234,6 +234,7 @@ export const crlConfig = (dir) =>
 
 /** PEM blocks of a type in a text (certificates by default) */
 export const splitPem = (text, type = "CERTIFICATE") => {
+	// nosemgrep: nginxions-regexp-from-variable -- type is a constant of the callers (CERTIFICATE, ...)
 	const re = new RegExp(`-----BEGIN ${type}-----[\\s\\S]+?-----END ${type}-----`, "g");
 	return (String(text || "").match(re) || []).map((block) => `${block}\n`);
 };

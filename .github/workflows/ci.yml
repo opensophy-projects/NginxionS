@@ -404,6 +404,11 @@ jobs:
     name: Security gate${{ github.event_name == 'push' && ' + publish' || '' }}
     needs: [level, images, stack]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # keyless signatures (cosign) and the attestations of GitHub (SLSA provenance, SBOM) of the published images
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -455,6 +460,61 @@ jobs:
             fi
           done
 
+      # what was published can be checked: built here, from this commit, not replaced (docs/DEVSECOPS.md, "Подпись")
+      #   gh attestation verify oci://docker.io/<ns>/<image>:<tag> --repo <owner>/<repo>
+      #   cosign verify docker.io/<ns>/<image>:<tag> --certificate-identity-regexp 'https://github.com/<owner>/<repo>/' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: digests of the published images
+        if: env.PUBLISH == 'true'
+        id: digests
+        run: |
+          for img in nginxions nginxions-openappsec; do
+            digest=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "docker.io/$NAMESPACE/$img:$VERSION" \
+              | grep -m1 "^docker.io/$NAMESPACE/$img@" | cut -d@ -f2)
+            [ -n "$digest" ] || digest=$(docker inspect --format '{{index .RepoDigests 0}}' "docker.io/$NAMESPACE/$img:$VERSION" | cut -d@ -f2)
+            echo "${img//-/_}=$digest" >> "$GITHUB_OUTPUT"
+            echo "$img@$digest"
+          done
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+      - name: sign (cosign, keyless)
+        if: env.PUBLISH == 'true'
+        env:
+          NGINXIONS_DIGEST: ${{ steps.digests.outputs.nginxions }}
+          APPSEC_DIGEST: ${{ steps.digests.outputs.nginxions_openappsec }}
+        run: |
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions@$NGINXIONS_DIGEST"
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions-openappsec@$APPSEC_DIGEST"
+      - name: provenance of nginxions (SLSA)
+        if: env.PUBLISH == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions
+          subject-digest: ${{ steps.digests.outputs.nginxions }}
+          push-to-registry: true
+      - name: provenance of nginxions-openappsec (SLSA)
+        if: env.PUBLISH == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions-openappsec
+          subject-digest: ${{ steps.digests.outputs.nginxions_openappsec }}
+          push-to-registry: true
+      - name: SBOM of nginxions as an attestation
+        if: env.PUBLISH == 'true' && hashFiles('reports/images/sbom-nginxions.spdx.json') != ''
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions
+          subject-digest: ${{ steps.digests.outputs.nginxions }}
+          sbom-path: reports/images/sbom-nginxions.spdx.json
+          push-to-registry: true
+      - name: SBOM of nginxions-openappsec as an attestation
+        if: env.PUBLISH == 'true' && hashFiles('reports/images/sbom-nginxions-openappsec.spdx.json') != ''
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions-openappsec
+          subject-digest: ${{ steps.digests.outputs.nginxions_openappsec }}
+          sbom-path: reports/images/sbom-nginxions-openappsec.spdx.json
+          push-to-registry: true
   nginxions-arm64:
     name: nginxions image (arm64)
     needs: [level, checks]
@@ -515,6 +575,9 @@ jobs:
     needs: [publish, nginxions-arm64]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: docker.io login
         if: env.PUBLISH == 'true'
@@ -534,6 +597,17 @@ jobs:
             docker buildx imagetools create -t "docker.io/$NAMESPACE/nginxions:$t" \
               "docker.io/$NAMESPACE/nginxions:$t-amd64" "docker.io/$NAMESPACE/nginxions:$t-arm64"
           done
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+      - name: sign the multi-arch manifest (cosign, keyless)
+        if: env.PUBLISH == 'true'
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) t="${GITHUB_REF#refs/tags/v}" ;;
+            *) t="develop" ;;
+          esac
+          digest=$(docker buildx imagetools inspect "docker.io/$NAMESPACE/nginxions:$t" --format '{{json .Manifest}}' | jq -r .digest)
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions@$digest"
 
   appsec-arm64:
     name: nginxions-openappsec image (arm64, experimental)

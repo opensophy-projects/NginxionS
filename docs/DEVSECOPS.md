@@ -36,7 +36,16 @@
 | TLS | **testssl.sh** | протоколы, шифры, HSTS, известные атаки на TLS — интерфейса (:81) и прокси-хоста (:443) | `ci.yml` → `images` |
 | nginx | **gixy** | работающая конфигурация nginx (`nginx -T`): SSRF, инъекции заголовков, обход `alias` | `ci.yml` → `images` |
 | Эксплуатация | **audit-logs** (`scripts/audit-logs.mjs`) | после теста закрытого контура: ошибки и предупреждения всех контейнеров, debug-логов агента (`/var/log/nano_agent`) и nginx, сведённые к сигнатурам. Известные — в `deploy/test/log-allowlist.tsv`, у каждой причина. Новые — в Summary прогона и в `reports/logs/log-audit.md` (пока отчёт; `LOG_AUDIT=gate` — блокирует) | `ci.yml` → `images` |
+| Контракт | **policy contract** (`scripts/test-policy-contract.sh`) | политики бэкенда (встроенные объекты, примеры open-appsec, политика со всеми видами объектов) подаются настоящему агенту; каждая должна примениться как написана | `ci.yml` → `contract`, `images` |
+| Фаззинг | **fuzz** (`scripts/fuzz.test.mjs`, Lua-тест File Security) | парсеры недоверенного ввода (конвертер Snort, экспертный фрагмент и импорт политики, загрузки через File Security) на мутированных входах: только результат или свой отказ, без исключений и зависаний. 300 случаев в CI, десятки тысяч ночью; `FUZZ_SEED` повторяет найденное | `ci.yml` → `checks`, `nightly.yml` |
+| WAF | **GoTestWAF** (`scripts/test-waf-score.sh`) | оценка защиты против базовой (`.github/security/waf-baseline.json`, 77,1 % ± 3): ниже — тест падает | `ci.yml` → `stack` |
+| Сети | **test-airgap** | с внешней сети недоступны база, LAPI и AppSec CrowdSec, clamd и локальные порты контейнера `openappsec` (агент, `nginxions-control`, shared storage, tuning) | `ci.yml` → `stack` |
+| Цепочка поставок | **cosign**, **SLSA provenance**, **SBOM-аттестация** | публикуемые образы подписаны (keyless, Sigstore), к ним приложены происхождение сборки и SBOM: `gh attestation verify oci://docker.io/<ns>/<образ>:<тег> --repo <владелец>/<репо>` | `ci.yml` → `publish` |
 | Качество | **jscpd**, покрытие тестами | дублирование кода, покрытие backend (`node --test`), frontend (vitest) и Go-сервисов агента (`scripts/test-go.sh`) | `security.yml` |
+
+`scripts/check-runtime.sh` на работающем стеке DAST (каждый полный прогон): `privileged`, пространства имён хоста,
+сокет Docker не у `nginxions-control` — блокируют; `cap_add`, нет `cap_drop: ALL` или `no-new-privileges`, root,
+запись в корень — показываются. Правила Semgrep NginxionS сделаны из наших ошибок (`.github/security/semgrep.yml`).
 
 Код агента NginxionS (`openappsec/`: агент, attachment, shared storage, tuning, smartsync) — наш код: его проверяют те
 же сканеры (Semgrep, CodeQL C/C++ и Go, Gitleaks, OSV-Scanner, hadolint, Trivy config, KICS), и его высокие и
@@ -99,7 +108,6 @@ frontend — быстрая (образы — по `[full]`). **Инкремен
 | OWASP ZAP | полный активный скан страниц интерфейса и `dast.local` (`zap-full-scan`), скан API без ограничения в 20 минут (до 60) |
 | Nuclei | ещё шаблоны `info` и шаблоны, которые `.nuclei-ignore` отключает по умолчанию (intrusive); без `dos` |
 | Schemathesis | фаззинг API по схеме OpenAPI с сессией (15 минут, после остальных сканеров: меняет данные): ошибки 500 показываются, операция, отвечающая без аутентификации (ST401), блокирует. Токены и аутентификация учётных записей не трогаются, чтобы сессия жила |
-| Контейнеры | `scripts/check-runtime.sh` на работающем стеке: `privileged`, пространства имён хоста, сокет Docker не у `nginxions-control` — блокируют; `cap_add`, нет `cap_drop: ALL` или `no-new-privileges`, root, запись в корень — показываются |
 | Docker Hub | Trivy и Grype по опубликованным `develop`, `latest` и трём последним релизам `X.Y.Z` (новые CVE в выпущенном); если на Hub нет ни одного образа, проверка падает |
 
 **Как запустить расширенную проверку**

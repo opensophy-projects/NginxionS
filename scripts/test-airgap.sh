@@ -130,6 +130,21 @@ if [ "${UI_E2E:-1}" = 1 ]; then
   [ "$ui_status" = 0 ] || { echo "FAIL: a page of the interface is broken (reports/ui/ui-e2e.md)"; exit 1; }
 fi
 
+# the isolation of the networks, as an attacker on the edge network (the internet side) would try it: the internal
+# services (database, LAPI of CrowdSec, clamd) are not on it, and the local services of the openappsec container
+# (agent 7777, nginxions-control 7080 with the Docker API, shared storage 7811, tuning 7813) listen on 127.0.0.1 only
+echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
+"${compose[@]}" run --rm -T --entrypoint sh tester -c '
+  bad=""
+  for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
+    curl -s -o /dev/null --max-time 4 "telnet://$t" < /dev/null
+    rc=$?
+    # 6: no such name on this network, 7: refused; anything else reached it (or hung on it)
+    case $rc in 6|7) ;; *) bad="$bad $t(curl $rc)" ;; esac
+  done
+  [ -z "$bad" ] || { echo "FAIL: reachable from the edge network:$bad"; exit 1; }
+  echo "    none reachable"' || { echo "FAIL: the networks of the stack are not isolated"; exit 1; }
+
 echo "==> all requested services are still running"
 for s in "${services[@]}"; do
   id=$("${compose[@]}" ps -q "$s")

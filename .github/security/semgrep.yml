@@ -129,3 +129,118 @@ rules:
     metadata:
       category: security
       cwe: ["CWE-328: Weak Hash"]
+
+  # ---------------------------------------------------------------- rules made of bugs found in NginxionS
+
+  - id: nginxions-regexp-from-variable
+    message: >-
+      A regular expression built from a variable: a value from a request, a file or the database can carry its own
+      syntax (regex injection) or backtrack without end (ReDoS). Escape the value (replace(/[.*+?^${}()|[\]\\]/g,
+      "\\$&")) or compare without a regular expression; a constant of the code is fine (nosemgrep with why).
+    severity: WARNING
+    languages: [javascript, typescript]
+    paths:
+      include: [nginxions/backend/nginxions/, nginxions/frontend/src/nginxions/]
+      exclude: ["*.test.js", "*.test.ts", "*.test.tsx"]
+    patterns:
+      - pattern-either:
+          - pattern: new RegExp($X, ...)
+          - pattern: RegExp($X, ...)
+      - pattern-not: new RegExp("...", ...)
+      - pattern-not: RegExp("...", ...)
+    metadata:
+      category: security
+      cwe: ["CWE-1333: Inefficient Regular Expression Complexity", "CWE-625: Permissive Regular Expression"]
+
+  - id: nginxions-log-secret
+    message: >-
+      A password, token, key or secret goes into a log: logs are read by more people than the secrets (the diagnostic
+      archive, docker logs, the audit of the logs in CI). Log that it is set, not its value.
+    severity: ERROR
+    languages: [javascript, typescript]
+    paths:
+      include: [nginxions/backend/nginxions/]
+      exclude: ["*.test.js"]
+    patterns:
+      - pattern-either:
+          - pattern: $LOG.$M(..., $X, ...)
+          - pattern: $LOG.$M(`...${$X}...`)
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: ^(logger|console|signale|log|debug)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(log|info|warn|error|debug|success|fatal|trace)$
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i)^[\w.]*(password|passwd|secret|token|api_?key|private_?key)$
+    metadata:
+      category: security
+      cwe: ["CWE-532: Insertion of Sensitive Information into Log File"]
+
+  - id: nginxions-lua-shell
+    message: >-
+      A shell from the Lua of nginx: nginx handles requests from the internet, a value of a request in a command is a
+      remote command. Talk to the service over its socket (as nginxions_files.lua talks to clamd).
+    severity: ERROR
+    languages: [lua]
+    paths:
+      include: [nginxions/rootfs/]
+    pattern-either:
+      - pattern: io.popen(...)
+      - pattern: os.execute(...)
+    metadata:
+      category: security
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+
+  - id: nginxions-compose-docker-socket
+    message: >-
+      The socket of Docker in a service: whoever reaches the container gets root on the host. Only openappsec, for
+      nginxions-control with its whitelist of operations (CLAUDE.md, "Безопасность"), has it.
+    severity: ERROR
+    languages: [yaml]
+    paths:
+      include: [deploy/]
+    patterns:
+      - pattern-regex: '/var/run/docker\.sock\s*:'
+      - pattern-not-inside: |
+          openappsec:
+            ...
+    metadata:
+      category: security
+      cwe: ["CWE-250: Execution with Unnecessary Privileges"]
+
+  - id: nginxions-compose-privileged
+    message: >-
+      A privileged container, or one in the network or process namespace of the host: the hardening of the stack
+      (cap_drop ALL, no-new-privileges, internal networks) is gone for it.
+    severity: ERROR
+    languages: [yaml]
+    paths:
+      include: [deploy/]
+    pattern-either:
+      - pattern: "privileged: true"
+      - pattern: "network_mode: host"
+      - pattern: "pid: host"
+      - pattern: "ipc: host"
+    metadata:
+      category: security
+      cwe: ["CWE-250: Execution with Unnecessary Privileges"]
+
+  - id: nginxions-agent-unsafe-string
+    message: >-
+      A C string function without a bound in the agent (it parses requests from the internet): an overflow of the
+      buffer. Use std::string, snprintf or strncpy with the size of the buffer.
+    severity: WARNING
+    languages: [c, cpp]
+    paths:
+      include: [openappsec/]
+      exclude: ["*_ut/", "*/test/", "*/tests/"]
+    pattern-either:
+      - pattern: strcpy(...)
+      - pattern: strcat(...)
+      - pattern: sprintf(...)
+      - pattern: gets(...)
+    metadata:
+      category: security
+      cwe: ["CWE-120: Buffer Copy without Checking Size of Input"]

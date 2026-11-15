@@ -238,9 +238,7 @@ const everything = () => {
 		]),
 	);
 	doc.trustedSources.push(
-		...objects("trusted_sources", [
-			{ name: "office", minNumOfSources: 1, sourcesIdentifiers: ["behind-proxy"] },
-		]),
+		...objects("trusted_sources", [{ name: "office", minNumOfSources: 1, sourcesIdentifiers: ["behind-proxy"] }]),
 	);
 	doc.policies = {
 		default: {
