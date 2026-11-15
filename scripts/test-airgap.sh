@@ -93,6 +93,27 @@ echo "==> restart nginxions"
 wait_healthy
 "${compose[@]}" run --rm -T tester after-restart
 
+# the interface in a real browser with the session of smoke (deploy/test/ui-e2e.mjs): every page renders, no error of
+# JavaScript, no 5xx of the API; screenshots in reports/ui. The container installs the package of Playwright on the
+# default network, then is moved into the closed network of the stack.
+echo "==> the interface in a browser: every page"
+pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
+pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
+pw="${COMPOSE_PROJECT_NAME}-ui"
+mkdir -p reports/ui
+docker rm -f "$pw" > /dev/null 2>&1 || true
+docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+  -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
+  -v "$PWD/reports/ui:/out" -w /e2e "$pw_image" sleep 1800 > /dev/null
+docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"
+docker network connect "${COMPOSE_PROJECT_NAME}_edge" "$pw"
+docker network disconnect bridge "$pw"
+ui_status=0
+docker exec "$pw" node ui-e2e.mjs || ui_status=$?
+docker rm -f "$pw" > /dev/null 2>&1 || true
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/ui/ui-e2e.md ]; then cat reports/ui/ui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
+[ "$ui_status" = 0 ] || { echo "FAIL: a page of the interface is broken (reports/ui/ui-e2e.md)"; exit 1; }
+
 echo "==> all requested services are still running"
 for s in "${services[@]}"; do
   id=$("${compose[@]}" ps -q "$s")
