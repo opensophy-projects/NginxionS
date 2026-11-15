@@ -10,7 +10,7 @@ import Alert from "react-bootstrap/Alert";
 import { useSearchParams } from "react-router-dom";
 import { HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
-import { formatDateTime, intl, T } from "src/locale";
+import { intl, T } from "src/locale";
 import { VIEW } from "src/modules/Permissions";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
@@ -27,6 +27,7 @@ import {
 	setPkiSettings,
 	usePki,
 	linkBase,
+	formatShort,
 } from "../../pki/api";
 import { showCaModal } from "../../pki/CaModal";
 import { showIssueModal } from "../../pki/IssueModal";
@@ -296,10 +297,10 @@ function CertificatesTab({ data, refresh }: { data: PkiOverview; refresh: () => 
 								<th>
 									<T id="nginxions.pki.expires" />
 								</th>
-								<th>
+								<th className="nx-optional">
 									<T id="nginxions.pki.issuer" />
 								</th>
-								<th>
+								<th className="nx-optional">
 									<T id="nginxions.pki.used" />
 								</th>
 								<th className="w-1" />
@@ -311,6 +312,10 @@ function CertificatesTab({ data, refresh }: { data: PkiOverview; refresh: () => 
 								const sans = [...c.sans.dns, ...c.sans.ip, ...c.sans.email];
 								const ca = data.cas.find((x) => x.id === c.caId);
 								const used = c.profile === "server" ? c.hosts : (ca?.hosts ?? []);
+								const detail =
+									[c.subject.organizationalUnit, c.subject.organization, sans.join(", "), c.template]
+										.filter(Boolean)
+										.join(" · ") || c.serial;
 								return (
 									<tr key={c.id}>
 										<td>
@@ -336,15 +341,8 @@ function CertificatesTab({ data, refresh }: { data: PkiOverview; refresh: () => 
 													<T id={`nginxions.pki.profile.${c.profile}`} />
 												</span>
 											</div>
-											<div className={styles.sub}>
-												{[
-													c.subject.organizationalUnit,
-													c.subject.organization,
-													sans.join(", "),
-													c.template,
-												]
-													.filter(Boolean)
-													.join(" · ") || c.serial}
+											<div className={styles.sub} title={detail}>
+												{detail}
 											</div>
 										</td>
 										<td>
@@ -352,21 +350,21 @@ function CertificatesTab({ data, refresh }: { data: PkiOverview; refresh: () => 
 												<T id={`nginxions.pki.status.${s}`} />
 											</span>
 											{c.revokeReason && (
-												<div className={styles.sub}>
+												<div className={cn(styles.sub, styles.wrap)}>
 													{t(`nginxions.pki.reason.${c.revokeReason}`)}
 												</div>
 											)}
 										</td>
 										<td className="text-nowrap">
-											<div>{formatDateTime(c.notAfter, locale)}</div>
+											<div>{formatShort(c.notAfter, locale)}</div>
 											<div className={styles.sub}>
 												{c.daysLeft >= 0
 													? t("nginxions.pki.days-left", { days: c.daysLeft })
 													: t("nginxions.pki.expired-ago", { days: -c.daysLeft })}
 											</div>
 										</td>
-										<td>{caName(c.caId)}</td>
-										<td className={styles.used}>
+										<td className="nx-optional">{caName(c.caId)}</td>
+										<td className={cn(styles.used, "nx-optional")}>
 											{used.length ? (
 												<span title={used.join(", ")}>
 													{used.slice(0, 2).join(", ")}
@@ -563,10 +561,10 @@ function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
 								<th>
 									<T id="nginxions.pki.ca.certificates" />
 								</th>
-								<th>
+								<th className="nx-optional">
 									<T id="nginxions.pki.ca.crl" />
 								</th>
-								<th>
+								<th className="nx-optional">
 									<T id="nginxions.pki.used" />
 								</th>
 								<th className="w-1" />
@@ -597,20 +595,22 @@ function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
 												</span>
 											)}
 										</div>
-										<div className={cn(styles.sub, "font-monospace")}>{ca.subjectDn}</div>
+										<div className={cn(styles.sub, "font-monospace")} title={ca.subjectDn}>
+											{ca.subjectDn}
+										</div>
 									</td>
-									<td className="text-nowrap">{formatDateTime(ca.notAfter, locale)}</td>
-									<td className="text-nowrap">
+									<td className="text-nowrap">{formatShort(ca.notAfter, locale)}</td>
+									<td className={styles.wrap}>
 										{ca.kind === "intermediate"
 											? t("nginxions.pki.ca.counts", { active: ca.active, revoked: ca.revoked })
 											: "—"}
 									</td>
-									<td className="text-nowrap">
+									<td className={cn(styles.wrap, "nx-optional")}>
 										{ca.crlNextUpdate ? (
 											<span title={t("nginxions.pki.ca.crl.number", { number: ca.crlNumber })}>
 												<T
 													id="nginxions.pki.ca.crl.until"
-													data={{ time: formatDateTime(ca.crlNextUpdate, locale) }}
+													data={{ time: formatShort(ca.crlNextUpdate, locale) }}
 												/>
 											</span>
 										) : (
@@ -619,7 +619,7 @@ function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
 											</span>
 										)}
 									</td>
-									<td className={styles.used}>
+									<td className={cn(styles.used, "nx-optional")}>
 										{ca.hosts.length ? (
 											<span title={ca.hosts.join(", ")}>
 												{ca.hosts.slice(0, 2).join(", ")}
