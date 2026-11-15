@@ -100,10 +100,12 @@
 
 Задаются один раз в `deploy/compose.yaml` и меняются только при обновлении NginxionS:
 
-- сети `edge` и `internal` (у второй нет выхода в интернет);
+- сети `edge`, `internal` и `control` (у двух последних нет выхода в интернет; в `control` только `nginxions-control` и `openappsec`);
+- лимиты памяти и процессов каждого сервиса: `NGINXIONS_MEM_<СЕРВИС>` и `NGINXIONS_PIDS_<СЕРВИС>` в `deploy/.env` (сервисы `NGINXIONS`, `OPENAPPSEC`, `CONTROL`, `POSTGRES`, `CROWDSEC`, `CLAMAV`, `NGINXIONS_INIT`; по умолчанию — в `deploy/compose.yaml`);
+- адрес панели `NGINXIONS_ADMIN_BIND_IP` (по умолчанию `127.0.0.1`) и сайтов `NGINXIONS_BIND_IP` (по умолчанию `0.0.0.0`);
 - `openappsec` владеет сетью и IPC (`ipc: shareable`, опубликованные порты), `nginxions` подключается к ним (`network_mode`/`ipc: service:openappsec`); tmpfs-том `appsec-shm`;
 - общие тома: `appsec-localconfig` (политика), `appsec-logs` (события, только чтение для NginxionS и CrowdSec), логи nginx для CrowdSec, `crowdsec-conf` и `crowdsec-data` в `nginxions` (настройки CrowdSec из GUI, список машин и баунсеров);
-- метки `nginxions.managed=true`, по которым `nginxions-control` решает, чем можно управлять; сокет Docker смонтирован только в `openappsec`, где работает `nginxions-control` со своим белым списком операций;
+- метки `nginxions.managed=true`, по которым `nginxions-control` решает, чем можно управлять; сокет Docker смонтирован только в `control` — отдельном контейнере `nginxions-control` со своим белым списком операций;
 - образы и версии (`deploy/.env`): `NGINXIONS_REGISTRY`, `NGINXIONS_VERSION`, `CROWDSEC_VERSION`, `POSTGRES_VERSION`, `CLAMAV_VERSION`.
 
 ## Обращения наружу только по действию администратора

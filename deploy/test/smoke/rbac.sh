@@ -41,3 +41,12 @@ expect "$(as_analyst "$ADMIN/api/nginx/proxy-hosts/$other_id")" 404 "the role op
 $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/rbac/users/$analyst_id" \
   -d "{\"roles\": [$analyst_role]}" > /dev/null
 $CURL -X DELETE "$ADMIN/api/nginx/proxy-hosts/$other_id" > /dev/null
+
+step "Login: an account is locked after 5 wrong passwords, also for the right one (any address)"
+lock_email="locked-$(date +%s)@nginxions.test"
+for i in 1 2 3 4 5; do
+  expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' "$ADMIN/api/tokens" \
+    -d "{\"identity\": \"$lock_email\", \"secret\": \"wrong-$i\"}")" 400 "wrong password $i"
+done
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' "$ADMIN/api/tokens" \
+  -d "{\"identity\": \"$lock_email\", \"secret\": \"anything\"}")" 429 "the locked account"

@@ -327,7 +327,7 @@
 			"tool": "kics",
 			"id": "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b",
 			"where": "deploy/compose.yaml",
-			"reason": "the Docker socket is for nginxions-control alone (System -> Services): a whitelist of operations on containers labelled nginxions.managed, a token, an audit log, 127.0.0.1 only; the container nginxions, which takes traffic from the internet, has no socket (CLAUDE.md, Security)",
+			"reason": "the Docker socket is for nginxions-control alone, a container of its own (service control): a whitelist of operations on containers labelled nginxions.managed, a token, an audit log, a read-only root filesystem, no capability, the network control shared with openappsec only; the containers that take the traffic of the internet (nginxions, openappsec) do not get it",
 			"until": "2027-05-01"
 		},
 		{
@@ -362,7 +362,7 @@
 			"tool": "kics",
 			"id": "ce76b7d0-9e77-464d-b86f-c5c48e03e22d",
 			"where": "deploy/compose.yaml",
-			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), clamav the five its entrypoint needs to give /var/lib/clamav to the user clamav (CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID); postgres runs as its user with none",
+			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), postgres and clamav run as their users with none",
 			"until": "2027-05-01",
 			"kind": "false-positive"
 		},
