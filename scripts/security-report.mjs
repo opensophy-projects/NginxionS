@@ -630,7 +630,11 @@ for (const check of CHECKS) {
 	} catch (err) {
 		result.error = `не удалось прочитать результат: ${err.message}`;
 	}
-	result.expected = expect.has(check.group) && !check.optional;
+	// a scan left out on purpose (CodeQL of C++ or Go when their code did not change: security.yml) writes
+	// <id>.skipped with the reason: shown as skipped, not as missing
+	const skipped = own.length === 0 && files.find((f) => basename(f) === `${check.id}.skipped`);
+	if (skipped) result.what = `${check.what} (${readFileSync(skipped, "utf8").trim() || "не запускалось"})`;
+	result.expected = expect.has(check.group) && !check.optional && !skipped;
 	result.missing = own.length === 0;
 	result.findings.sort((a, b) => b.blocking - a.blocking || SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity));
 	result.blockingCount = result.findings.filter((f) => f.blocking).length;

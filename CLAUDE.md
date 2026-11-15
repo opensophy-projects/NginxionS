@@ -42,6 +42,8 @@ git subtree pull --prefix=nginxions https://github.com/ZoeyVid/NPMplus <tag> --s
 ## Команды проверки
 
 ```bash
+# всё быстрое сразу (то же, что задача CI «Lint, types, tests»); --changed — только затронутое
+scripts/check.sh
 # backend
 cd nginxions/backend && pnpm install --frozen-lockfile && pnpm biome ci . --assist-enabled=false \
   && node --test 'nginxions/**/*.test.js'
@@ -97,7 +99,8 @@ cd nginxions/frontend && pnpm install && pnpm vite                              
 - Проверки безопасности в CI (SAST, секреты, SCA, SBOM, IaC, образы, DAST) и их политика — `docs/DEVSECOPS.md`; итог —
   в Summary прогона и в артефакте `security-report`. Находку исправляют; если нельзя — вносят в
   `.github/security/accepted-risks.json` с причиной и сроком. Ложное срабатывание Semgrep — `// nosemgrep: <правило> -- почему`.
-  На обычных ветках CI быстрый (без образов и DAST); полный прогон — `work`, теги, PR или `[full]` в сообщении
-  коммита; расширенный (тяжёлые сканеры) — ветки `security/**`, PR с меткой `security-scan`, Run workflow с уровнем
+  На обычных ветках CI быстрый (без образов и DAST); полный прогон — `work`, теги, PR, `[full]` в сообщении
+  коммита или изменение агента/`deploy/`/Dockerfile; только часть тестов стека — `[smoke:waf]`, `[dast]` и т. п.
+  (`scripts/ci-level.mjs`). Перед push — `scripts/check.sh` (быстрая часть CI локально); расширенный (тяжёлые сканеры) — ветки `security/**`, PR с меткой `security-scan`, Run workflow с уровнем
   `extended`.
 - Доступ к Docker — только у `nginxions-control` (в контейнере `openappsec`, сокет `/var/run/docker.sock`): белый список операций (список, логи, перезапуск, reload контейнеров стека с меткой `nginxions.managed`), токен, аудит, слушает только 127.0.0.1. Контейнер `nginxions`, принимающий трафик из интернета, сокета не получает.

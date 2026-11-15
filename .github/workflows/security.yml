@@ -21,6 +21,14 @@ on:
         description: "fast, full or extended (ci.yml, job level)"
         type: string
         default: full
+      cpp:
+        description: "CodeQL of C/C++: false when the C++ of openappsec/ did not change (incremental; extended: always)"
+        type: boolean
+        default: true
+      go:
+        description: "CodeQL of Go: false when no Go changed"
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       level:
@@ -103,10 +111,34 @@ jobs:
           - language: go
             build-mode: autobuild
     steps:
+      # incremental: C++ and Go are scanned when their code changed (scripts/ci-level.mjs); the extended run and the
+      # weekly branch scan them always. A scan left out is "skipped" in the report, not "missing".
+      - name: needed?
+        id: need
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          CPP: ${{ inputs.cpp }}
+          GO: ${{ inputs.go }}
+          LEVEL: ${{ inputs.level }}
+        run: |
+          run=true
+          if [ "$LEVEL" != extended ]; then
+            { [ "$LANGUAGE" = c-cpp ] && [ "$CPP" = false ]; } && run=false
+            { [ "$LANGUAGE" = go ] && [ "$GO" = false ]; } && run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          if [ "$run" = false ]; then
+            mkdir -p out
+            case "$LANGUAGE" in c-cpp) id=codeql-cpp ;; *) id="codeql-$LANGUAGE" ;; esac
+            echo "пропущено: код не менялся; полный скан — в расширенном и еженедельном прогоне" > "out/$id.skipped"
+            echo "### CodeQL $LANGUAGE: skipped, the code did not change" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.need.outputs.run == 'true'
         with:
           persist-credentials: false
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: steps.need.outputs.run == 'true'
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -114,17 +146,20 @@ jobs:
           queries: ${{ inputs.level == 'extended' && 'security-and-quality' || 'security-extended' }}
           config-file: .github/security/codeql.yml
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: steps.need.outputs.run == 'true'
         with:
           category: /language:${{ matrix.language }}
           output: out
           # uploaded below, without the accepted risks
           upload: never
       - name: name the result
+        if: steps.need.outputs.run == 'true'
         env:
           LANGUAGE: ${{ matrix.language }}
         run: for f in out/*.sarif; do mv "$f" "out/codeql-$LANGUAGE.sarif"; done
       # accepted risks stay in out/ (the report), not in code scanning
       - name: leave out accepted risks
+        if: steps.need.outputs.run == 'true'
         env:
           LANGUAGE: ${{ matrix.language }}
         run: |
@@ -136,6 +171,7 @@ jobs:
           esac
           mkdir -p upload && node scripts/sarif-accepted.mjs "$tool" "out/codeql-$LANGUAGE.sarif" "upload/codeql.sarif"
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: steps.need.outputs.run == 'true'
         with:
           sarif_file: upload/codeql.sarif
           category: /language:${{ matrix.language }}

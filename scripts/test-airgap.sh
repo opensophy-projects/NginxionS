@@ -4,6 +4,11 @@
 #
 #   scripts/test-airgap.sh                 # full stack
 #   SERVICES="nginxions crowdsec" scripts/test-airgap.sh   # subset (dependencies are added by compose)
+#   SMOKE_GROUPS="waf crowdsec" scripts/test-airgap.sh       # some groups of smoke (deploy/test/smoke/), all by default
+#   UI_E2E=0 scripts/test-airgap.sh                            # without the interface in a browser
+#
+# A failed group of smoke does not stop the test: the checks after it still run, the test fails at its end. The
+# steps of smoke with their times are in reports/smoke (scripts/smoke-report.mjs) and in the summary of the run.
 #
 # Images: NGINXIONS_REGISTRY / NGINXIONS_VERSION and the pinned versions in deploy/.env.
 set -euo pipefail
@@ -13,6 +18,8 @@ cd "$(dirname "$0")/.."
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-nginxions-airgap}"
 compose=(docker compose -f deploy/compose.yaml -f deploy/test/compose.airgap.yaml)
 read -r -a services <<< "${SERVICES:-nginxions openappsec crowdsec clamav}"
+export SMOKE_GROUPS="${SMOKE_GROUPS:-all}"
+smoke_has() { [ "$SMOKE_GROUPS" = all ] || [[ " ${SMOKE_GROUPS//,/ } " == *" $1 "* ]]; }
 
 # every error and warning of the stack, compared with deploy/test/log-allowlist.tsv (scripts/audit-logs.mjs): the
 # report is in reports/logs and in the summary of the run; LOG_AUDIT=gate fails the test on a new one
@@ -81,7 +88,14 @@ wait_healthy() {
 
 echo "==> waiting for nginxions to become healthy"
 wait_healthy
-"${compose[@]}" run --rm -T tester
+echo "==> smoke (groups: $SMOKE_GROUPS)"
+smoke_status=0
+"${compose[@]}" run --rm -T tester || smoke_status=$?
+mkdir -p reports/smoke
+for f in smoke-steps.tsv smoke-groups.tsv; do
+  "${compose[@]}" run --rm -T --entrypoint cat tester "/state/$f" > "reports/smoke/$f" 2> /dev/null || true
+done
+command -v node > /dev/null && node scripts/smoke-report.mjs reports/smoke || true
 
 # an update runs init again on the volumes of an existing install (issue 146: the copies of the secrets are read
 # only and init has no capabilities, cp could not write them)
@@ -96,23 +110,25 @@ wait_healthy
 # the interface in a real browser with the session of smoke (deploy/test/ui-e2e.mjs): every page renders, no error of
 # JavaScript, no 5xx of the API; screenshots in reports/ui. The container installs the package of Playwright on the
 # default network, then is moved into the closed network of the stack.
-echo "==> the interface in a browser: every page"
-pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
-pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
-pw="${COMPOSE_PROJECT_NAME}-ui"
-mkdir -p reports/ui
-docker rm -f "$pw" > /dev/null 2>&1 || true
-docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-  -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
-  -v "$PWD/reports/ui:/out" -w /e2e "$pw_image" sleep 1800 > /dev/null
-docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"
-docker network connect "${COMPOSE_PROJECT_NAME}_edge" "$pw"
-docker network disconnect bridge "$pw"
-ui_status=0
-docker exec "$pw" node ui-e2e.mjs || ui_status=$?
-docker rm -f "$pw" > /dev/null 2>&1 || true
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/ui/ui-e2e.md ]; then cat reports/ui/ui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
-[ "$ui_status" = 0 ] || { echo "FAIL: a page of the interface is broken (reports/ui/ui-e2e.md)"; exit 1; }
+if [ "${UI_E2E:-1}" = 1 ]; then
+  echo "==> the interface in a browser: every page"
+  pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
+  pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
+  pw="${COMPOSE_PROJECT_NAME}-ui"
+  mkdir -p reports/ui
+  docker rm -f "$pw" > /dev/null 2>&1 || true
+  docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
+    -v "$PWD/reports/ui:/out" -w /e2e "$pw_image" sleep 1800 > /dev/null
+  docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"
+  docker network connect "${COMPOSE_PROJECT_NAME}_edge" "$pw"
+  docker network disconnect bridge "$pw"
+  ui_status=0
+  docker exec "$pw" node ui-e2e.mjs || ui_status=$?
+  docker rm -f "$pw" > /dev/null 2>&1 || true
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/ui/ui-e2e.md ]; then cat reports/ui/ui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
+  [ "$ui_status" = 0 ] || { echo "FAIL: a page of the interface is broken (reports/ui/ui-e2e.md)"; exit 1; }
+fi
 
 echo "==> all requested services are still running"
 for s in "${services[@]}"; do
@@ -128,14 +144,16 @@ if [[ " ${services[*]} " == *" crowdsec "* ]]; then
   "${compose[@]}" exec -T crowdsec cscli machines list -o raw | grep -q '^nginxions-' || { echo "FAIL: the machine of NginxionS is not registered"; exit 1; }
   "${compose[@]}" exec -T crowdsec cscli hub update > /dev/null || { echo "FAIL: cscli hub update does not reach the hub of NginxionS"; exit 1; }
   # smoke banned the tester through the bouncer of NginxionS in nginx: it reads the decisions of the local LAPI
-  echo "==> the CrowdSec bouncer of NginxionS pulls decisions from the local LAPI"
-  line=$("${compose[@]}" exec -T crowdsec cscli bouncers list -o raw | grep '^nginxions,' || true)
-  # name,ip,valid,last_pull,...: last_pull is set after the first pull
-  [ -n "$(echo "$line" | cut -d, -f4)" ] || { echo "FAIL: the bouncer of NginxionS never pulled CrowdSec decisions: $line"; exit 1; }
+  if smoke_has crowdsec; then
+    echo "==> the CrowdSec bouncer of NginxionS pulls decisions from the local LAPI"
+    line=$("${compose[@]}" exec -T crowdsec cscli bouncers list -o raw | grep '^nginxions,' || true)
+    # name,ip,valid,last_pull,...: last_pull is set after the first pull
+    [ -n "$(echo "$line" | cut -d, -f4)" ] || { echo "FAIL: the bouncer of NginxionS never pulled CrowdSec decisions: $line"; exit 1; }
+  fi
   # the IP reputation of the agent stays off (WAF -> Agent): it would hold every request for a lookup
 fi
 
-if [[ " ${services[*]} " == *" openappsec "* ]]; then
+if [[ " ${services[*]} " == *" openappsec "* ]] && { smoke_has waf || smoke_has events || smoke_has crowdsec; }; then
   # smoke sent attacks: the agent sends its logs to the local tuning service, which creates its events database
   # with the first one. Without a Fog there is no access token: the agent refused to send them (fixed in openappsec/agent).
   echo "==> the agent's logs reach the local tuning service (its events database exists)"
@@ -158,7 +176,7 @@ if [[ " ${services[*]} " == *" openappsec "* ]]; then
   fi
 fi
 
-if [[ " ${services[*]} " == *" openappsec "* ]]; then
+if [[ " ${services[*]} " == *" openappsec "* ]] && smoke_has crowdsec; then
   # smoke set the log trigger to syslog on localhost:5514 (UDP) and 127.0.0.1:5515 (TCP): the agent sends to the relay
   # of NginxionS (waf/syslog.js), which forwards to both. The listeners run in the network of the agent.
   echo "==> syslog of the agent reaches every server through the relay of NginxionS"
@@ -253,4 +271,8 @@ if "${compose[@]}" logs --no-color "${services[@]}" 2>&1 \
   exit 1
 fi
 
+if [ "$smoke_status" != 0 ]; then
+  echo "FAIL: smoke groups failed (above and in reports/smoke/smoke.md); the checks after smoke passed"
+  exit 1
+fi
 echo "OK: closed-network test passed"
