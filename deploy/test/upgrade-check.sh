@@ -68,7 +68,8 @@ verify)
   $CURL "$ADMIN/api/nginxions/waf/policy" | grep -q 'host: test.local' || fail "the rule of test.local is gone from the policy"
   step "verify: the exception object, the root CA and the ban are there"
   $CURL "$ADMIN/api/nginxions/waf/policy/objects?kind=exception" | grep -q '"upgrade-exception"' || fail "the exception object is gone"
-  $CURL "$ADMIN/api/nginxions/pki/cas" | grep -q '"Upgrade Root"' || fail "the root CA is gone"
+  # the CAs of the PKI are listed by GET /pki (/pki/cas only creates)
+  $CURL "$ADMIN/api/nginxions/pki" | grep -q '"Upgrade Root"' || fail "the root CA is gone"
   $CURL "$ADMIN/api/nginxions/crowdsec/decisions?q=192.0.2.66" | grep -q '192.0.2.66' || fail "the ban is gone"
   echo "OK: everything of the release before works after the update"
   ;;
