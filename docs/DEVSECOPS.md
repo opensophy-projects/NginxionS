@@ -243,7 +243,7 @@ Tool status.
   `clamav` — пять, нужных его entrypoint; `postgres` работает от своего пользователя (uid 70) с корнем только для
   чтения и без возможностей; `openappsec`, `crowdsec`, `nginxions-init` — ни одной. У всех
   `no-new-privileges` и `healthcheck`; порты публикуются на `NGINXIONS_BIND_IP` / `NGINXIONS_ADMIN_BIND_IP`
-  (по умолчанию `0.0.0.0`). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
+  (по умолчанию `0.0.0.0` для 80/443 и `127.0.0.1` для панели :81). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
 - **Python и SQLite в образе агента**: сигнатуры Snort конвертирует `snort_to_ips_local.mjs` (Node.js образа), тест
   `snort_to_ips_local.test.mjs` сверяет его вывод с питоновским оригиналом upstream; из Boost ставятся только
   библиотеки, которые линкуют бинарники агента (`scanelf` в стадии сборки), а не пакет `boost`, тянувший
