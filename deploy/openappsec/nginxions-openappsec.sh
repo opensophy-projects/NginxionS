@@ -1,10 +1,9 @@
 #!/bin/bash
 # NginxionS: the processes of the openappsec container (deploy/openappsec/Dockerfile):
 #   - the open-appsec agent (/nginxions-entry.sh: the settings of WAF -> Agent, then the upstream entry.sh);
-#   - its shared storage (decisions.data, learning state) and tuning (statistics, suggestions) services;
-#   - nginxions-control, the Docker API for the GUI (only when the Docker socket is mounted).
-# Each is started again when it stops. nginxions-control restarts the agent with a TERM to the pid in
-# /run/nginxions-agent.pid (its settings are read at its start). TERM to the container stops them all.
+#   - its shared storage (decisions.data, learning state) and tuning (statistics, suggestions) services.
+# Each is started again when it stops. nginxions-control (a container of its own, deploy/compose.yaml) restarts this
+# container to apply the settings of the agent (read at its start). TERM to the container stops them all.
 # The container owns the network namespace nginxions joins: the services listen on ports nginx leaves free.
 set -u
 
@@ -65,13 +64,8 @@ agent() {
 
 keep shared-storage shared_storage
 keep tuning tuning
-if [ -S /var/run/docker.sock ]; then
-    keep nginxions-control node /opt/nginxions-control/server.js
-else
-    log "no Docker socket: nginxions-control (System -> Services) is off"
-fi
 
-# the agent in the foreground loop: a TERM from nginxions-control restarts it, a TERM to the container ends here
+# the agent in the foreground loop: started again when it stops, a TERM to the container ends here
 while [ "$stopping" = 0 ]; do
     agent "$@"
     code=$?

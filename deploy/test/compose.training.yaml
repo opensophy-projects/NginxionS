@@ -20,6 +20,6 @@ services:
     # the healthcheck of compose.yaml, here too: KICS checks each compose file alone (capabilities and
     # no-new-privileges come from compose.yaml; a list repeated in an overlay is refused by compose)
     healthcheck:
-      test: ["CMD", "/bin/sh", "-c", "wget -q -T 4 -O /dev/null http://127.0.0.1:7080/healthz || nc -z -w 4 127.0.0.1 7777"]
+      test: ["CMD", "nc", "-z", "-w", "4", "127.0.0.1", "7777"]
     volumes:
       - ${NGINXIONS_FEATURES_DIR:?the directory of the feature dump}:/var/log/nginxions-features

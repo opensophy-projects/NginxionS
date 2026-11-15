@@ -4,7 +4,7 @@
 #   high     privileged, the host's PID, IPC or network namespace, the Docker socket outside nginxions-control
 #   medium   added capabilities, no no-new-privileges, cap_drop without ALL
 #   low      root user, writable root filesystem
-#   info     the Docker socket of nginxions-control (openappsec, CLAUDE.md), ports published on every address
+#   info     the Docker socket of nginxions-control (service control, CLAUDE.md), ports published on every address
 #
 #   scripts/check-runtime.sh <compose project> <out.json>
 set -euo pipefail
@@ -25,7 +25,7 @@ docker inspect $ids | jq '
         | select($c.HostConfig[$ns] == "host")
         | finding("host-namespace"; "high"; "\($ns): host") ),
       ( $c.Mounts[]? | select(.Source == "/var/run/docker.sock" or .Source == "/run/docker.sock")
-        | if $svc == "openappsec"
+        | if $svc == "control"
           then finding("docker-socket"; "info"; "Docker socket (nginxions-control, белый список операций)")
           else finding("docker-socket"; "high"; "Docker socket в контейнере \($svc)") end ),
       ( ($c.HostConfig.CapAdd // []) | select(length > 0)

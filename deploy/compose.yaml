@@ -9,12 +9,13 @@
 # CrowdSec later is a switch in the GUI, not an edit of this file.
 # Settings below are bootstrap parameters only; see docs/ENV-INVENTORY.md.
 #
-# Containers: nginxions (nginx, the panel, the backend), openappsec (the WAF agent and its learning services,
-# nginxions-control), crowdsec, clamav (File Security of the WAF policy), postgres; nginxions-init runs once at start. nginxions and openappsec are built by the
+# Containers: nginxions (nginx, the panel, the backend), openappsec (the WAF agent and its learning services),
+# control (nginxions-control: the only one with the Docker socket), crowdsec, clamav (File Security of the WAF policy),
+# postgres; nginxions-init runs once at start. nginxions and openappsec are built by the
 # NginxionS project (${NGINXIONS_REGISTRY}/nginxions, /nginxions-openappsec), CrowdSec and Postgres are the official images.
 # Versions are pinned in deploy/.env (read automatically by compose).
 #
-# Requires Docker Engine >= 26 and Compose >= 2.23 (volume subpath mounts).
+# Requires Docker Engine >= 28 (ports on 127.0.0.1 closed to the local network) and Compose >= 2.23 (volume subpath).
 
 name: nginxions
 
@@ -27,6 +28,10 @@ services:
   # One-shot bootstrap (deploy/init/nginxions-init.sh): secrets, subpath directories,
   # CrowdSec volumes seeded from the offline hub snapshot. Never overwrites existing data.
   nginxions-init:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_NGINXIONS_INIT / NGINXIONS_PIDS_NGINXIONS_INIT when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_NGINXIONS_INIT:-256m}
+    pids_limit: ${NGINXIONS_PIDS_NGINXIONS_INIT:-64}
     image: ${NGINXIONS_REGISTRY}/nginxions:${NGINXIONS_VERSION}
     restart: "no"
     network_mode: none
@@ -53,31 +58,36 @@ services:
       - appsec-conf:/appsec-conf
       - appsec-localconfig:/appsec-localconfig
 
-  # open-appsec: the agent, its shared storage and tuning services and nginxions-control (the Docker API of System ->
-  # Services) in one container (deploy/openappsec). It owns the network and IPC namespaces nginxions joins: the
-  # published ports are here, nginx of nginxions listens on them; the nginx attachment talks to the agent through the
-  # shared IPC and /dev/shm/check-point. Its services listen on 127.0.0.1 there: control 7080, shared storage 7811,
-  # tuning 7813, the agent 7777.
+  # open-appsec: the agent and its shared storage and tuning services in one container (deploy/openappsec). It owns the
+  # network and IPC namespaces nginxions joins: the published ports are here, nginx of nginxions listens on them; the
+  # nginx attachment talks to the agent through the shared IPC and /dev/shm/check-point. Its services listen on
+  # 127.0.0.1 there: shared storage 7811, tuning 7813, the agent 7777.
   openappsec:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_OPENAPPSEC / NGINXIONS_PIDS_OPENAPPSEC when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_OPENAPPSEC:-4g}
+    pids_limit: ${NGINXIONS_PIDS_OPENAPPSEC:-1024}
     <<: *managed
     image: ${NGINXIONS_REGISTRY}/nginxions-openappsec:${NGINXIONS_VERSION}
     container_name: nginxions-openappsec
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
-    # the agent and its services run as root on files of root; the Docker socket is root's: no capability is needed
+    # the agent and its services run as root on files of root: no capability is needed
     cap_drop:
       - ALL
     # the namespace of the network is this container's: nginx of nginxions listens on 80, 443 and 81 without the
     # capability NET_BIND_SERVICE
     sysctls:
       net.ipv4.ip_unprivileged_port_start: 0
-    # the same check as the image: nginxions-control answers, or the agent listens
+    # the same check as the image: the agent listens. Every 2 s while it starts: nginxions-control restarts nginxions
+    # once the restarted agent is healthy
     healthcheck:
-      test: ["CMD", "/bin/sh", "-c", "wget -q -T 4 -O /dev/null http://127.0.0.1:7080/healthz || nc -z -w 4 127.0.0.1 7777"]
+      test: ["CMD", "nc", "-z", "-w", "4", "127.0.0.1", "7777"]
       interval: 30s
       timeout: 5s
-      start_period: 60s
+      start_period: 120s
+      start_interval: 2s
       retries: 3
     depends_on:
       nginxions-init:
@@ -114,7 +124,6 @@ services:
       QUERY_DB_HOST: postgres
       QUERY_DB_USER: appsec
       QUERY_DB_PASSWORD_FILE: /run/secrets/appsec/db_password
-      NGINXIONS_CONTROL_TOKEN_FILE: /run/secrets/control/control_token
     volumes:
       - appsec-shm:/dev/shm/check-point
       - appsec-conf:/etc/cp/conf
@@ -124,9 +133,6 @@ services:
       - appsec-storage:/db
       # advanced ML model uploaded in WAF -> Agent, unpacked by the entrypoint at start
       - appsec-model:/advanced-model:ro
-      # nginxions-control: only list, logs, restart and reload of this stack's nginxions.managed containers
-      # (nginxions/backend/nginxions/control/server.js); nginxions itself never gets the socket
-      - /var/run/docker.sock:/var/run/docker.sock
       - type: volume
         source: secrets
         target: /run/secrets/nginxions
@@ -139,6 +145,54 @@ services:
         read_only: true
         volume:
           subpath: appsec
+    networks:
+      # "nginxions": the name nginx and the panel had before, for the clients of the networks
+      edge:
+        aliases: [nginxions]
+      internal:
+        aliases: [nginxions]
+      # nginxions-control, for the backend of nginxions (in this namespace)
+      control: {}
+
+  # nginxions-control (nginxions/backend/nginxions/control): the Docker API of the GUI, the only container with the
+  # Docker socket. A container of its own (the image of the agent, which carries its code and Node.js), so that a flaw
+  # in nginx or in the agent, which take the traffic of the internet, does not reach the socket: other processes, other
+  # files, the token only here and in nginxions. Only list, logs, restart and reload of this stack's nginxions.managed
+  # containers; on the network "control" alone (no internet, no other service), root filesystem read-only.
+  control:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_CONTROL / NGINXIONS_PIDS_CONTROL when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_CONTROL:-256m}
+    pids_limit: ${NGINXIONS_PIDS_CONTROL:-64}
+    image: ${NGINXIONS_REGISTRY}/nginxions-openappsec:${NGINXIONS_VERSION}
+    container_name: nginxions-control
+    restart: unless-stopped
+    entrypoint: ["node", "/opt/nginxions-control/server.js"]
+    command: []
+    read_only: true
+    # root on the Docker socket of root and on the files of the agent: no capability is needed
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "4", "-O", "/dev/null", "http://127.0.0.1:7080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      nginxions-init:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${TZ:-UTC}
+      NGINXIONS_CONTROL_TOKEN_FILE: /run/secrets/control/control_token
+      # every address of its container (its only network is "control"); older images listened on 127.0.0.1
+      NGINXIONS_CONTROL_LISTEN: 0.0.0.0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # what the agent learned (read, and a snapshot staged back for its next start; control/learning.js)
+      - appsec-conf:/etc/cp/conf
       - type: volume
         source: secrets
         target: /run/secrets/control
@@ -146,13 +200,13 @@ services:
         volume:
           subpath: control
     networks:
-      # "nginxions": the name nginx and the panel had before, for the clients of the networks
-      edge:
-        aliases: [nginxions]
-      internal:
-        aliases: [nginxions]
+      - control
 
   nginxions:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_NGINXIONS / NGINXIONS_PIDS_NGINXIONS when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_NGINXIONS:-3g}
+    pids_limit: ${NGINXIONS_PIDS_NGINXIONS:-4096}
     <<: *managed
     image: ${NGINXIONS_REGISTRY}/nginxions:${NGINXIONS_VERSION}
     container_name: nginxions
@@ -163,7 +217,10 @@ services:
         condition: service_healthy
       openappsec:
         condition: service_started
-    # the network (ports) and IPC of openappsec; nginxions-control restarts nginxions when openappsec was restarted
+      control:
+        condition: service_started
+    # the network (ports) and IPC of openappsec; nginxions-control restarts nginxions when openappsec was restarted.
+    # nginxions-control is reached on the network "control" of openappsec
     network_mode: service:openappsec
     ipc: service:openappsec
     cap_drop:
@@ -182,6 +239,7 @@ services:
       retries: 3
     environment:
       TZ: ${TZ:-UTC}
+      NGINXIONS_CONTROL_URL: http://nginxions-control:7080
       DB_POSTGRES_HOST: postgres
       DB_POSTGRES_NAME: nginxions
       DB_POSTGRES_USER: nginxions
@@ -219,6 +277,10 @@ services:
       - clamav-control:/var/lib/nginxions-clamav
 
   postgres:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_POSTGRES / NGINXIONS_PIDS_POSTGRES when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_POSTGRES:-1g}
+    pids_limit: ${NGINXIONS_PIDS_POSTGRES:-512}
     <<: *managed
     image: docker.io/library/postgres:${POSTGRES_VERSION}
     container_name: nginxions-postgres
@@ -259,6 +321,10 @@ services:
       - internal
 
   crowdsec:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_CROWDSEC / NGINXIONS_PIDS_CROWDSEC when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_CROWDSEC:-1g}
+    pids_limit: ${NGINXIONS_PIDS_CROWDSEC:-512}
     <<: *managed
     # official image; config and data volumes are seeded by nginxions-init from the offline hub snapshot
     image: docker.io/crowdsecurity/crowdsec:${CROWDSEC_VERSION}
@@ -266,7 +332,11 @@ services:
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
-    # CrowdSec runs as root on files of root (its volumes, the logs it reads): no capability is needed
+    # CrowdSec runs as root on files of root (its volumes, the logs it reads): no capability is needed. The root
+    # filesystem is read-only: it writes its volumes (configuration, database, hub) and /tmp
+    read_only: true
+    tmpfs:
+      - /tmp
     cap_drop:
       - ALL
     depends_on:
@@ -307,6 +377,10 @@ services:
       - internal
 
   clamav:
+    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
+    # NGINXIONS_MEM_CLAMAV / NGINXIONS_PIDS_CLAMAV when a large setup needs more
+    mem_limit: ${NGINXIONS_MEM_CLAMAV:-4g}
+    pids_limit: ${NGINXIONS_PIDS_CLAMAV:-512}
     <<: *managed
     # official image with a snapshot of the signatures; clamd runs only while a practice of the WAF policy has File
     # Security on (deploy/clamav/nginxions-clamav.sh): without it the container waits and takes no memory
@@ -315,15 +389,16 @@ services:
     entrypoint: ["/bin/sh", "/nginxions-clamav.sh"]
     security_opt:
       - no-new-privileges:true
-    # the entrypoint of the image hands /var/lib/clamav to its user clamav, clamd drops to it
+    # the user clamav of the image from the start (clamd parses the files visitors upload), no capability, a read-only
+    # root filesystem: nginxions-clamav.sh starts clamd and freshclam itself with their configuration in /tmp
+    user: "100:101"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/clamav:uid=100,gid=101,mode=0775
+      - /var/log/clamav:uid=100,gid=101,mode=0775
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - SETGID
-      - SETUID
     environment:
       TZ: ${TZ:-UTC}
       # an upload is streamed to clamd whole (nginxions_files.lua): the limits of the practice come first
@@ -357,6 +432,9 @@ networks:
   edge: {}
   # service-to-service traffic, no internet access
   internal:
+    internal: true
+  # nginxions-control and openappsec (nginxions in its namespace) only: no other service reaches the Docker API
+  control:
     internal: true
 
 volumes:

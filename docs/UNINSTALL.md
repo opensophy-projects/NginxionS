@@ -106,9 +106,9 @@ Compose удаляет только то, что знает по текущим 
 
 | Что | Имена |
 |---|---|
-| Контейнеры | `nginxions`, `nginxions-openappsec`, `nginxions-postgres`, `nginxions-crowdsec`, `nginxions-clamav`, `nginxions-nginxions-init-1`; от версий до ноября 2026: `nginxions-control`, `nginxions-socket-proxy`, `nginxions-appsec-agent`, `nginxions-appsec-shared-storage`, `nginxions-appsec-tuning-svc`; dev и тесты: `nginxions-test-upstream`, `nginxions-attacker`, `nginxions-<тест>-*` (стеки тестов), `nginxions-<тест>-probe`/`-load` (их клиенты), `nginxions-contract-*` (контракт политики) |
+| Контейнеры | `nginxions`, `nginxions-openappsec`, `nginxions-control`, `nginxions-postgres`, `nginxions-crowdsec`, `nginxions-clamav`, `nginxions-nginxions-init-1`; от версий до ноября 2026: `nginxions-socket-proxy`, `nginxions-appsec-agent`, `nginxions-appsec-shared-storage`, `nginxions-appsec-tuning-svc`; dev и тесты: `nginxions-test-upstream`, `nginxions-attacker`, `nginxions-<тест>-*` (стеки тестов), `nginxions-<тест>-probe`/`-load` (их клиенты), `nginxions-contract-*` (контракт политики) |
 | Тома | `nginxions_secrets`, `nginxions_nginxions-data`, `nginxions_postgres-data`, `nginxions_appsec-shm`, `nginxions_appsec-conf`, `nginxions_appsec-data`, `nginxions_appsec-logs`, `nginxions_appsec-localconfig`, `nginxions_appsec-model`, `nginxions_appsec-storage`, `nginxions_crowdsec-conf`, `nginxions_crowdsec-data`, `nginxions_clamav-db`, `nginxions_clamav-control`; тесты: `nginxions-<тест>_*`, `nginxions-<тест>-state` |
-| Сети | `nginxions_edge`, `nginxions_internal` (и `nginxions_control` старых версий); тесты: `nginxions-<тест>_*` |
+| Сети | `nginxions_edge`, `nginxions_internal`, `nginxions_control`; тесты: `nginxions-<тест>_*` |
 
 Установка под старым названием NPMOS оставляет то же с префиксом `npmos`: если `scripts/upgrade-from-npmos.sh` не запускался, повторите шаг 2 с `npmos` вместо `nginxions`.
 
