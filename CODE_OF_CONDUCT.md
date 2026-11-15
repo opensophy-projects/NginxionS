@@ -459,9 +459,7 @@ flowchart LR
       - `WafAgent/` — состояние, метрики (`AgentMetrics.tsx`), настройки агента (`AgentSettings.tsx`), File Security / ClamAV (`FileSecurity.tsx`)
       - `WafPolicy/`, `WafExpert/` — политика из объектов и режим эксперта
       - `BlockPage/` — Агенты → Страница блокировки с предпросмотром
-      - `Certificates/` — реестр всех сертификатов
-      - `Pki/` — Сертификаты → mTLS и PKI: одна страница с вкладками (mTLS хостов, сертификаты, ЦС, шаблоны, настройки); `Mtls/` — её вкладка mTLS (`/mtls` ведёт туда)
-      - `Acme/` — Сертификаты → ACME: ACME-серверы и продление (перенесены из настроек)
+      - `Certificates/` — раздел «Сертификаты» одной страницей: сводка, хосты с mTLS, таблица всех сертификатов (ACME, свои, PKI, пропуска mTLS, файлы) с массовым отзывом, блоки «Центры сертификации» и «ACME-серверы», окно настроек; старые `/pki`, `/mtls`, `/certificates/acme` ведут сюда
       - `Notifications/` — уведомления
       - `Roles/` — роли и права
       - `Services/` — сервисы стека
@@ -473,7 +471,7 @@ flowchart LR
     - **`crowdsec/`** — окна бана (`BanModal.tsx`), заблокированного адреса (`DecisionModal.tsx`), блок-листа (`BlocklistModal.tsx`), профиля (`ProfileModal.tsx`); подписи (`labels.ts`), API
     - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), пробный режим хоста (`TrialModal.tsx`), что выучил агент (`LearnedModal.tsx`), снимки обучения (`SnapshotsModal.tsx`), API
     - **`notifications/`** — канал (`ChannelModal.tsx`), правило (`RuleModal.tsx`), быстрая настройка (`SetupModal.tsx`), API
-    - **`pki/`** — CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
+    - **`pki/`** — блоки страницы «Сертификаты»: центры сертификации, шаблоны и настройки PKI (`Sections.tsx`), хосты с mTLS и «Защитить хост» (`MtlsHosts.tsx`), окно настроек раздела (`SettingsModal.tsx`); CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
     - **`policy/`** — редактор политики: объект (`ObjectModal.tsx`, поля в `fields.ts`), файлы OpenAPI практики (`SchemaFiles.tsx`), ссылки на объекты (`RefsEditor.tsx`), просмотр изменения (`Review.tsx`, `ReviewModal.tsx`), код (`CodePane.tsx`), импорт (`ImportModal.tsx`), имена встроенных объектов (`names.ts`), API
     - **`rbac/`** — роль (`RoleModal.tsx`), хосты роли (`HostPicker.tsx`), роли пользователя (`UserRolesModal.tsx`, `UserRoleBadges.tsx`), подписи (`labels.ts`), хуки и API
     - **`system/`** — Настройки: env-настройки (`EnvSection.tsx`, `sections.tsx`), GeoIP (`Geoip.tsx`), перенос (`Migration.tsx`), API

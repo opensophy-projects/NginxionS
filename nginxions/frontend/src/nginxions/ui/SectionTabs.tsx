@@ -15,7 +15,7 @@ export function SectionTabs() {
 	const can = useCan();
 	const section = useMemo(() => sectionOf(visibleItems(navigation, me, can), pathname), [me, can, pathname]);
 	if (!section?.tabs || section.tabs.length < 2) return null;
-	// the most specific tab: /certificates/acme is the tab ACME, not "All certificates" (/certificates)
+	// the most specific tab: /a/b is the tab of /a/b, not of /a
 	const active = section.tabs
 		.filter((tab) => containsActive(tab, pathname))
 		.sort((a, b) => (b.to?.length ?? 0) - (a.to?.length ?? 0))[0];

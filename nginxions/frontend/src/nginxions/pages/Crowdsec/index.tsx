@@ -25,7 +25,7 @@ import { CodePane } from "../../policy/CodePane";
 import { useCan } from "../../rbac/hooks";
 import agentStyles from "../AgentOpenappsec/Agent.module.css";
 import hostStyles from "../Hosts/Hosts.module.css";
-import styles from "../Pki/Pki.module.css";
+import styles from "../../pki/Pki.module.css";
 import { BlocklistsTab, RegistryTab } from "./Blocklists";
 import { AlertsTab, DecisionsTab } from "./Decisions";
 import { HubTab } from "./Hub";
