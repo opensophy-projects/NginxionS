@@ -255,6 +255,18 @@ jobs:
           NGINXIONS_VERSION: ${{ env.VERSION }}
           OUT: reports/waf
         run: scripts/test-waf-score.sh
+      - name: update from the published develop (data and work kept)
+        env:
+          NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          NGINXIONS_VERSION: ${{ env.VERSION }}
+          FROM_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          FROM_VERSION: develop
+        run: scripts/test-upgrade.sh
+      - name: failures of the parts of the stack (agent, backend, CrowdSec, PostgreSQL)
+        env:
+          NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          NGINXIONS_VERSION: ${{ env.VERSION }}
+        run: scripts/test-chaos.sh
       - name: image scan (Trivy, Syft SBOM, Grype, Dockle)
         env:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}

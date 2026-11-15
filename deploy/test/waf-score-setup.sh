@@ -7,7 +7,7 @@ ADMIN="https://nginxions:81"
 HTTP="http://nginxions"
 EMAIL="admin@nginxions.test"
 PASSWORD="nginxions-wafscore-$(date +%s)"
-JAR=/tmp/cookies
+JAR="${JAR:-/tmp/cookies}"
 CURL="curl -sS --fail-with-body --max-time 30 -k -b $JAR -c $JAR"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 status() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: test.local' "$HTTP$1"; }
