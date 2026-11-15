@@ -202,7 +202,7 @@ flowchart LR
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
   - `compose.airgap.yaml` — стек без выхода в интернет
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
-  - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
+  - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
   - `upgrade-check.sh` — данные теста обновления (`seed`) и их проверка после обновления (`verify`)
   - `waf-score-setup.sh` — подготовка стека для оценки WAF: админ, хост `test.local` под WAF в режиме блокировки
@@ -460,7 +460,8 @@ flowchart LR
       - `WafPolicy/`, `WafExpert/` — политика из объектов и режим эксперта
       - `BlockPage/` — Агенты → Страница блокировки с предпросмотром
       - `Certificates/` — реестр всех сертификатов
-      - `Pki/`, `Mtls/` — PKI и mTLS
+      - `Pki/` — Сертификаты → mTLS и PKI: одна страница с вкладками (mTLS хостов, сертификаты, ЦС, шаблоны, настройки); `Mtls/` — её вкладка mTLS (`/mtls` ведёт туда)
+      - `Acme/` — Сертификаты → ACME: ACME-серверы и продление (перенесены из настроек)
       - `Notifications/` — уведомления
       - `Roles/` — роли и права
       - `Services/` — сервисы стека

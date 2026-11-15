@@ -21,7 +21,7 @@ export COMPOSE_PROJECT_NAME="nginxions-$suite"
 case "$suite" in
   smoke-waf) SMOKE_GROUPS="waf" UI_E2E=0 exec scripts/test-airgap.sh ;;
   smoke-crowdsec) SMOKE_GROUPS="crowdsec migration" UI_E2E=0 exec scripts/test-airgap.sh ;;
-  smoke-core) SMOKE_GROUPS="services hosts rbac events pki" UI_E2E=1 exec scripts/test-airgap.sh ;;
+  smoke-core) SMOKE_GROUPS="services hosts rbac events pki certs" UI_E2E=1 exec scripts/test-airgap.sh ;;
   waf-score) OUT="${OUT:-reports/waf}" exec scripts/test-waf-score.sh ;;
   upgrade) exec scripts/test-upgrade.sh ;;
   chaos) exec scripts/test-chaos.sh ;;

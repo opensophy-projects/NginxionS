@@ -1,5 +1,6 @@
 import cn from "classnames";
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { T } from "src/locale";
 import { useCan } from "src/nginxions/rbac/hooks";
 // NginxionS: sections of NginxionS (env settings of NPMplus, retention of events), see src/nginxions/system
@@ -12,6 +13,8 @@ export default function Layout() {
 		() => new URLSearchParams(window.location.search).get("section") || "default-site",
 	);
 	const can = useCan();
+	// NginxionS: ACME moved to Certificates → ACME; old links ?section=nginxions-acme lead there
+	if (section === "nginxions-acme") return <Navigate to="/certificates/acme" replace />;
 	// Taken from https://preview.tabler.io/settings.html
 	// Refer to that when updating this content
 

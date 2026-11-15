@@ -70,8 +70,10 @@ export const navigation: NavItem[] = [
 		label: "certificates",
 		tabs: [
 			{ id: "certificates", label: "nginxions.nav.all-certs", to: "/certificates", section: CERTIFICATES },
-			{ id: "mtls", label: "nginxions.nav.mtls", to: "/mtls", rbac: "pki" },
-			{ id: "pki", label: "nginxions.pki", to: "/pki", rbac: "pki" },
+			// mTLS of the hosts, CAs, issued certificates, templates and settings of PKI: one page with tabs
+			{ id: "pki", label: "nginxions.nav.mtls-pki", to: "/pki", rbac: "pki" },
+			// the ACME servers and the renewal of ACME certificates (moved from Administration → Settings)
+			{ id: "acme", label: "nginxions.nav.acme", to: "/certificates/acme", section: CERTIFICATES },
 		],
 	},
 	{

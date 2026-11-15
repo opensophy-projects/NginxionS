@@ -351,3 +351,45 @@ test("OCSP: good, revoked and unknown, signed by the CA", async () => {
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("PKI: a template fills in what the request leaves out, an unknown one is refused", async () => {
+	const { applyTemplate } = await import("./x509.js");
+	const templates = [
+		{
+			id: "vpn",
+			name: "VPN",
+			profile: "client",
+			ca_id: 7,
+			days: 30,
+			key_type: "ec-p384",
+			subject: { organizational_unit: "VPN" },
+		},
+	];
+	const filled = applyTemplate({ template: "vpn", ca_id: 3, subject: { common_name: "erin" } }, templates);
+	assert.equal(filled.key_type, "ec-p384");
+	assert.equal(filled.days, 30);
+	assert.equal(filled.profile, "client");
+	// the CA chosen in the request stays
+	assert.equal(filled.ca_id, 3);
+	assert.deepEqual(filled.subject, { organizational_unit: "VPN", common_name: "erin" });
+	// what the request says wins
+	const own = applyTemplate(
+		{
+			template: "vpn",
+			ca_id: 3,
+			days: 90,
+			key_type: "rsa-2048",
+			subject: { common_name: "x", organizational_unit: "IT" },
+		},
+		templates,
+	);
+	assert.equal(own.days, 90);
+	assert.equal(own.key_type, "rsa-2048");
+	assert.equal(own.subject.organizational_unit, "IT");
+	assert.throws(() => applyTemplate({ template: "gone", ca_id: 3 }, templates), /does not exist/);
+	assert.throws(
+		() => applyTemplate({ template: "vpn", profile: "server", ca_id: 3 }, templates),
+		/client certificates/,
+	);
+	assert.equal(applyTemplate({ ca_id: 3 }, templates).days, undefined);
+});

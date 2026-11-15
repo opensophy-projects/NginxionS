@@ -139,6 +139,8 @@ export interface PkiOverview {
 	cas: PkiCa[];
 	certificates: PkiCert[];
 	settings: PkiSettings;
+	/** the panel through its proxy hosts (hosts without mTLS first) */
+	panelUrls: { url: string; mtls: boolean }[];
 	protected: ProtectedHost[];
 }
 
@@ -397,4 +399,35 @@ const saveBlob = (blob: Blob, filename: string) => {
 };
 
 /** full address of a one-time link: the public address of the PKI, or this GUI */
-export const linkUrl = (path: string, publicUrl: string) => `${publicUrl || window.location.origin}${path}`;
+/** an address only this machine or the local network opens: localhost, a loopback or private IP */
+export const isLocalAddress = (url: string) => {
+	let host: string;
+	try {
+		host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	} catch {
+		return true;
+	}
+	return (
+		host === "localhost" ||
+		host.endsWith(".localhost") ||
+		host === "::1" ||
+		/^127\./.test(host) ||
+		/^10\./.test(host) ||
+		/^192\.168\./.test(host) ||
+		/^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+		/^(fc|fd)[0-9a-f]{2}:/.test(host)
+	);
+};
+
+/**
+ * Where one-time links lead: the public address of PKI; else the panel as it is open, unless that is localhost or a
+ * private address and a proxy host of the panel exists (its domain).
+ */
+export const linkBase = (data: { settings: PkiSettings; panelUrls?: { url: string; mtls: boolean }[] }) => {
+	if (data.settings.publicUrl) return data.settings.publicUrl;
+	const origin = window.location.origin;
+	if (isLocalAddress(origin) && data.panelUrls?.length) return data.panelUrls[0].url;
+	return origin;
+};
+
+export const linkUrl = (path: string, base: string) => `${base || window.location.origin}${path}`;
