@@ -17,7 +17,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteCertificate, downloadCertificate, getCertificate } from "src/api/backend";
 import { HasPermission, LoadingPage } from "src/components";
 import { useUser } from "src/hooks";
-import { formatDateTime, intl, T } from "src/locale";
+import { intl, T } from "src/locale";
+import { formatShort } from "../../pki/api";
 import {
 	showCustomCertificateModal,
 	showDeleteConfirmModal,
@@ -82,7 +83,7 @@ function Expiry({ value, status }: { value: string | null; status: CertStatus })
 	const days = Math.floor((new Date(value).getTime() - Date.now()) / DAY);
 	return (
 		<>
-			<div>{formatDateTime(value, intl.locale)}</div>
+			<div>{formatShort(value, intl.locale)}</div>
 			<div className={cn(own.left, (status === "expiring" || status === "expired") && own[status])}>
 				{days < 0 ? (
 					<T id="nginxions.certs.expired-ago" data={{ days: -days }} />
@@ -492,13 +493,13 @@ function CertificatesPage() {
 										<th>
 											<T id="nginxions.certs.kind" />
 										</th>
-										<th>
+										<th className="nx-optional">
 											<T id="nginxions.certs.issuer" />
 										</th>
 										<th>
 											<T id="nginxions.certs.expires" />
 										</th>
-										<th>
+										<th className="nx-optional">
 											<T id="nginxions.certs.used-by" />
 										</th>
 										<th />
@@ -540,11 +541,13 @@ function CertificatesPage() {
 															<T id={`nginxions.certs.source.${c.source}`} />
 														</div>
 													</td>
-													<td>{c.issuer || <span className="text-secondary">—</span>}</td>
+													<td className="nx-optional">
+														{c.issuer || <span className="text-secondary">—</span>}
+													</td>
 													<td>
 														<Expiry value={c.notAfter} status={c.status} />
 													</td>
-													<td className={own.used}>
+													<td className={cn(own.used, "nx-optional")}>
 														<UsedBy cert={c} />
 													</td>
 													<td className="text-end">

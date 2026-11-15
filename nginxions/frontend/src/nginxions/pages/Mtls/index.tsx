@@ -10,7 +10,7 @@ import Alert from "react-bootstrap/Alert";
 import { useSearchParams } from "react-router-dom";
 import { useLocaleState } from "src/context";
 import { useProxyHosts, useStreams } from "src/hooks";
-import { formatDateTime, intl, T } from "src/locale";
+import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showAccessModal } from "../../pki/AccessModal";
@@ -27,6 +27,7 @@ import {
 	type ProtectedHost,
 	setMtlsHost,
 	linkBase,
+	formatShort,
 } from "../../pki/api";
 import { certStatus, STATUS_TONE, showCertModal } from "../../pki/CertModal";
 import { showHostCertsModal } from "../../pki/HostCertsModal";
@@ -444,7 +445,7 @@ function CertsCard({
 								<th>
 									<T id="nginxions.mtls.access.name" />
 								</th>
-								<th>
+								<th className="nx-optional">
 									<T id="nginxions.mtls.opens" />
 								</th>
 								<th>
@@ -488,7 +489,7 @@ function CertsCard({
 												{[c.subject.email, c.notes].filter(Boolean).join(" · ") || c.serial}
 											</div>
 										</td>
-										<td className={styles.used}>
+										<td className={cn(styles.used, "nx-optional")}>
 											{c.access.length ? (
 												<span title={c.access.map((a) => a.name).join(", ")}>
 													{c.access
@@ -507,7 +508,7 @@ function CertsCard({
 											</span>
 										</td>
 										<td className="text-nowrap">
-											<div>{formatDateTime(c.notAfter, locale)}</div>
+											<div>{formatShort(c.notAfter, locale)}</div>
 											<div className={styles.sub}>
 												{c.daysLeft >= 0
 													? t("nginxions.pki.days-left", { days: c.daysLeft })
