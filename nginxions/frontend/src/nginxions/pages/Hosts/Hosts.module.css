@@ -27,7 +27,14 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 0.5rem;
+}
+/* on a wide screen the buttons stay in one row; the long subtitle beside them wraps instead */
+@media (min-width: 768px) {
+	.toolbar {
+		flex-shrink: 0;
+	}
 }
 /* search in the inset frame of cards (as the theme/language buttons) */
 .searchFrame {

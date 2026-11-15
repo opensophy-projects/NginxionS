@@ -20,6 +20,20 @@ test("a preset takes its directory and client; the TLS CA needs lego", () => {
 	assert.ok(PRESETS.every((p) => p.directory.startsWith("https://")));
 });
 
+test("the directory of a preset can be changed and is kept; another preset brings its own", () => {
+	const moved = normalize({ preset: "tlscc-stage", directory: "https://acme.new.example/directory" });
+	assert.equal(moved.directory, "https://acme.new.example/directory");
+	assert.equal(moved.preset, "tlscc-stage");
+	// a change of the name only keeps the changed address
+	assert.equal(normalize({ name: "TCI" }, moved).directory, "https://acme.new.example/directory");
+	// switching to another preset without an address takes the address of that preset
+	assert.equal(
+		normalize({ preset: "letsencrypt" }, moved).directory,
+		"https://acme-v02.api.letsencrypt.org/directory",
+	);
+	assert.throws(() => normalize({ preset: "letsencrypt", directory: "javascript:alert(1)" }), /https:\/\//);
+});
+
 test("a server of your own: its URL, name from the host, client of choice", () => {
 	const s = normalize({
 		directory: "https://ca.internal:9000/acme/acme/directory",

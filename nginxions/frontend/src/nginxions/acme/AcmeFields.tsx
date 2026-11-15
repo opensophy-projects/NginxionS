@@ -17,7 +17,7 @@ export const useChosenAcmeServer = () => {
 	return chosenServer(data, values?.meta?.acmeServerId);
 };
 
-/** a select of the ACME servers of Settings → ACME, with the default one chosen */
+/** a select of the ACME servers of Certificates → ACME, with the default one chosen */
 export function AcmeServerField() {
 	const { values, setFieldValue } = useFormikContext<any>();
 	const { data, isLoading } = useAcmeServers();
@@ -52,7 +52,7 @@ export function AcmeServerField() {
 					<T id={`nginxions.acme.client.${server.client}`} />
 					{" · "}
 					{/* a plain link: the modals of EasyModal are rendered outside the router */}
-					<a href="/settings?section=nginxions-acme" target="_blank" rel="noreferrer">
+					<a href="/certificates/acme" target="_blank" rel="noreferrer">
 						<T id="nginxions.acme.server.manage" />
 					</a>
 				</div>

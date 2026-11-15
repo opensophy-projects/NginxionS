@@ -23,6 +23,7 @@ import {
 	normalizeSans,
 	normalizeSubject,
 	PkiError,
+	applyTemplate,
 	PROFILES,
 	parseCert,
 	REVOKE_REASONS,
@@ -103,6 +104,35 @@ const removeCopies = async (access, copies) => {
 
 const settings = () => getSetting("pki");
 
+/** the addresses a proxy host of the panel forwards to (the panel listens on 81 of its own container) */
+const PANEL_UPSTREAMS = new Set(["127.0.0.1", "localhost", "::1", "[::1]", "nginxions", "nginxions-openappsec"]);
+
+/**
+ * Addresses of the panel through its proxy hosts (enabled, forwarding to the panel): a one-time link made in a panel
+ * opened on localhost leads there when no public address of PKI is set. Hosts without mTLS first: a client gets its
+ * certificate there before it has one.
+ * @returns {Promise<{url: string, mtls: boolean}[]>}
+ */
+export const panelUrls = async () => {
+	const hosts = await db()("proxy_host")
+		.select("id", "domain_names", "forward_host", "forward_port", "certificate_id")
+		.where({ is_deleted: 0, enabled: 1, forward_port: 81 });
+	const guarded = new Set(
+		(await db()("nginxions_mtls_host").where({ host_type: "proxy_host", enabled: true }).select("host_id")).map(
+			(r) => r.host_id,
+		),
+	);
+	const urls = [];
+	for (const host of hosts) {
+		if (!PANEL_UPSTREAMS.has(String(host.forward_host).toLowerCase())) continue;
+		const names = typeof host.domain_names === "string" ? JSON.parse(host.domain_names) : host.domain_names;
+		const name = (names || []).find((n) => !String(n).startsWith("*."));
+		if (!name) continue;
+		urls.push({ url: `${host.certificate_id ? "https" : "http"}://${name}`, mtls: guarded.has(host.id) });
+	}
+	return urls.sort((a, b) => Number(a.mtls) - Number(b.mtls));
+};
+
 const crlUrl = (s, caId) =>
 	s.public_url ? `${s.public_url.replace(/\/$/, "")}/api/nginxions/pki/public/crl/${caId}.crl` : undefined;
 
@@ -150,7 +180,11 @@ const clampDays = (days, fallback, max) => {
 // CAs
 
 const caRow = async (id, trx = db()) => {
-	const row = await trx("nginxions_pki_ca").where({ id }).first();
+	// no id (a field left out of a request): not found, not a failed query
+	if (id === undefined || id === null || !Number.isInteger(Number(id))) throw new errs.ItemNotFoundError(id);
+	const row = await trx("nginxions_pki_ca")
+		.where({ id: Number(id) })
+		.first();
 	if (!row) throw new errs.ItemNotFoundError(id);
 	return row;
 };
@@ -466,6 +500,8 @@ const normalizeTemplate = (t, cas) => {
 	};
 };
 
+const withTemplate = async (data) => (data.template ? applyTemplate(data, (await settings()).templates) : data);
+
 const audit = (access, action, objectType, id, meta) =>
 	internalAuditLog.add(access, { action, object_type: objectType, object_id: id, meta });
 
@@ -502,6 +538,7 @@ const internalPki = {
 			cas,
 			certificates,
 			settings: await settings(),
+			panel_urls: await panelUrls(),
 			key_types: Object.keys(KEY_TYPES),
 			revoke_reasons: REVOKE_REASONS,
 		};
@@ -561,6 +598,7 @@ const internalPki = {
 					serial: randomSerial(),
 				});
 			} else if (data.kind === "intermediate") {
+				if (!data.parent_id) throw new PkiError("parent_id: the root CA the trust domain is made under");
 				parent = await caRow(data.parent_id);
 				if (parent.kind !== "root" || !parent.key_enc)
 					throw new PkiError("The parent must be a root CA of NginxionS with its key");
@@ -827,8 +865,10 @@ const internalPki = {
 	 *   password?, compatible?, link_hours?, include_key_pem?, install?}} data
 	 *   install: a server certificate also becomes a custom certificate of NPMplus (Certificates)
 	 */
-	issue: async (access, data, { replaces } = {}) => {
+	issue: async (access, input, { replaces } = {}) => {
 		await access.can("pki:issue");
+		// a renewal keeps the name of the template of the old certificate, its values are those of the old one
+		const data = replaces ? input : await guard(() => withTemplate(input));
 		if (data.store_key) await access.can("pki:export_key");
 		if (data.own_ca) {
 			// a CA of its own for one person under a root: deleting that CA cuts the person off (hosts with

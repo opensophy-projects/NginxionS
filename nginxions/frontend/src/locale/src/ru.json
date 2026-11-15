@@ -648,7 +648,7 @@
 		"defaultMessage": "HTTP-01: домены должны указывать на этот сервер, порт 80 открыт из интернета."
 	},
 	"nginxions.acme.csr.intro": {
-		"defaultMessage": "Вставьте запрос на сертификат, сделанный в другом месте (с нужным типом ключа, субъектом или расширениями), и его закрытый ключ. Подпишет ACME-сервер из «Настройки → ACME»; NginxionS продлевает сертификат тем же CSR и отдаёт его, как любой сертификат ACME. Домены берутся из subjectAltName запроса."
+		"defaultMessage": "Вставьте запрос на сертификат, сделанный в другом месте (с нужным типом ключа, субъектом или расширениями), и его закрытый ключ. Подпишет ACME-сервер из «Сертификаты → ACME»; NginxionS продлевает сертификат тем же CSR и отдаёт его, как любой сертификат ACME. Домены берутся из subjectAltName запроса."
 	},
 	"nginxions.acme.csr.key": {
 		"defaultMessage": "Закрытый ключ CSR, PEM"
@@ -704,6 +704,12 @@
 	"nginxions.acme.new": {
 		"defaultMessage": "Новый сертификат ACME"
 	},
+	"nginxions.acme.page.renewal": {
+		"defaultMessage": "Продление"
+	},
+	"nginxions.acme.page.subtitle": {
+		"defaultMessage": "Откуда берутся ACME-сертификаты: Let's Encrypt и другие центры, свой ACME-сервер; сервер по умолчанию; email, EAB и клиент каждого. Изменения — с правом на настройки."
+	},
 	"nginxions.acme.server": {
 		"defaultMessage": "ACME-сервер"
 	},
@@ -726,7 +732,7 @@
 		"defaultMessage": "certbot — клиент NginxionS, его DNS-плагины. Регистрируется с RSA-ключом и отправляет CSR без subject."
 	},
 	"nginxions.acme.servers.client-hint.lego": {
-		"defaultMessage": "lego — ключ аккаунта ES256 и имя в CN запроса (нужно ТЦИ / НУЦ Минцифры и другим), 150+ DNS-провайдеров."
+		"defaultMessage": "lego — ключ аккаунта ES256 и имя в CN запроса (нужно ТЦИ (tlscc.ru) и другим), 150+ DNS-провайдеров."
 	},
 	"nginxions.acme.servers.custom": {
 		"defaultMessage": "Другой ACME-сервер (URL)"
@@ -745,6 +751,12 @@
 	},
 	"nginxions.acme.servers.directory-placeholder": {
 		"defaultMessage": "https://acme.example.com/directory"
+	},
+	"nginxions.acme.servers.directory-preset": {
+		"defaultMessage": "Адрес пресета: {url}."
+	},
+	"nginxions.acme.servers.directory-reset": {
+		"defaultMessage": "Вернуть"
 	},
 	"nginxions.acme.servers.eab-hint": {
 		"defaultMessage": "Привязка внешнего аккаунта со страницы аккаунта центра сертификации. Пусто, если не нужна."
@@ -1128,7 +1140,7 @@
 		"defaultMessage": "{days, plural, one {остался # день} few {осталось # дня} many {осталось # дней} other {осталось # дня}}"
 	},
 	"nginxions.certs.default-server": {
-		"defaultMessage": "Запросы к неизвестным именам"
+		"defaultMessage": "Панель по IP (:81) и неизвестные имена; заменяется сертификатом по умолчанию (Администрирование → Настройки → Общие)"
 	},
 	"nginxions.certs.description": {
 		"defaultMessage": "Все сертификаты системы в одном списке: TLS хостов, центры сертификации и выпущенные сертификаты PKI, а также файлы сертификатов на диске, о которых нет записей."
@@ -1146,7 +1158,7 @@
 		"defaultMessage": "Действует до"
 	},
 	"nginxions.certs.files-hint": {
-		"defaultMessage": "Файлы сертификатов на диске, о которых нет записей ни в NginxionS, ни в PKI: копии после миграции, от удалённого хоста или ручных изменений. NginxionS их не использует, кроме заглушки NginxionS; остальные, если они не нужны, удалите с диска."
+		"defaultMessage": "Файлы сертификатов на диске, о которых нет записей ни в NginxionS, ни в PKI: копии после миграции, от удалённого хоста или ручных изменений. NginxionS их не использует, кроме встроенного самоподписанного (панель по IP); остальные, если они не нужны, удалите с диска."
 	},
 	"nginxions.certs.issuer": {
 		"defaultMessage": "Кем выпущен"
@@ -1155,7 +1167,7 @@
 		"defaultMessage": "Тип"
 	},
 	"nginxions.certs.kind.dummy": {
-		"defaultMessage": "Заглушка NginxionS"
+		"defaultMessage": "Самоподписанный, встроенный"
 	},
 	"nginxions.certs.kind.external": {
 		"defaultMessage": "Внешний CA (загружен)"
@@ -2407,6 +2419,9 @@
 	},
 	"nginxions.events.raw": {
 		"defaultMessage": "Событие в том виде, как его записал агент"
+	},
+	"nginxions.events.repeats": {
+		"defaultMessage": "Запросов в событии (тот же источник, хост и причина за минуту)"
 	},
 	"nginxions.events.request-row": {
 		"defaultMessage": "HTTP-запрос"
@@ -4160,6 +4175,9 @@
 	"nginxions.mtls.trust": {
 		"defaultMessage": "Доверенные CA"
 	},
+	"nginxions.nav.acme": {
+		"defaultMessage": "ACME"
+	},
 	"nginxions.nav.administration": {
 		"defaultMessage": "Администрирование"
 	},
@@ -4192,6 +4210,9 @@
 	},
 	"nginxions.nav.mtls": {
 		"defaultMessage": "mTLS"
+	},
+	"nginxions.nav.mtls-pki": {
+		"defaultMessage": "mTLS и PKI"
 	},
 	"nginxions.nav.nothing-found": {
 		"defaultMessage": "Ничего не найдено"
@@ -5078,6 +5099,9 @@
 	"nginxions.pki.link.local": {
 		"defaultMessage": "Ссылка ведёт на адрес этого интерфейса; если клиенты его не видят, задайте публичный адрес PKI в настройках."
 	},
+	"nginxions.pki.link.localhost": {
+		"defaultMessage": "Этот адрес откроется только на этом компьютере или в локальной сети: задайте публичный адрес PKI (PKI → Настройки) или откройте панель через её домен и создайте ссылку заново."
+	},
 	"nginxions.pki.link.none": {
 		"defaultMessage": "Без ссылки"
 	},
@@ -5327,6 +5351,9 @@
 	"nginxions.pki.tab.certificates": {
 		"defaultMessage": "Сертификаты"
 	},
+	"nginxions.pki.tab.mtls": {
+		"defaultMessage": "mTLS хостов"
+	},
 	"nginxions.pki.tab.settings": {
 		"defaultMessage": "Настройки"
 	},
@@ -5359,6 +5386,9 @@
 	},
 	"nginxions.pki.templates.none": {
 		"defaultMessage": "Шаблонов нет."
+	},
+	"nginxions.pki.title": {
+		"defaultMessage": "mTLS и PKI"
 	},
 	"nginxions.pki.used": {
 		"defaultMessage": "Где используется"

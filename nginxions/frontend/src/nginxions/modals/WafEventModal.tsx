@@ -135,6 +135,7 @@ const WafEventModal = EasyModal.create(({ visible, remove, event: summary, onFil
 					/>
 					<Field label="nginxions.waf.events.request" value={request} />
 					<Field label="nginxions.events.response-code" value={event.responseCode} />
+					{event.repeats > 1 && <Field label="nginxions.events.repeats" value={event.repeats} />}
 					<Field label="nginxions.waf.events.event" value={event.name} />
 					<Field label="nginxions.waf.events.component" value={event.service} />
 				</div>

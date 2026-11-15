@@ -544,7 +544,14 @@ function EventRow({ event, onFilter }: { event: SecurityEvent; onFilter: (field:
 				<SeverityBadge severity={event.severity} />
 			</td>
 			<td>
-				<div>{event.incidentType || event.name}</div>
+				<div>
+					{event.incidentType || event.name}
+					{event.repeats > 1 && (
+						<span className="badge bg-secondary-lt ms-2" title={t("nginxions.events.repeats")}>
+							×{event.repeats}
+						</span>
+					)}
+				</div>
 				{event.incidentType && event.parameter && <div className={styles.sub}>{event.parameter}</div>}
 			</td>
 			<td>

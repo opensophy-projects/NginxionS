@@ -178,6 +178,8 @@ export interface SecurityEvent {
 	override: string;
 	/** agent component that wrote it */
 	service: string;
+	/** requests counted in this event: refusals of mTLS of one source, host and reason within a minute */
+	repeats: number;
 }
 
 export interface SecurityEventFull extends SecurityEvent {

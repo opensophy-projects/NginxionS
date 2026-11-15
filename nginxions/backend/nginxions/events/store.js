@@ -98,10 +98,20 @@ export const trafficAggregates = (rows) => {
  * Stores what one read of the log files gave, with the new positions, in one transaction: a
  * restart never loses or doubles events.
  * @param {{events: object[], telemetry: object[], cursors: object[], requests?: object[], requestLog?: object[],
- *   countries?: object[]}} batch  requests: rows of nginxions_request_hourly, requestLog: rows of nginxions_request_log,
- *   countries: rows of nginxions_request_country_hourly (all from the request log of nginx, requests.js)
+ *   countries?: object[], repeats?: {id: string, time: Date, add: number}[]}} batch  requests: rows of
+ *   nginxions_request_hourly, requestLog: rows of nginxions_request_log, countries: rows of
+ *   nginxions_request_country_hourly (all from the request log of nginx, requests.js); repeats: stored events that
+ *   new lines repeat (pki/denials.js), their counter grows by add
  */
-export const store = async ({ events, telemetry, cursors, requests = [], requestLog = [], countries = [] }) => {
+export const store = async ({
+	events,
+	telemetry,
+	cursors,
+	requests = [],
+	requestLog = [],
+	countries = [],
+	repeats = [],
+}) => {
 	const knex = db();
 	// the agent knows no countries offline: the GeoIP database of NginxionS fills them in
 	await enrich(events);
@@ -114,6 +124,11 @@ export const store = async ({ events, telemetry, cursors, requests = [], request
 	await knex.transaction(async (trx) => {
 		for (let i = 0; i < events.length; i += INSERT_BATCH) {
 			await trx(EVENT_TABLE).insert(events.slice(i, i + INSERT_BATCH));
+		}
+		for (const { id, time, add } of repeats) {
+			await trx(EVENT_TABLE)
+				.where({ id, time })
+				.update({ repeats: trx.raw("?? + ?", ["repeats", add]) });
 		}
 		for (const row of eventAggregates(events)) {
 			await trx("nginxions_event_hourly")

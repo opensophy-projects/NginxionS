@@ -29,7 +29,8 @@ const Notifications = lazy(() => import("src/nginxions/pages/Notifications"));
 const AgentOpenappsec = lazy(() => import("src/nginxions/pages/AgentOpenappsec"));
 const BlockPage = lazy(() => import("src/nginxions/pages/BlockPage"));
 const Pki = lazy(() => import("src/nginxions/pages/Pki"));
-const Mtls = lazy(() => import("src/nginxions/pages/Mtls"));
+// NginxionS: ACME servers and the settings of renewal, in Certificates (were in Settings)
+const Acme = lazy(() => import("src/nginxions/pages/Acme"));
 const Crowdsec = lazy(() => import("src/nginxions/pages/Crowdsec"));
 // NginxionS: the decisions of CrowdSec are in Analytics → Blocks
 const Blocks = lazy(() => import("src/nginxions/pages/Crowdsec").then((m) => ({ default: m.Blocks })));
@@ -40,6 +41,14 @@ function RequestsRedirect() {
 	const params = new URLSearchParams(window.location.search);
 	params.set("kind", "requests");
 	return <Navigate to={`/waf/events?${params}`} replace />;
+}
+
+// NginxionS: mTLS is a tab of the page mTLS and PKI
+/** /mtls?… → /pki?tab=mtls&… (?host= and ?cert= kept) */
+function MtlsRedirect() {
+	const params = new URLSearchParams(window.location.search);
+	params.set("tab", "mtls");
+	return <Navigate to={`/pki?${params}`} replace />;
 }
 
 function Router() {
@@ -93,7 +102,8 @@ function Router() {
 						<Route path="/system/services" element={<Services />} />
 						<Route path="/system/notifications" element={<Notifications />} />
 						<Route path="/pki" element={<Pki />} />
-						<Route path="/mtls" element={<Mtls />} />
+						<Route path="/mtls" element={<MtlsRedirect />} />
+						<Route path="/certificates/acme" element={<Acme />} />
 						<Route path="/crowdsec" element={<Crowdsec />} />
 						<Route path="/agents/open-appsec" element={<AgentOpenappsec />} />
 						<Route path="/agents/block-page" element={<BlockPage />} />
