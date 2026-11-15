@@ -15,7 +15,7 @@
 ## 2. Что нужно на машине
 
 - Linux x86_64 (amd64). Образы open-appsec собираются только под amd64, arm64 экспериментальный.
-- Docker Engine 26+ и Docker Compose 2.23+ (`docker version`, `docker compose version`).
+- Docker Engine 28+ и Docker Compose 2.23+ (`docker version`, `docker compose version`). Docker 28 закрывает доступ соседних машин локальной сети к портам, опубликованным на `127.0.0.1` (панель :81 по умолчанию); тома с `subpath` работают с Docker 26.
 - Свободные порты 80, 443 и 81. Другие порты задаются так: `NGINXIONS_HTTP_PORT=8080 NGINXIONS_HTTPS_PORT=8443 NGINXIONS_ADMIN_PORT=8181`. Адрес хоста, на котором они открыты: `NGINXIONS_BIND_IP` (80, 443; по умолчанию `0.0.0.0`) и `NGINXIONS_ADMIN_BIND_IP` (81; по умолчанию `127.0.0.1` — панель видна только на самом сервере). Панель в сети управления или VPN: `NGINXIONS_ADMIN_BIND_IP=<адрес>`, на всех адресах — `0.0.0.0` (не советуем).
 - Около 10 ГБ на диске для образов и томов.
 - По умолчанию NginxionS слушает только IPv4. Нужен IPv6 — `NGINXIONS_DISABLE_IPV6=false` в `deploy/.env` (или перед каждой командой `docker compose`); на хосте IPv6 должен работать.
