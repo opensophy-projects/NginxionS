@@ -242,8 +242,8 @@ Tool status.
   1024 без `NET_BIND_SERVICE`: `sysctls` `net.ipv4.ip_unprivileged_port_start=0` у `openappsec`, владельца сети),
   `postgres` (uid 70) и `clamav` (uid 100) работают от своих пользователей с корнем только для чтения и без
   возможностей, `crowdsec` и `control` — с корнем только для чтения; `openappsec`, `crowdsec`, `control`,
-  `nginxions-init` — без возможностей. У каждого сервиса `mem_limit` и `pids_limit` (переопределяются
-  `NGINXIONS_MEM_<СЕРВИС>` / `NGINXIONS_PIDS_<СЕРВИС>`). У всех
+  `nginxions-init` — без возможностей. Лимиты памяти и процессов по умолчанию не заданы, их
+  включают `NGINXIONS_MEM_<СЕРВИС>` / `NGINXIONS_PIDS_<СЕРВИС>`. У всех
   `no-new-privileges` и `healthcheck`; порты публикуются на `NGINXIONS_BIND_IP` / `NGINXIONS_ADMIN_BIND_IP`
   (по умолчанию `0.0.0.0` для 80/443 и `127.0.0.1` для панели :81). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
 - **Python и SQLite в образе агента**: сигнатуры Snort конвертирует `snort_to_ips_local.mjs` (Node.js образа), тест
