@@ -52,7 +52,7 @@ export function AcmeServerField() {
 					<T id={`nginxions.acme.client.${server.client}`} />
 					{" · "}
 					{/* a plain link: the modals of EasyModal are rendered outside the router */}
-					<a href="/certificates/acme" target="_blank" rel="noreferrer">
+					<a href="/certificates?section=acme" target="_blank" rel="noreferrer">
 						<T id="nginxions.acme.server.manage" />
 					</a>
 				</div>

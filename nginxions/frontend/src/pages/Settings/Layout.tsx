@@ -14,7 +14,7 @@ export default function Layout() {
 	);
 	const can = useCan();
 	// NginxionS: ACME moved to Certificates → ACME; old links ?section=nginxions-acme lead there
-	if (section === "nginxions-acme") return <Navigate to="/certificates/acme" replace />;
+	if (section === "nginxions-acme") return <Navigate to="/certificates?section=acme" replace />;
 	// Taken from https://preview.tabler.io/settings.html
 	// Refer to that when updating this content
 

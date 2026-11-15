@@ -1133,6 +1133,9 @@
 	"nginxions.certs.badge.valid": {
 		"defaultMessage": "Действует"
 	},
+	"nginxions.certs.block.cas": {
+		"defaultMessage": "Центры сертификации"
+	},
 	"nginxions.certs.copy-path": {
 		"defaultMessage": "Скопировать путь"
 	},
@@ -1143,7 +1146,7 @@
 		"defaultMessage": "Панель по IP (:81) и неизвестные имена; заменяется сертификатом по умолчанию (Администрирование → Настройки → Общие)"
 	},
 	"nginxions.certs.description": {
-		"defaultMessage": "Все сертификаты системы в одном списке: TLS хостов, центры сертификации и выпущенные сертификаты PKI, а также файлы сертификатов на диске, о которых нет записей."
+		"defaultMessage": "Все сертификаты в одном месте: TLS хостов (ACME и свои), сертификаты собственных ЦС и пропуска mTLS; ниже — центры сертификации и ACME-серверы."
 	},
 	"nginxions.certs.details": {
 		"defaultMessage": "Подробнее"
@@ -1205,6 +1208,21 @@
 	"nginxions.certs.search": {
 		"defaultMessage": "Имя, домен, издатель, серийный номер, хост или путь"
 	},
+	"nginxions.certs.selected": {
+		"defaultMessage": "Выбрано: {count}"
+	},
+	"nginxions.certs.settings": {
+		"defaultMessage": "Настройки"
+	},
+	"nginxions.certs.settings.pki": {
+		"defaultMessage": "PKI"
+	},
+	"nginxions.certs.settings.renewal": {
+		"defaultMessage": "Продление ACME"
+	},
+	"nginxions.certs.settings.templates": {
+		"defaultMessage": "Шаблоны"
+	},
 	"nginxions.certs.sort": {
 		"defaultMessage": "Сортировка"
 	},
@@ -1234,6 +1252,24 @@
 	},
 	"nginxions.certs.source.tls": {
 		"defaultMessage": "TLS хостов"
+	},
+	"nginxions.certs.stat.acme": {
+		"defaultMessage": "ACME-серверов"
+	},
+	"nginxions.certs.stat.cas": {
+		"defaultMessage": "Центров сертификации"
+	},
+	"nginxions.certs.stat.ended": {
+		"defaultMessage": "Истекли или отозваны"
+	},
+	"nginxions.certs.stat.expiring": {
+		"defaultMessage": "Истекают в течение 30 дней"
+	},
+	"nginxions.certs.stat.mtls": {
+		"defaultMessage": "Хостов с mTLS"
+	},
+	"nginxions.certs.stat.valid": {
+		"defaultMessage": "Действуют"
 	},
 	"nginxions.certs.status": {
 		"defaultMessage": "Статус"
@@ -6864,7 +6900,7 @@
 		"defaultMessage": "ACME"
 	},
 	"nginxions.system.group.acme.hint": {
-		"defaultMessage": "Когда продлеваются сертификаты ACME. Серверы, откуда они берутся, — выше."
+		"defaultMessage": "Когда продлеваются сертификаты ACME. Серверы, откуда они берутся, — в блоке «ACME-серверы» раздела «Сертификаты»."
 	},
 	"nginxions.system.group.external": {
 		"defaultMessage": "Внешние сервисы"

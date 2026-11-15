@@ -23,8 +23,8 @@
 | `DB_MYSQL_*` | — | не используется | Bootstrap (поддержка upstream сохраняется) | — |
 | `COOKIE_SECRET` | случайный при каждом старте | `COOKIE_SECRET_FILE` от `nginxions-init` ✅ | Bootstrap (секрет) | 0 |
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` | — | не задаём: первый админ создаётся мастером в GUI | Bootstrap | — |
-| `ACME_SERVER`, `ACME_EMAIL`, `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`, `ACME_PROFILE`, `ACME_SERVER_TLS_VERIFY` | Let's Encrypt | Аккаунт регистрируется при первом запросе сертификата, при старте обращений нет ✅ | GUI (Сертификаты → ACME): несколько серверов (Let's Encrypt, его staging, ZeroSSL, Google Trust Services, SSL.com, ТЦИ, tlscc.ru (stage) или свой directory), у каждого email, EAB, профиль, проверка TLS и клиент certbot или lego; один — по умолчанию. Значения env прежних версий становятся первым сервером при старте | 6 ✅ |
-| `ACME_RENEW`, `ACME_RENEW_DAYS` | продление вкл., окно certbot | — | GUI (Сертификаты → ACME) | 6 ✅ |
+| `ACME_SERVER`, `ACME_EMAIL`, `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`, `ACME_PROFILE`, `ACME_SERVER_TLS_VERIFY` | Let's Encrypt | Аккаунт регистрируется при первом запросе сертификата, при старте обращений нет ✅ | GUI (Сертификаты: блок «ACME-серверы», «Настройки → Продление ACME»): несколько серверов (Let's Encrypt, его staging, ZeroSSL, Google Trust Services, SSL.com, ТЦИ, tlscc.ru (stage) или свой directory), у каждого email, EAB, профиль, проверка TLS и клиент certbot или lego; один — по умолчанию. Значения env прежних версий становятся первым сервером при старте | 6 ✅ |
+| `ACME_RENEW`, `ACME_RENEW_DAYS` | продление вкл., окно certbot | — | GUI (Сертификаты: блок «ACME-серверы», «Настройки → Продление ACME») | 6 ✅ |
 | `ACME_KEY_TYPE`, `ACME_KEY_SIZE`, `ACME_MUST_STAPLE`, `ACME_OCSP_STAPLING` | | те же | env (редко нужны) | 6 |
 | `CUSTOM_OCSP_STAPLING` | `false` | `false` | GUI (Сертификаты) | 6 |
 | `CERTBOT_RUN_INTERVAL` | 3 ч | 3 ч | GUI (Сертификаты) | 6 |
@@ -112,7 +112,7 @@
 
 | Действие | Куда | Фаза, в которой довести до local-first |
 |---|---|---|
-| Запрос и продление ACME-сертификата (первый запрос регистрирует аккаунт) | ACME-сервер сертификата (Сертификаты → ACME), для ZeroSSL — api.zerossl.com | 6: свой ACME-сервер/PKI как локальная альтернатива |
+| Запрос и продление ACME-сертификата (первый запрос регистрирует аккаунт) | ACME-сервер сертификата (Сертификаты, блок «ACME-серверы»), для ZeroSSL — api.zerossl.com | 6: свой ACME-сервер/PKI как локальная альтернатива |
 | DNS-challenge: установка DNS-плагина certbot (`pip install` при первом использовании провайдера) | PyPI | 6: предустановленные плагины для популярных провайдеров или загрузка wheel через GUI |
 | «Проверить доступность» домена при выпуске сертификата | site24x7.com | 6: проверка без внешнего сервиса или явное предупреждение |
 | OCSP stapling (`ACME_OCSP_STAPLING`, `CUSTOM_OCSP_STAPLING`) | OCSP-респондеры CA | 6 |

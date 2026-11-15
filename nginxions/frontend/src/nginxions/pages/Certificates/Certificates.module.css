@@ -40,3 +40,39 @@
 	color: var(--foreground-muted);
 	font-size: 0.875rem;
 }
+/* a block of the page below the table (the CAs): its title and buttons above its card */
+.block {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+.blockHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+.blockTitle {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 500;
+}
+/* the selected certificates of the PKI and what can be done with them */
+.bulk {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.375rem;
+	margin-left: auto;
+}
+.bulkCount {
+	margin-right: 0.25rem;
+	color: var(--foreground);
+	font-size: 0.8125rem;
+	font-weight: 500;
+}
+.blockHint {
+	margin: 0.125rem 0 0;
+	color: var(--foreground-muted);
+	font-size: 0.8125rem;
+}
