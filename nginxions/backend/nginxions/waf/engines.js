@@ -85,10 +85,13 @@ export const forAgent = (doc) => ({
 	...doc,
 	threatPreventionPractices: list(doc.threatPreventionPractices).map((p) => {
 		const out = { ...p };
-		// only the mode: the agent reads antiBot.injectedUris and validatedUris as strings, the {uri} objects of
-		// v1beta2 made it refuse the whole policy (it kept the previous one); the rest is of no use to it either
+		// antiBot and schemaValidation: only the mode. The agent reads antiBot.injectedUris and validatedUris as
+		// strings, the {uri} objects of v1beta2 made it refuse the whole policy (it kept the previous one).
+		// fileSecurity keeps its fields with the mode off: without its units the agent logs an error for each.
 		for (const engine of NOT_IN_AGENT) {
-			if (out[engine]) out[engine] = { overrideMode: "inactive" };
+			if (!out[engine]) continue;
+			out[engine] =
+				engine === "fileSecurity" ? { ...out[engine], overrideMode: "inactive" } : { overrideMode: "inactive" };
 		}
 		return out;
 	}),

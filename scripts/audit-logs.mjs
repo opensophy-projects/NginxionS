@@ -106,7 +106,8 @@ export const audit = (files, allowlist) => {
 		.sort((a, b) => Number(a.known) - Number(b.known) || (a.level === b.level ? b.count - a.count : a.level === "error" ? -1 : 1));
 };
 
-const md = (s) => String(s).replace(/\|/g, "\\|").replace(/`/g, "'");
+// a cell of a Markdown table: backslashes first, then the pipes that would end the cell
+const md = (s) => String(s).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/`/g, "'");
 
 export const report = (entries) => {
 	const fresh = entries.filter((e) => !e.known);

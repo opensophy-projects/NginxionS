@@ -14,6 +14,7 @@
 #include "policy_maker_utils.h"
 
 #include <algorithm>
+#include <cctype>
 #include <regex>
 
 #include "local_policy_mgmt_gen.h"
@@ -585,6 +586,13 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
     string verbosity = "Standard";
     string extendLoggingMinSeverity =
         trigger_spec.getAppsecTriggerAdditionalSuspiciousEventsLogging().getMinimumSeverity();
+    // NginxionS: the policy says "high" or "critical" (its schema), the log trigger of the agent reads "High" or
+    // "Critical" (triggers_config.cc): the lower case was refused ("Failed to parse the extendLoggingMinSeverity")
+    // and the minimum severity of additional suspicious events never applied
+    if (!extendLoggingMinSeverity.empty()) {
+        unsigned char first = static_cast<unsigned char>(extendLoggingMinSeverity[0]);
+        extendLoggingMinSeverity[0] = static_cast<char>(toupper(first));
+    }
     bool tpDetect = trigger_spec.getAppsecTriggerLogging().isDetectEvents();
     bool tpPrevent = trigger_spec.getAppsecTriggerLogging().isPreventEvents();
     bool acAllow = trigger_spec.getAppsecTriggerAccessControlLogging().isAcAllowEvents();

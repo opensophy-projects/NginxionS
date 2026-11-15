@@ -115,6 +115,9 @@ test("the policy of the agent has the engines of CrowdSec and File Security off"
 	// only the mode: the agent refused a policy with the {uri} objects of antiBot (it reads strings)
 	assert.deepEqual(agent.threatPreventionPractices[0].antiBot, { overrideMode: "inactive" });
 	assert.deepEqual(agent.threatPreventionPractices[0].schemaValidation, { overrideMode: "inactive" });
-	assert.deepEqual(agent.threatPreventionPractices[0].fileSecurity, { overrideMode: "inactive" });
+	assert.deepEqual(agent.threatPreventionPractices[0].fileSecurity, {
+		overrideMode: "inactive",
+		threatEmulationEnabled: true,
+	});
 	assert.deepEqual(agent.threatPreventionPractices[0].webAttacks, {});
 });
