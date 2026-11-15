@@ -64,6 +64,12 @@
 			"kind": "false-positive"
 		},
 		{
+			"tool": "testssl-ui",
+			"id": "OCSP_stapling",
+			"reason": "OCSP stapling of a custom or PKI certificate is an option the administrator turns on (CUSTOM_OCSP_STAPLING, default off, docs/ENV-INVENTORY.md): the responses are fetched from the responder of the CA, a connection out of the server, which NginxionS makes only when asked (local-first); with it on, start.sh staples the interface too",
+			"until": "2027-05-01"
+		},
+		{
 			"kind": "false-positive",
 			"tool": "testssl-ui",
 			"id": "BREACH",
@@ -356,7 +362,7 @@
 			"tool": "kics",
 			"id": "ce76b7d0-9e77-464d-b86f-c5c48e03e22d",
 			"where": "deploy/compose.yaml",
-			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), postgres the five its entrypoint needs to give its data directory to the user postgres (CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID)",
+			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), clamav the five its entrypoint needs to give /var/lib/clamav to the user clamav (CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID); postgres runs as its user with none",
 			"until": "2027-05-01",
 			"kind": "false-positive"
 		},
@@ -532,7 +538,15 @@
 			"id": "*",
 			"where": "sqlite-libs",
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite comes with python3 (certbot of NPMplus), NginxionS keeps its data in PostgreSQL",
+			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite) and of python3 (certbot); NginxionS uses neither node:sqlite nor the sqlite module of Python, its data is in PostgreSQL",
+			"until": "2027-02-01"
+		},
+		{
+			"tool": "grype-nginxions-openappsec",
+			"id": "*",
+			"where": "sqlite-libs",
+			"unfixed": true,
+			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite), installed for nginxions-control, which listens on 127.0.0.1 and does not use node:sqlite; the agent links no sqlite",
 			"until": "2027-02-01"
 		},
 		{

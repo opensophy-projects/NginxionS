@@ -10,6 +10,8 @@ import errs from "../lib/error.js";
 import { termOf } from "./cert-terms.js";
 import { readWithStat } from "./files.js";
 import { firstPemCertificate } from "./pem.js";
+import { getSetting } from "./settings.js";
+import { running } from "./system/env.js";
 
 const DAY = 86400000;
 /** "expiring": less than this many days left */
@@ -292,6 +294,22 @@ const collect = async (access, now) => {
  * Filters from query parameters: source, status, kind: comma-separated; used=yes|no; q: text in the name,
  * domains, issuer, serial and path; sort=expires (soonest first, default) | -expires | name | -created.
  */
+/**
+ * The certificate of the interface and of the default site (DEFAULT_CERT_ID, System -> Settings) is not deleted:
+ * its files go, and every check of nginx (nginx -t) fails on the configuration of the interface, so no host could be
+ * saved any more (DAST found it). The running value and a saved one waiting for the restart both count.
+ * @param {number} id
+ */
+export const assertNotInterfaceCert = async (id) => {
+	const saved = (await getSetting("system.env"))?.DEFAULT_CERT_ID;
+	const ids = new Set([Number(running("DEFAULT_CERT_ID")), Number(saved ?? 0)]);
+	if (Number(id) > 0 && ids.has(Number(id))) {
+		throw new errs.ValidationError(
+			"This certificate is the certificate of the interface (System -> Settings, DEFAULT_CERT_ID): choose another one there first",
+		);
+	}
+};
+
 export const parseQuery = (query) => {
 	const source = list(query.source).filter((s) => SOURCES.includes(s));
 	const status = list(query.status).filter((s) => STATUSES.includes(s));
