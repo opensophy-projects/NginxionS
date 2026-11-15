@@ -28,10 +28,9 @@ services:
   # One-shot bootstrap (deploy/init/nginxions-init.sh): secrets, subpath directories,
   # CrowdSec volumes seeded from the offline hub snapshot. Never overwrites existing data.
   nginxions-init:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_NGINXIONS_INIT / NGINXIONS_PIDS_NGINXIONS_INIT when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_NGINXIONS_INIT:-256m}
-    pids_limit: ${NGINXIONS_PIDS_NGINXIONS_INIT:-64}
+    # no limit by default; NGINXIONS_MEM_NGINXIONS_INIT / NGINXIONS_PIDS_NGINXIONS_INIT in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_NGINXIONS_INIT:-0}
+    pids_limit: ${NGINXIONS_PIDS_NGINXIONS_INIT:--1}
     image: ${NGINXIONS_REGISTRY}/nginxions:${NGINXIONS_VERSION}
     restart: "no"
     network_mode: none
@@ -63,10 +62,9 @@ services:
   # nginx attachment talks to the agent through the shared IPC and /dev/shm/check-point. Its services listen on
   # 127.0.0.1 there: shared storage 7811, tuning 7813, the agent 7777.
   openappsec:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_OPENAPPSEC / NGINXIONS_PIDS_OPENAPPSEC when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_OPENAPPSEC:-4g}
-    pids_limit: ${NGINXIONS_PIDS_OPENAPPSEC:-1024}
+    # no limit by default; NGINXIONS_MEM_OPENAPPSEC / NGINXIONS_PIDS_OPENAPPSEC in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_OPENAPPSEC:-0}
+    pids_limit: ${NGINXIONS_PIDS_OPENAPPSEC:--1}
     <<: *managed
     image: ${NGINXIONS_REGISTRY}/nginxions-openappsec:${NGINXIONS_VERSION}
     container_name: nginxions-openappsec
@@ -160,10 +158,9 @@ services:
   # files, the token only here and in nginxions. Only list, logs, restart and reload of this stack's nginxions.managed
   # containers; on the network "control" alone (no internet, no other service), root filesystem read-only.
   control:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_CONTROL / NGINXIONS_PIDS_CONTROL when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_CONTROL:-256m}
-    pids_limit: ${NGINXIONS_PIDS_CONTROL:-64}
+    # no limit by default; NGINXIONS_MEM_CONTROL / NGINXIONS_PIDS_CONTROL in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_CONTROL:-0}
+    pids_limit: ${NGINXIONS_PIDS_CONTROL:--1}
     image: ${NGINXIONS_REGISTRY}/nginxions-openappsec:${NGINXIONS_VERSION}
     container_name: nginxions-control
     restart: unless-stopped
@@ -203,10 +200,9 @@ services:
       - control
 
   nginxions:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_NGINXIONS / NGINXIONS_PIDS_NGINXIONS when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_NGINXIONS:-3g}
-    pids_limit: ${NGINXIONS_PIDS_NGINXIONS:-4096}
+    # no limit by default; NGINXIONS_MEM_NGINXIONS / NGINXIONS_PIDS_NGINXIONS in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_NGINXIONS:-0}
+    pids_limit: ${NGINXIONS_PIDS_NGINXIONS:--1}
     <<: *managed
     image: ${NGINXIONS_REGISTRY}/nginxions:${NGINXIONS_VERSION}
     container_name: nginxions
@@ -277,10 +273,9 @@ services:
       - clamav-control:/var/lib/nginxions-clamav
 
   postgres:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_POSTGRES / NGINXIONS_PIDS_POSTGRES when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_POSTGRES:-1g}
-    pids_limit: ${NGINXIONS_PIDS_POSTGRES:-512}
+    # no limit by default; NGINXIONS_MEM_POSTGRES / NGINXIONS_PIDS_POSTGRES in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_POSTGRES:-0}
+    pids_limit: ${NGINXIONS_PIDS_POSTGRES:--1}
     <<: *managed
     image: docker.io/library/postgres:${POSTGRES_VERSION}
     container_name: nginxions-postgres
@@ -321,10 +316,9 @@ services:
       - internal
 
   crowdsec:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_CROWDSEC / NGINXIONS_PIDS_CROWDSEC when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_CROWDSEC:-1g}
-    pids_limit: ${NGINXIONS_PIDS_CROWDSEC:-512}
+    # no limit by default; NGINXIONS_MEM_CROWDSEC / NGINXIONS_PIDS_CROWDSEC in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_CROWDSEC:-0}
+    pids_limit: ${NGINXIONS_PIDS_CROWDSEC:--1}
     <<: *managed
     # official image; config and data volumes are seeded by nginxions-init from the offline hub snapshot
     image: docker.io/crowdsecurity/crowdsec:${CROWDSEC_VERSION}
@@ -377,10 +371,9 @@ services:
       - internal
 
   clamav:
-    # limits against a runaway process (a leak, a fork loop) taking the whole server; raise them with
-    # NGINXIONS_MEM_CLAMAV / NGINXIONS_PIDS_CLAMAV when a large setup needs more
-    mem_limit: ${NGINXIONS_MEM_CLAMAV:-4g}
-    pids_limit: ${NGINXIONS_PIDS_CLAMAV:-512}
+    # no limit by default; NGINXIONS_MEM_CLAMAV / NGINXIONS_PIDS_CLAMAV in deploy/.env set one (e.g. 2g / 1024)
+    mem_limit: ${NGINXIONS_MEM_CLAMAV:-0}
+    pids_limit: ${NGINXIONS_PIDS_CLAMAV:--1}
     <<: *managed
     # official image with a snapshot of the signatures; clamd runs only while a practice of the WAF policy has File
     # Security on (deploy/clamav/nginxions-clamav.sh): without it the container waits and takes no memory
