@@ -1,6 +1,7 @@
 # Every night: the published develop under a long mixed load (scripts/test-soak.sh): leaks of memory, growth of the
 # database and of the logs, 5xx, latency, attacks still blocked, the audit of the logs. Then the failures of the parts
-# of the stack (scripts/test-chaos.sh) on the same images. By hand: Actions → Nightly → Run workflow (minutes, tag).
+# of the stack (scripts/test-chaos.sh) and every group of smoke on one stack (CI runs them
+# on separate stacks) on the same images. By hand: Actions → Nightly → Run workflow (minutes, tag).
 name: Nightly
 on:
   schedule:
@@ -45,6 +46,10 @@ jobs:
         env:
           DURATION: ${{ inputs.duration || '60' }}
         run: scripts/test-soak.sh
+      # every group of smoke on one stack, one after the other: what the groups do to each other (CI runs them apart)
+      - name: closed-network test, every group on one stack
+        if: always()
+        run: scripts/test-airgap.sh
       - name: failures of the parts of the stack
         if: always()
         run: scripts/test-chaos.sh
@@ -53,4 +58,37 @@ jobs:
         with:
           name: nightly
           path: reports/
+          if-no-files-found: ignore
+
+  flaky:
+    name: Flaky steps of smoke (last runs of CI)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # the artifacts tests-smoke-* of the last runs of CI
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+      - name: steps of smoke of the last 40 runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p runs
+          gh run list --repo "$REPO" --workflow ci.yml --limit 40 --json databaseId,headSha,status \
+            --jq '.[] | select(.status == "completed") | "\(.databaseId) \(.headSha)"' |
+            while read -r id sha; do
+              gh run download "$id" --repo "$REPO" --pattern 'tests-smoke-*' --dir "runs/$id-${sha:0:12}" 2> /dev/null || true
+            done
+          node scripts/flaky-report.mjs runs --out reports/flaky
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: flaky
+          path: reports/flaky/
           if-no-files-found: ignore
