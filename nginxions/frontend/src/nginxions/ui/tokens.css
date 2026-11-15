@@ -644,3 +644,11 @@ a.card:focus-visible {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+/* NginxionS: columns of a table a narrow content area can do without (the sidebar open on a small laptop): the row
+   keeps what identifies it and when it expires, the rest is in its details */
+@media (max-width: 1199.98px) {
+	.nx-optional {
+		display: none;
+	}
+}

@@ -431,3 +431,14 @@ export const linkBase = (data: { settings: PkiSettings; panelUrls?: { url: strin
 };
 
 export const linkUrl = (path: string, base: string) => `${base || window.location.origin}${path}`;
+
+/** a date in a table of certificates: day and minutes (the seconds of an expiry say nothing and widen the column) */
+export const formatShort = (value: string, locale?: string) => {
+	const d = new Date(value);
+	if (Number.isNaN(d.getTime())) return value;
+	try {
+		return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }).format(d);
+	} catch {
+		return value;
+	}
+};
