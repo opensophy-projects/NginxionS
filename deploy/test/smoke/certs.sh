@@ -219,6 +219,21 @@ echo "$registry" | grep -q '"used_by":\[{' || fail "the registry does not say wh
 step "Certificates: the built-in self-signed certificate is listed as used by the panel"
 $CURL "$ADMIN/api/nginxions/certificates?source=file" | json | grep -q '"kind":"dummy"' || fail "no built-in certificate"
 
+step "Certificates: the certificate of the interface is not deleted (DAST: nginx -t failed for every later change)"
+$CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/system/settings" \
+  -d "{\"values\": [{\"env\": \"DEFAULT_CERT_ID\", \"value\": $own_id}]}" > /dev/null || fail "DEFAULT_CERT_ID not saved"
+expect "$(code_of -X DELETE "$ADMIN/api/nginx/certificates/$own_id")" 400 "delete the certificate of the interface"
+$CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/system/settings" \
+  -d '{"values": [{"env": "DEFAULT_CERT_ID", "value": 0}]}' | grep -q '"restartRequired": *false' \
+  || fail "DEFAULT_CERT_ID not back to its running value"
+
+step "API: broken requests are refused with 400, not 500 (DAST)"
+printf -- '--x\r\nContent-Disposition: form-data; name="certificate"; filename="a"\r\n\r\nabc' > /tmp/certs-cut
+expect "$(curl -sS -k -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Content-Type: multipart/form-data; boundary=x' \
+  --data-binary @/tmp/certs-cut "$ADMIN/api/nginx/certificates/validate")" 400 "a multipart body without its end"
+expect "$(code_of -H 'Content-Type: application/json' "$ADMIN/api/nginx/dead-hosts" \
+  -d '{"domain_names": ["http://www.example.com/"]}')" 400 "a URL as the name of a host"
+
 step "Certificates: a certificate of your own is deleted with its host gone, nginx stays up"
 expect "$(code_of -X DELETE "$ADMIN/api/nginx/proxy-hosts/$own_host")" 200 "delete the host"
 expect "$(code_of -X DELETE "$ADMIN/api/nginx/certificates/$own_id")" 200 "delete the certificate"

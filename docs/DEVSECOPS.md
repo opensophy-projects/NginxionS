@@ -240,7 +240,8 @@ Tool status.
 
 - **возможности контейнеров**: у каждого сервиса `cap_drop: ALL`; `nginxions` добавляет только `SETGID` (порты ниже
   1024 без `NET_BIND_SERVICE`: `sysctls` `net.ipv4.ip_unprivileged_port_start=0` у `openappsec`, владельца сети),
-  `postgres` — пять, нужных его entrypoint; `openappsec`, `crowdsec`, `nginxions-init` — ни одной. У всех
+  `clamav` — пять, нужных его entrypoint; `postgres` работает от своего пользователя (uid 70) с корнем только для
+  чтения и без возможностей; `openappsec`, `crowdsec`, `nginxions-init` — ни одной. У всех
   `no-new-privileges` и `healthcheck`; порты публикуются на `NGINXIONS_BIND_IP` / `NGINXIONS_ADMIN_BIND_IP`
   (по умолчанию `0.0.0.0`). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
 - **Python и SQLite в образе агента**: сигнатуры Snort конвертирует `snort_to_ips_local.mjs` (Node.js образа), тест

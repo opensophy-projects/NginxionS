@@ -21,6 +21,7 @@ import internalAcmeCsr from "../nginxions/acme-csr.js"; // NginxionS: ACME with 
 import legoCerts, { clientOf, withServer } from "../nginxions/acme/certs.js"; // NginxionS: lego, the second ACME client
 import acmeServers from "../nginxions/acme/servers.js"; // NginxionS: the ACME server of each certificate
 import { assertKeyMatches } from "../nginxions/cert-pair.js"; // NginxionS: the key must belong to the certificate
+import { assertNotInterfaceCert } from "../nginxions/certificates.js"; // NginxionS: the interface certificate is not deleted
 import error from "../lib/error.js";
 import utils from "../lib/utils.js";
 import { debug, ssl as logger } from "../logger.js";
@@ -388,6 +389,8 @@ const internalCertificate = {
 		if (!row?.id) {
 			throw new error.ItemNotFoundError(data.id);
 		}
+		// NginxionS: the certificate of the interface stays (its configuration would no longer pass nginx -t)
+		await assertNotInterfaceCert(row.id);
 
 		await certificateModel.query().where("id", row.id).patch({
 			is_deleted: 1,
