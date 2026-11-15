@@ -16,7 +16,7 @@
 
 - Linux x86_64 (amd64). Образы open-appsec собираются только под amd64, arm64 экспериментальный.
 - Docker Engine 26+ и Docker Compose 2.23+ (`docker version`, `docker compose version`).
-- Свободные порты 80, 443 и 81. Другие порты задаются так: `NGINXIONS_HTTP_PORT=8080 NGINXIONS_HTTPS_PORT=8443 NGINXIONS_ADMIN_PORT=8181`. Адрес хоста, на котором они открыты: `NGINXIONS_BIND_IP` (80, 443) и `NGINXIONS_ADMIN_BIND_IP` (81), по умолчанию `0.0.0.0`; например `NGINXIONS_ADMIN_BIND_IP=127.0.0.1` открывает интерфейс только локально.
+- Свободные порты 80, 443 и 81. Другие порты задаются так: `NGINXIONS_HTTP_PORT=8080 NGINXIONS_HTTPS_PORT=8443 NGINXIONS_ADMIN_PORT=8181`. Адрес хоста, на котором они открыты: `NGINXIONS_BIND_IP` (80, 443; по умолчанию `0.0.0.0`) и `NGINXIONS_ADMIN_BIND_IP` (81; по умолчанию `127.0.0.1` — панель видна только на самом сервере). Панель в сети управления или VPN: `NGINXIONS_ADMIN_BIND_IP=<адрес>`, на всех адресах — `0.0.0.0` (не советуем).
 - Около 10 ГБ на диске для образов и томов.
 - По умолчанию NginxionS слушает только IPv4. Нужен IPv6 — `NGINXIONS_DISABLE_IPV6=false` в `deploy/.env` (или перед каждой командой `docker compose`); на хосте IPv6 должен работать.
 - `docker compose pull` падает с `TLS handshake timeout` на `auth.docker.io`, хотя `curl https://auth.docker.io/token` отвечает: соединения Docker с Docker Hub обрываются по пути (так бывает у некоторых провайдеров, в том числе в России). Это не лимиты Docker Hub — при них приходит `429 Too Many Requests`. Решение — зеркало Docker Hub, все образы стека берутся с `docker.io`, так что зеркало покрывает их все:
@@ -69,7 +69,7 @@ NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/test-airgap.sh
 
 ## 5. Первый вход
 
-1. Откройте `https://<адрес-сервера>:81`. Сертификат самоподписанный, браузер предупредит.
+1. Откройте панель. Она слушает `127.0.0.1:81` сервера: на самом сервере — `https://127.0.0.1:81`, с другой машины — через SSH-туннель `ssh -L 8181:127.0.0.1:81 user@<адрес-сервера>` и `https://localhost:8181` (или задайте `NGINXIONS_ADMIN_BIND_IP`, см. раздел 2). Сертификат самоподписанный, браузер предупредит.
 2. Создайте первого администратора. Пароли сервисов, ключи CrowdSec и токен `nginxions-control` уже сгенерировал `nginxions-init`; `.env` и ручные пароли не нужны.
 3. Язык переключается флажком справа вверху.
 

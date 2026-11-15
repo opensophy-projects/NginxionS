@@ -79,7 +79,7 @@
 
 ```mermaid
 flowchart TB
-    internet(["Интернет<br/>:80 · :443 tcp/udp · :81"])
+    internet(["Интернет<br/>:80 · :443 tcp/udp<br/>(:81 панели — 127.0.0.1 сервера)"])
 
     subgraph oa["контейнер openappsec"]
         agent["Агент open-appsec (ML-WAF)<br/>127.0.0.1:7777<br/>политика /ext/appsec/local_policy.yaml"]
