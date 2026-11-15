@@ -1133,6 +1133,9 @@
 	"nginxions.certs.badge.valid": {
 		"defaultMessage": "Valid"
 	},
+	"nginxions.certs.block.cas": {
+		"defaultMessage": "Certificate authorities"
+	},
 	"nginxions.certs.copy-path": {
 		"defaultMessage": "Copy the path"
 	},
@@ -1143,7 +1146,7 @@
 		"defaultMessage": "The panel by IP (:81) and unknown names; replaced by the default certificate (Administration → Settings → General)"
 	},
 	"nginxions.certs.description": {
-		"defaultMessage": "Every certificate of the system in one list: TLS of the hosts, CAs and issued certificates of the PKI, and certificate files on disk that no record describes."
+		"defaultMessage": "Every certificate in one place: TLS of the hosts (ACME and your own), certificates of your own CAs and the access certificates of mTLS; below, the CAs and the ACME servers."
 	},
 	"nginxions.certs.details": {
 		"defaultMessage": "Details"
@@ -1205,6 +1208,21 @@
 	"nginxions.certs.search": {
 		"defaultMessage": "Name, domain, issuer, serial, host or path"
 	},
+	"nginxions.certs.selected": {
+		"defaultMessage": "Selected: {count}"
+	},
+	"nginxions.certs.settings": {
+		"defaultMessage": "Settings"
+	},
+	"nginxions.certs.settings.pki": {
+		"defaultMessage": "PKI"
+	},
+	"nginxions.certs.settings.renewal": {
+		"defaultMessage": "ACME renewal"
+	},
+	"nginxions.certs.settings.templates": {
+		"defaultMessage": "Templates"
+	},
 	"nginxions.certs.sort": {
 		"defaultMessage": "Sort"
 	},
@@ -1234,6 +1252,24 @@
 	},
 	"nginxions.certs.source.tls": {
 		"defaultMessage": "TLS of hosts"
+	},
+	"nginxions.certs.stat.acme": {
+		"defaultMessage": "ACME servers"
+	},
+	"nginxions.certs.stat.cas": {
+		"defaultMessage": "Certificate authorities"
+	},
+	"nginxions.certs.stat.ended": {
+		"defaultMessage": "Expired or revoked"
+	},
+	"nginxions.certs.stat.expiring": {
+		"defaultMessage": "Expire within 30 days"
+	},
+	"nginxions.certs.stat.mtls": {
+		"defaultMessage": "Hosts with mTLS"
+	},
+	"nginxions.certs.stat.valid": {
+		"defaultMessage": "Valid"
 	},
 	"nginxions.certs.status": {
 		"defaultMessage": "Status"
@@ -2844,7 +2880,7 @@
 		"defaultMessage": "Turn on mTLS: only clients with an access certificate get through"
 	},
 	"nginxions.hosts.mtls.upstream": {
-		"defaultMessage": "mTLS of NginxionS (Certificates → mTLS CA) is on for this host"
+		"defaultMessage": "mTLS of NginxionS (Certificates → Add → mTLS CA) is on for this host"
 	},
 	"nginxions.hosts.no-access": {
 		"defaultMessage": "You have no access to hosts"
@@ -6864,7 +6900,7 @@
 		"defaultMessage": "ACME"
 	},
 	"nginxions.system.group.acme.hint": {
-		"defaultMessage": "When ACME certificates are renewed. The servers they come from are above."
+		"defaultMessage": "When ACME certificates are renewed. The servers they come from are in Certificates → ACME servers."
 	},
 	"nginxions.system.group.external": {
 		"defaultMessage": "External services"

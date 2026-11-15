@@ -28,6 +28,8 @@ export interface NavItem {
 	permission?: Permission;
 	/** RBAC resource (nginxions/rbac): visible with its "view" */
 	rbac?: string;
+	/** with section: visible as well when the section is not allowed but this RBAC resource is */
+	orRbac?: string;
 }
 
 // Six sections, each a set of pages shown as tabs: few items in the sidebar, related pages next to
@@ -65,17 +67,8 @@ export const navigation: NavItem[] = [
 			{ id: "audit", label: "auditlogs", to: "/audit-log", rbac: "audit_log" },
 		],
 	},
-	{
-		id: "certificates-group",
-		label: "certificates",
-		tabs: [
-			{ id: "certificates", label: "nginxions.nav.all-certs", to: "/certificates", section: CERTIFICATES },
-			// mTLS of the hosts, CAs, issued certificates, templates and settings of PKI: one page with tabs
-			{ id: "pki", label: "nginxions.nav.mtls-pki", to: "/pki", rbac: "pki" },
-			// the ACME servers and the renewal of ACME certificates (moved from Administration → Settings)
-			{ id: "acme", label: "nginxions.nav.acme", to: "/certificates/acme", section: CERTIFICATES },
-		],
-	},
+	// every certificate, mTLS of the hosts, the CAs and the ACME servers on one page (pages/Certificates)
+	{ id: "certificates", label: "certificates", to: "/certificates", section: CERTIFICATES, orRbac: "pki" },
 	{
 		id: "agents",
 		label: "nginxions.nav.agents",
@@ -125,7 +118,7 @@ export const visibleItems = (items: NavItem[], me: Me, can: (resource: string) =
 		}
 		const allowed = (section: Section) =>
 			hasPermission(section, item.permission || VIEW, me?.permissions, me?.roles);
-		if (item.section && !allowed(item.section)) {
+		if (item.section && !allowed(item.section) && !(item.orRbac && can(item.orRbac))) {
 			return [];
 		}
 		if (item.anyOf && !item.anyOf.some(allowed)) {

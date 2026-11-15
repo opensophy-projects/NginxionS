@@ -1,14 +1,16 @@
-// Settings → ACME → Servers: where ACME certificates come from. A preset (Let's Encrypt, ZeroSSL, Google, SSL.com,
+// Certificates → ACME servers (a block of the page; its title and "Add" are those of the page): where ACME certificates come from. A preset (Let's Encrypt, ZeroSSL, Google, SSL.com,
 // the TLS CA of TCI, tlscc.ru) or a server of your own; each says its client (certbot or lego) and may be
 // the default one, which the certificate forms choose first.
 import { useQueryClient } from "@tanstack/react-query";
 import EasyModal, { type InnerModalProps } from "ez-modal-react";
+import cn from "classnames";
 import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
+import pkiStyles from "../pki/Pki.module.css";
 import {
 	type AcmeClient,
 	type AcmePreset,
@@ -277,6 +279,10 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 	);
 });
 
+/** the form of a new ACME server (the menu "Add" of Certificates) */
+export const showAcmeServerModal = (presets: AcmePreset[], onSaved: () => void) =>
+	EasyModal.show(ServerModal, { presets, onSaved });
+
 export function AcmeServers({ canManage }: { canManage: boolean }) {
 	const queryClient = useQueryClient();
 	const { data, isLoading } = useAcmeServers();
@@ -295,22 +301,7 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 	};
 
 	return (
-		<div className="px-4 pt-4">
-			<div className="d-flex align-items-start mb-2">
-				<div>
-					<h3 className="h4 mb-1">
-						<T id="nginxions.acme.servers.title" />
-					</h3>
-					<p className="text-secondary small mb-0">
-						<T id="nginxions.acme.servers.description" />
-					</p>
-				</div>
-				{canManage && (
-					<Button actionType="primary" className="ms-3 flex-shrink-0 text-nowrap" onClick={() => open()}>
-						<T id="nginxions.acme.servers.add" />
-					</Button>
-				)}
-			</div>
+		<section className={cn("card", pkiStyles.card)}>
 			<div className="table-responsive">
 				<table className="table table-vcenter card-table">
 					<thead>
@@ -399,6 +390,6 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 					</tbody>
 				</table>
 			</div>
-		</div>
+		</section>
 	);
 }
