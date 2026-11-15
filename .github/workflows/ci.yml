@@ -204,8 +204,7 @@ jobs:
     if: needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
     # in a full run the contract with the agent of the build (job images) decides: the published develop may lack an
-    # agent change this branch relies on, then this job says so without failing the run
-    continue-on-error: ${{ needs.level.outputs.level != 'fast' }}
+    # agent change this branch relies on (it is published after this run), then this job warns and stays green
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -222,9 +221,12 @@ jobs:
         env:
           NGINXIONS_REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
           NGINXIONS_VERSION: develop
+          DECIDES: ${{ needs.level.outputs.level == 'fast' }}
         run: |
           (cd nginxions/backend && pnpm install --frozen-lockfile > /dev/null)
-          scripts/test-policy-contract.sh
+          if scripts/test-policy-contract.sh; then exit 0; fi
+          [ "$DECIDES" = true ] && exit 1
+          echo "::warning title=Policy contract::the agent of the published develop refuses a policy of this commit; the contract with the agent of this build (job images) decides"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
