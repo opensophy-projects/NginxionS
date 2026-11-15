@@ -302,3 +302,25 @@ export const randomPassword = () => {
 	const chars = Array.from({ length: 16 }, () => alphabet[randomInt(alphabet.length)]);
 	return [0, 4, 8, 12].map((i) => chars.slice(i, i + 4).join("")).join("-");
 };
+
+/**
+ * A certificate issued with a template (PKI → Settings): what the request leaves out comes from the template (key
+ * type, lifetime, fields of the subject, its CA); a template that does not exist (removed meanwhile) is refused.
+ * Renewals keep the name of the template of the old certificate without applying it again.
+ */
+export const applyTemplate = (data, templates) => {
+	const id = String(data.template || "").trim();
+	if (!id) return data;
+	const t = (templates || []).find((x) => x.id === id);
+	if (!t) throw new PkiError(`The template ${id} does not exist`);
+	if (data.profile && data.profile !== t.profile)
+		throw new PkiError(`The template ${t.name} is for ${t.profile} certificates`);
+	return {
+		...data,
+		profile: data.profile || t.profile,
+		ca_id: data.ca_id ?? t.ca_id ?? undefined,
+		key_type: data.key_type || t.key_type,
+		days: data.days ?? (data.hours ? undefined : t.days),
+		subject: data.csr_pem?.trim() ? data.subject : { ...(t.subject || {}), ...(data.subject || {}) },
+	};
+};

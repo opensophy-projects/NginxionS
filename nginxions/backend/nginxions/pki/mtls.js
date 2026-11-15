@@ -428,7 +428,7 @@ const validate = (data, hostType, host, cas) => {
 	}
 	const paths = ["/", ...(parse(host.locations) || []).map((l) => l.path)];
 	if (!Array.isArray(b.required_paths) || !b.required_paths.every((p) => paths.includes(p))) {
-		throw new errs.ValidationError(`required_paths: of ${paths.join(", ")}`);
+		throw new errs.ValidationError(`required_paths: only locations of the host (${paths.join(", ")})`);
 	}
 	if (b.mode === "on") b.required_paths = [];
 	for (const key of ["send_ca_names", "headers"]) {
@@ -499,7 +499,14 @@ const internalMtls = {
 			await access.can(`${permission(hostType)}:get`, id);
 		}
 		const host = await getHost(hostType, id);
-		const binding = validate(data, hostType, host, await db()("nginxions_pki_ca").select("id", "kind"));
+		// fields left out keep their values: {enabled: false} switches mTLS off and keeps its settings for later
+		const stored = toBinding(await db()("nginxions_mtls_host").where({ host_type: hostType, host_id: id }).first());
+		const binding = validate(
+			{ ...stored, ...data },
+			hostType,
+			host,
+			await db()("nginxions_pki_ca").select("id", "kind"),
+		);
 		const values = {
 			modified_on: new Date(),
 			enabled: binding.enabled,

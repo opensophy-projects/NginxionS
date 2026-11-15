@@ -1,0 +1,434 @@
+[
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter).GetFile: file /Any/tuning/decisions.data not found",
+    "count": 12,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:21.095Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"local\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "getUpdate@hybrid_communication.cc: Acccess Token not available.",
+    "count": 6,
+    "sample": "[2026-11-15T09:20:07.921788: : <26> getUpdate@hybrid_communication.cc:82                  | ###] Acccess Token not available.",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "getEffectiveSegmentSize@shared_ring_queue.c: Effective segment size determined: N (larger segment supported: N)",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.531763: : <25> getEffectiveSegmentSize@shared_ring_queue.c:215       | ###] Effective segment size determined: 4096 (larger segment supported: 1)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "createSharedRingQueue@shared_ring_queue.c: Successfully created a new shared ring queue. Shared memory path: __cp_nano_rx_shared_memory_NbNbNaNcNa_N__, number of segments: N, is owner: N, fd flags: N, fd: N, physical memory size: N, effecti",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.532723: : <25> createSharedRingQueue@shared_ring_queue.c:444         | ###] Successfully created a new shared ring queue. Shared memory path: __cp_nano_rx_shared_memory_21b6b8a0c06a_1__, number of segments: 200, is owner: 1, fd flags: 66, fd: 10, physical memory size: 823378, effective memory size: 823378, effective segment size: 4096, effective queue size: 4178, num_of_data_s",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "getEffectiveSegmentSize@shared_ring_queue.c: Effective segment size from environment: N (EFFECTIVE_SHM_SEGMENT_SIZE=N)",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.532774: : <25> getEffectiveSegmentSize@shared_ring_queue.c:203       | ###] Effective segment size from environment: 4096 (EFFECTIVE_SHM_SEGMENT_SIZE=4096)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "createSharedRingQueue@shared_ring_queue.c: Successfully created a new shared ring queue. Shared memory path: __cp_nano_tx_shared_memory_NbNbNaNcNa_N__, number of segments: N, is owner: N, fd flags: N, fd: N, physical memory size: N, effecti",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.532804: : <25> createSharedRingQueue@shared_ring_queue.c:444         | ###] Successfully created a new shared ring queue. Shared memory path: __cp_nano_tx_shared_memory_21b6b8a0c06a_1__, number of segments: 200, is owner: 1, fd flags: 66, fd: 11, physical memory size: 823378, effective memory size: 823378, effective segment size: 4096, effective queue size: 4178, num_of_data_s",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "updateStateFromRemoteFile@Serializator.cc: Owner: IndicatorsFiltersManager, no remote state file path defined: No remote state file path defined",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.602019: : <44> updateStateFromRemoteFile@Serializator.cc:875         | ###] Owner: IndicatorsFiltersManager, no remote state file path defined: No remote state file path defined",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "sendObject@i_serialize.h: failed to send request to uri: /api//Any/Indicators/Confidence/remote/confidence.data, error: [Status-code]: N - HTTP_NOT_FOUND, [Body]: {}",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.656773: : <46> sendObject@i_serialize.h:198                          | ###] failed to send request to uri: /api//Any/Indicators/Confidence/remote/confidence.data, error: [Status-code]: 404 - HTTP_NOT_FOUND, [Body]: {}",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "pullProcessedData@ConfidenceCalculator.cc: Failed to get tracking keys from file: /Any/Indicators/Confidence/remote/confidence.data",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.656811: : <46> pullProcessedData@ConfidenceCalculator.cc:430         | ###] Failed to get tracking keys from file: /Any/Indicators/Confidence/remote/confidence.data",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "sendObject@i_serialize.h: failed to send request to uri: /api//Any/Indicators/Trust/remote/data.data, error: [Status-code]: N - HTTP_NOT_FOUND, [Body]: {}",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.656916: : <49> sendObject@i_serialize.h:198                          | ###] failed to send request to uri: /api//Any/Indicators/Trust/remote/data.data, error: [Status-code]: 404 - HTTP_NOT_FOUND, [Body]: {}",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "sendObject@i_serialize.h: failed to send request to uri: /api//Any/Type/Confidence/remote/confidence.data, error: [Status-code]: N - HTTP_NOT_FOUND, [Body]: {}",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.656978: : <51> sendObject@i_serialize.h:198                          | ###] failed to send request to uri: /api//Any/Type/Confidence/remote/confidence.data, error: [Status-code]: 404 - HTTP_NOT_FOUND, [Body]: {}",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "pullProcessedData@ConfidenceCalculator.cc: Failed to get tracking keys from file: /Any/Type/Confidence/remote/confidence.data",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.656985: : <51> pullProcessedData@ConfidenceCalculator.cc:430         | ###] Failed to get tracking keys from file: /Any/Type/Confidence/remote/confidence.data",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "sendObject@i_serialize.h: failed to send request to uri: /api//Any/Type/Trust/remote/data.data, error: [Status-code]: N - HTTP_NOT_FOUND, [Body]: {}",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.657030: : <54> sendObject@i_serialize.h:198                          | ###] failed to send request to uri: /api//Any/Type/Trust/remote/data.data, error: [Status-code]: 404 - HTTP_NOT_FOUND, [Body]: {}",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "operator()@Serializator.cc: no remote processed files",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.707534: : <44> operator()@Serializator.cc:1132                       | ###] no remote processed files",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter).GetFile: file /Any/Indicators/Trust/remote/data.data not found",
+    "count": 4,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:21.109Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"local\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter).GetFile: file /Any/Type/Confidence/remote/confidence.data not found",
+    "count": 4,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:21.109Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"local\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter).GetFile: file /Any/Type/Trust/remote/data.data not found",
+    "count": 4,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:21.109Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"local\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter).GetFile: file /Any/Indicators/Confidence/remote/confidence.data not found",
+    "count": 4,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:21.111Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"local\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-shared-files/internal/pkg/filesdb/filesystem.(*Adapter)",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "Communication with CrowdSec Central API disabled from configuration file",
+    "count": 2,
+    "sample": "time=\"2026-11-15T09:20:00Z\" level=warning msg=\"Communication with CrowdSec Central API disabled from configuration file\"",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "grok 'IPvN_WORKAROUND' already registred",
+    "count": 2,
+    "sample": "time=\"2026-11-15T09:20:02Z\" level=warning msg=\"grok 'IPv4_WORKAROUND' already registred\" id=divine-voice module=parser name=crowdsecurity/sshd-success-logs stage=s01-parse",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "grok 'IP_WORKAROUND' already registred",
+    "count": 2,
+    "sample": "time=\"2026-11-15T09:20:02Z\" level=warning msg=\"grok 'IP_WORKAROUND' already registred\" id=divine-voice module=parser name=crowdsecurity/sshd-success-logs stage=s01-parse",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "SIGTERM received, shutting down",
+    "count": 1,
+    "sample": "time=\"2026-11-15T09:20:08Z\" level=warning msg=\"SIGTERM received, shutting down\"",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "Crowdsec service shutting down",
+    "count": 1,
+    "sample": "time=\"2026-11-15T09:20:09Z\" level=warning msg=\"Crowdsec service shutting down\"",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "No matching files for pattern /var/log/openappsec/cp-nano-http-transaction-handler.log*",
+    "count": 1,
+    "sample": "time=\"2026-11-15T09:20:12Z\" level=warning msg=\"No matching files for pattern /var/log/openappsec/cp-nano-http-transaction-handler.log*\" module=acquisition.file type=file",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "openappsec",
+    "level": "warning",
+    "signature": "openappsec.io/smartsync-tuning/internal/pkg/query.(*Adapter).ensureNextPartition: failed to create an index, err: pq: relation \"appsec\" does not exist",
+    "count": 1,
+    "sample": "{\"eventTime\":\"2026-11-15T09:20:18.453Z\",\"eventName\":\"log\",\"eventType\":\"Code Related\",\"eventAudience\":\"Internal\",\"eventAudienceTeam\":\"\",\"eventFrequency\":\"\",\"eventLogLevel\":\"warning\",\"eventSource\":{\"fogId\":\"\",\"fogType\":\"\",\"eventTraceId\":\"\",\"tenantId\":\"\",\"agentId\":\"\",\"eventSpanId\":\"\",\"codeLabel\":\"\",\"issuingFunction\":\"openappsec.io/smartsync-tuning/internal/pkg/query.(*Adapter).ensureNextPartition\",\"i",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "postgres",
+    "level": "warning",
+    "signature": "postgres: no usable system locales were found",
+    "count": 1,
+    "sample": "2026-11-15 09:20:00.048 UTC [39] WARNING:  no usable system locales were found",
+    "known": false,
+    "reason": ""
+  },
+  {
+    "source": "agent-debug",
+    "level": "error",
+    "signature": "pullProcessedData@ConfidenceCalculator.cc: Failed to get the remote state",
+    "count": 8,
+    "sample": "[2026-11-15T09:20:30.656822: : <46> pullProcessedData@ConfidenceCalculator.cc:435         | !!!] Failed to get the remote state",
+    "known": true,
+    "reason": "One agent: there is no remote state of learning of other agents to pull (see SHARED_STORAGE_HOST)"
+  },
+  {
+    "source": "agent-debug",
+    "level": "error",
+    "signature": "pullProcessedData@TrustedSourcesConfidence.cc: Failed to pull state data",
+    "count": 8,
+    "sample": "[2026-11-15T09:20:30.656928: : <49> pullProcessedData@TrustedSourcesConfidence.cc:219     | !!!] Failed to pull state data",
+    "known": true,
+    "reason": "One agent: there is no remote state of learning of other agents to pull (see SHARED_STORAGE_HOST)"
+  },
+  {
+    "source": "agent-debug",
+    "level": "error",
+    "signature": "getModeWithDefault@new_practice.cc: Setting to top-level mode: inactive",
+    "count": 8,
+    "sample": "[2026-11-15T09:20:07.931627: : <26> getModeWithDefault@new_practice.cc:82                 | !!!] Setting to top-level mode: inactive",
+    "known": true,
+    "reason": "open-appsec logs the normal path of an inherited mode at the error level (new_practice.cc)"
+  },
+  {
+    "source": "nginxions",
+    "level": "error",
+    "signature": "Access: pki:manage undefined no role gives pki:manage",
+    "count": 2,
+    "sample": "[Access        ] › ✖  error     pki:manage undefined no role gives pki:manage",
+    "known": true,
+    "reason": "Refusals of RBAC and input checks that smoke provokes on purpose (an analyst, a missing object) and expects"
+  },
+  {
+    "source": "postgres",
+    "level": "error",
+    "signature": "postgres: relation \"appsec\" does not exist",
+    "count": 2,
+    "sample": "2026-11-15 09:20:18.452 UTC [100] ERROR:  relation \"appsec\" does not exist",
+    "known": true,
+    "reason": "The tuning service creates its table with the first log: the first insert fails by design, then the table is made"
+  },
+  {
+    "source": "agent-debug",
+    "level": "error",
+    "signature": "ParametersSection@rules_config_section.cc: Illegal Parameter values. Name and ID are empty",
+    "count": 1,
+    "sample": "[2026-11-15T09:20:07.931546: : <26> ParametersSection@rules_config_section.cc:112         | !!!] Illegal Parameter values. Name and ID are empty",
+    "known": true,
+    "reason": "open-appsec adds an empty parameter to a rule with no exceptions and logs it at the error level (policy_maker_utils.cc); the rule works"
+  },
+  {
+    "source": "nginxions",
+    "level": "error",
+    "signature": "Access: settings:update undefined validation failed",
+    "count": 1,
+    "sample": "[Access        ] › ✖  error     settings:update undefined validation failed",
+    "known": true,
+    "reason": "Refusals of RBAC and input checks that smoke provokes on purpose (an analyst, a missing object) and expects"
+  },
+  {
+    "source": "nginxions",
+    "level": "error",
+    "signature": "Access: pki:export_key undefined no role gives pki:export_key",
+    "count": 1,
+    "sample": "[Access        ] › ✖  error     pki:export_key undefined no role gives pki:export_key",
+    "known": true,
+    "reason": "Refusals of RBAC and input checks that smoke provokes on purpose (an analyst, a missing object) and expects"
+  },
+  {
+    "source": "nginxions",
+    "level": "error",
+    "signature": "Access: pki:issue undefined no role gives pki:issue",
+    "count": 1,
+    "sample": "[Access        ] › ✖  error     pki:issue undefined no role gives pki:issue",
+    "known": true,
+    "reason": "Refusals of RBAC and input checks that smoke provokes on purpose (an analyst, a missing object) and expects"
+  },
+  {
+    "source": "nginxions",
+    "level": "error",
+    "signature": "Access: proxy_hosts:update N validation failed",
+    "count": 1,
+    "sample": "[Access        ] › ✖  error     proxy_hosts:update 5 validation failed",
+    "known": true,
+    "reason": "Refusals of RBAC and input checks that smoke provokes on purpose (an analyst, a missing object) and expects"
+  },
+  {
+    "source": "postgres",
+    "level": "error",
+    "signature": "postgres: database \"iNdatatubeschemasecurityeventlogsvN\" does not exist",
+    "count": 1,
+    "sample": "2026-11-15 09:20:18.402 UTC [98] FATAL:  database \"i2datatubeschemasecurityeventlogsv03\" does not exist",
+    "known": true,
+    "reason": "The tuning service creates its database with the first log of the agent: the first open fails by design (smartsync-tuning datatube.go InsertLog)"
+  },
+  {
+    "source": "postgres",
+    "level": "error",
+    "signature": "postgres: no partition of relation \"appsec\" found for row",
+    "count": 1,
+    "sample": "2026-11-15 09:20:18.463 UTC [100] ERROR:  no partition of relation \"appsec\" found for row",
+    "known": true,
+    "reason": "The table of the tuning service has a partition per UTC day, made by the first insert of the day (and a day ahead): that insert fails once by design"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "SerializeToLocalAndRemoteSyncBaseT@Serializator.cc: learning host name(SHARED_STORAGE_HOST) is not set",
+    "count": 28,
+    "sample": "[2026-11-15T09:20:30.535788: : <40> SerializeToLocalAndRemoteSyncBaseT@Serializator.cc:584 | ###] learning host name(SHARED_STORAGE_HOST) is not set",
+    "known": true,
+    "reason": "One agent: what it learns is kept locally, not synced to other agents through the shared storage"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "loadFromFile@Serializator.cc: failed to open file: /etc/cp/conf/waap/Any/NbNbNaNcNa_N/N.data Error: No such file or directory",
+    "count": 24,
+    "sample": "[2026-11-15T09:20:30.535991: : <40> loadFromFile@Serializator.cc:368                      | ###] failed to open file: /etc/cp/conf/waap/Any/21b6b8a0c06a_1/6.data Error: No such file or directory",
+    "known": true,
+    "reason": "A learned file of an asset does not exist before the agent writes it for the first time"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "loadFromFile@Serializator.cc: failed to open file: /etc/cp/conf/waap/Any/N.data Error: No such file or directory",
+    "count": 24,
+    "sample": "[2026-11-15T09:20:30.536002: : <40> loadFromFile@Serializator.cc:368                      | ###] failed to open file: /etc/cp/conf/waap/Any/6.data Error: No such file or directory",
+    "known": true,
+    "reason": "A learned file of an asset does not exist before the agent writes it for the first time"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "loadAccessToken@agent_details.cc: Failed to open session token file: /etc/cp/data/dataN.a",
+    "count": 21,
+    "sample": "[2026-11-15T09:20:06.907017: : <9> loadAccessToken@agent_details.cc:363                   | ###] Failed to open session token file: /etc/cp/data/data3.a",
+    "known": true,
+    "reason": "No Fog, no token of a session: the agent runs without registration, by design"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "sendSyncMessageWithoutResponse@interface_impl.h: Received error from server. Status code: -N, error response: NginxionS: the agent has no cloud",
+    "count": 6,
+    "sample": "[2026-11-15T09:20:06.898345: : <27> sendSyncMessageWithoutResponse@interface_impl.h:128   | ###] Received error from server. Status code: -1, error response: NginxionS: the agent has no cloud",
+    "known": true,
+    "reason": "The agent of NginxionS has no Fog (openappsec/agent): its calls to the cloud end here, by design"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "executeHealthCheck@health_check_manager.cc: Failed to send periodic health check patch to the fog",
+    "count": 6,
+    "sample": "[2026-11-15T09:20:06.898350: : <27> executeHealthCheck@health_check_manager.cc:253        | ###] Failed to send periodic health check patch to the fog",
+    "known": true,
+    "reason": "No Fog: the health check of the cloud is not sent, by design"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "closeLogFile@file_stream.cc: Failed in closing log file. File path: NbNbNaNcNa_N",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:18.367378: : <10> closeLogFile@file_stream.cc:119                       | ###] Failed in closing log file. File path: 21b6b8a0c06a_1",
+    "known": true,
+    "reason": "open-appsec closes its log file before rotating it even when it is not open yet; the log goes on"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "loadFromFile@Serializator.cc: failed to open file: /etc/cp/conf/waap/Any/NbNbNaNcNa_N/waap.data Error: No such file or directory",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.535744: : <40> loadFromFile@Serializator.cc:368                      | ###] failed to open file: /etc/cp/conf/waap/Any/21b6b8a0c06a_1/waap.data Error: No such file or directory",
+    "known": true,
+    "reason": "A learned file of an asset does not exist before the agent writes it for the first time"
+  },
+  {
+    "source": "agent-debug",
+    "level": "warning",
+    "signature": "loadFromFile@Serializator.cc: failed to open file: /etc/cp/conf/waap/Any/waap.data Error: No such file or directory",
+    "count": 4,
+    "sample": "[2026-11-15T09:20:30.535764: : <40> loadFromFile@Serializator.cc:368                      | ###] failed to open file: /etc/cp/conf/waap/Any/waap.data Error: No such file or directory",
+    "known": true,
+    "reason": "A learned file of an asset does not exist before the agent writes it for the first time"
+  },
+  {
+    "source": "crowdsec",
+    "level": "warning",
+    "signature": "No matching files for pattern /does/not/exist",
+    "count": 2,
+    "sample": "time=\"2026-11-15T09:20:02Z\" level=warning msg=\"No matching files for pattern /does/not/exist\" module=acquisition.file type=file",
+    "known": true,
+    "reason": "The official image of CrowdSec writes this placeholder into acquis.yaml; the sources of NginxionS are in acquis.d"
+  }
+]

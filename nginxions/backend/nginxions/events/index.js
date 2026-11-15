@@ -51,6 +51,7 @@ const LIST_COLUMNS = [
 	"practice",
 	"override",
 	"service",
+	"repeats",
 ];
 
 /** the agent that wrote an event → its kind */
@@ -215,6 +216,8 @@ const toApi = (row) => ({
 	id: String(row.id),
 	time: new Date(row.time).toISOString(),
 	score: row.score === null ? null : Number(row.score),
+	// requests counted in one event (refusals of mTLS within a minute, pki/denials.js)
+	repeats: Number(row.repeats ?? 1),
 });
 
 const internalEvents = {

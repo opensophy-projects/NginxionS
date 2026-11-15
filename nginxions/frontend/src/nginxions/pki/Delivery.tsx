@@ -6,7 +6,7 @@ import Alert from "react-bootstrap/Alert";
 import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
 import { showSuccess } from "src/notifications";
-import { type IssueResult, linkUrl, type OneTimeLink, saveBase64, saveText } from "./api";
+import { type IssueResult, isLocalAddress, linkUrl, type OneTimeLink, saveBase64, saveText } from "./api";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 
@@ -43,10 +43,16 @@ export function LinkBox({ link, publicUrl }: { link: OneTimeLink; publicUrl: str
 				<div className="text-secondary small">
 					<T id="nginxions.pki.link.expires" data={{ time: formatDateTime(link.expiresOn, locale) }} />
 				</div>
-				{!publicUrl && (
-					<div className="text-secondary small">
-						<T id="nginxions.pki.link.local" />
+				{isLocalAddress(url) ? (
+					<div className="text-warning small">
+						<T id="nginxions.pki.link.localhost" />
 					</div>
+				) : (
+					!publicUrl && (
+						<div className="text-secondary small">
+							<T id="nginxions.pki.link.local" />
+						</div>
+					)
 				)}
 			</div>
 		</div>

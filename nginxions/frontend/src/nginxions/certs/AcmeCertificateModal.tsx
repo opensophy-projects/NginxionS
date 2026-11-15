@@ -1,5 +1,5 @@
 // Certificates → Add → ACME: one form for every ACME server of Settings → ACME (Let's Encrypt, ZeroSSL, Google, the
-// TLS CA of the Russian Federation, a server of your own): the server, how the domain is checked (HTTP-01 or DNS-01)
+// TLS CA of TCI, tlscc.ru, a server of your own): the server, how the domain is checked (HTTP-01 or DNS-01)
 // and the names. Your own CSR has its form (CsrModal), reached from here.
 import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";

@@ -1,12 +1,13 @@
-// Certificates → PKI and mTLS (docs/ROADMAP.md, phase 6; ADR-0009): certificates issued by the
-// own CAs as a table (status, expiry, where used, filters, bulk revocation), the CAs (roots, trust
-// domains, external ones), templates of certificates and settings (public address for CRLs and
-// links, lifetimes).
+// Certificates → mTLS and PKI (docs/ROADMAP.md, phase 6; ADR-0009): one page with tabs. mTLS of the hosts (pages/Mtls:
+// protected hosts and their access certificates), the certificates issued by the own CAs as a table (status, expiry,
+// where used, filters, bulk revocation), the CAs (roots, trust domains, external ones), templates of certificates and
+// settings (public address for CRLs and links, lifetimes). ?tab= opens a tab.
 import { IconDots, IconPlus } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
 import { useMemo, useState } from "react";
 import Alert from "react-bootstrap/Alert";
+import { useSearchParams } from "react-router-dom";
 import { HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
@@ -25,6 +26,7 @@ import {
 	saveFile,
 	setPkiSettings,
 	usePki,
+	linkBase,
 } from "../../pki/api";
 import { showCaModal } from "../../pki/CaModal";
 import { showIssueModal } from "../../pki/IssueModal";
@@ -34,12 +36,14 @@ import { showTemplateModal } from "../../pki/TemplateModal";
 import { useCan } from "../../rbac/hooks";
 import { Dropdown, type DropdownItem } from "../../ui/Dropdown";
 import hostStyles from "../Hosts/Hosts.module.css";
+import { MtlsTab, MtlsToolbar } from "../Mtls";
 import styles from "./Pki.module.css";
 import { SearchField } from "../../ui/SearchField";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 
-type Tab = "certificates" | "cas" | "templates" | "settings";
+type Tab = "mtls" | "certificates" | "cas" | "templates" | "settings";
+const TABS: Tab[] = ["mtls", "certificates", "cas", "templates", "settings"];
 type StatusFilter = "" | "active" | "expiring" | "expired" | "revoked" | "replaced";
 
 const EXPIRING = 30;
@@ -128,7 +132,7 @@ function CertificatesTab({ data, refresh }: { data: PkiOverview; refresh: () => 
 
 	const selectable = rows.filter((c) => !c.revokedOn);
 	const chosen = data.certificates.filter((c) => selected.includes(c.id) && !c.revokedOn);
-	const publicUrl = data.settings.publicUrl;
+	const publicUrl = linkBase(data);
 	const compatible = data.settings.p12Compatible;
 
 	const actions = (c: PkiCert): DropdownItem[] => [
@@ -422,7 +426,7 @@ function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
 								action: "ca-key",
 								objectId: ca.id,
 								name: ca.name,
-								publicUrl: data.settings.publicUrl,
+								publicUrl: linkBase(data),
 								compatible: true,
 							}),
 					},
@@ -848,11 +852,14 @@ function SettingsTab({ data, refresh }: { data: PkiOverview; refresh: () => void
 function PkiPage() {
 	const can = useCan();
 	const queryClient = useQueryClient();
-	// ?tab=cas opens a tab (links from the registry of certificates)
-	const [tab, setTab] = useState<Tab>(() => {
-		const asked = new URLSearchParams(window.location.search).get("tab");
-		return asked === "cas" || asked === "templates" || asked === "settings" ? asked : "certificates";
-	});
+	// ?tab=cas opens a tab (links from the registry of certificates; /mtls leads to ?tab=mtls)
+	const [params, setParams] = useSearchParams();
+	const asked = params.get("tab") as Tab | null;
+	const tab: Tab = asked && TABS.includes(asked) ? asked : "mtls";
+	const setTab = (next: Tab) => {
+		// the filters of a tab (?host=, ?cert=) do not follow to another one
+		setParams({ tab: next }, { replace: true });
+	};
 	const { data, isLoading, isError, error } = usePki({ refetchInterval: 30000 });
 	const refresh = () => {
 		queryClient.invalidateQueries({ queryKey: ["nginxions-pki"] });
@@ -872,14 +879,15 @@ function PkiPage() {
 			<div className={hostStyles.head}>
 				<div>
 					<h1 className={hostStyles.title}>
-						<T id="nginxions.pki" />
+						<T id="nginxions.pki.title" />
 					</h1>
 					<p className={hostStyles.subtitle}>
-						<T id="nginxions.pki.subtitle" />
+						<T id={tab === "mtls" ? "nginxions.mtls.subtitle" : "nginxions.pki.subtitle"} />
 					</p>
 				</div>
 				<div className={hostStyles.toolbar}>
-					{can("pki", "manage") && (
+					{tab === "mtls" && <MtlsToolbar data={data} refresh={refresh} />}
+					{tab !== "mtls" && can("pki", "manage") && (
 						<button
 							type="button"
 							className={hostStyles.tool}
@@ -891,7 +899,7 @@ function PkiPage() {
 							</span>
 						</button>
 					)}
-					{can("pki", "issue") && hasIssuer && (
+					{tab !== "mtls" && can("pki", "issue") && hasIssuer && (
 						<button
 							type="button"
 							className={cn("btn btn-primary btn-sm", hostStyles.add)}
@@ -904,22 +912,8 @@ function PkiPage() {
 				</div>
 			</div>
 
-			{!hasIssuer && (
-				<Alert variant="info" className="mb-0">
-					<T
-						id={
-							data.cas.some((ca) => ca.kind === "root")
-								? "nginxions.pki.start.domain"
-								: "nginxions.pki.start"
-						}
-					/>
-				</Alert>
-			)}
-
-			<Summary data={data} />
-
 			<ul className="nav nav-tabs flex-nowrap overflow-auto">
-				{(["certificates", "cas", "templates", "settings"] as Tab[]).map((x) => (
+				{TABS.map((x) => (
 					<li className="nav-item" key={x}>
 						<button
 							type="button"
@@ -931,6 +925,22 @@ function PkiPage() {
 					</li>
 				))}
 			</ul>
+
+			{tab === "mtls" && <MtlsTab data={data} refresh={refresh} />}
+
+			{tab !== "mtls" && !hasIssuer && (
+				<Alert variant="info" className="mb-0">
+					<T
+						id={
+							data.cas.some((ca) => ca.kind === "root")
+								? "nginxions.pki.start.domain"
+								: "nginxions.pki.start"
+						}
+					/>
+				</Alert>
+			)}
+
+			{tab !== "mtls" && <Summary data={data} />}
 
 			{tab === "certificates" && <CertificatesTab data={data} refresh={refresh} />}
 			{tab === "cas" && <CasTab data={data} refresh={refresh} />}

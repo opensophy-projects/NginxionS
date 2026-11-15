@@ -1,5 +1,5 @@
 // Settings → ACME → Servers: where ACME certificates come from. A preset (Let's Encrypt, ZeroSSL, Google, SSL.com,
-// the TLS CA of the Russian Federation) or a server of your own; each says its client (certbot or lego) and may be
+// the TLS CA of TCI, tlscc.ru) or a server of your own; each says its client (certbot or lego) and may be
 // the default one, which the certificate forms choose first.
 import { useQueryClient } from "@tanstack/react-query";
 import EasyModal, { type InnerModalProps } from "ez-modal-react";
@@ -38,6 +38,7 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 					preset: presets[0]?.id ?? "custom",
 					name: presets[0]?.name ?? "",
 					client: presets[0]?.client ?? "certbot",
+					directory: presets[0]?.directory ?? "",
 					tlsVerify: true,
 					email: "",
 					eabKid: "",
@@ -58,7 +59,6 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 			delete (body as any).id;
 			delete (body as any).usedBy;
 			delete (body as any).isDefault;
-			if (preset) delete body.directory;
 			if (server) await updateAcmeServer(server.id, body);
 			else await createAcmeServer(body);
 			onSaved();
@@ -128,10 +128,21 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 								type="url"
 								className="form-control font-monospace"
 								placeholder={t("nginxions.acme.servers.directory-placeholder")}
-								value={preset ? preset.directory : (v.directory ?? "")}
-								disabled={!!preset}
+								value={v.directory ?? ""}
 								onChange={(e) => set({ directory: e.target.value.trim() })}
 							/>
+							{preset && v.directory !== preset.directory && (
+								<div className="form-hint">
+									<T id="nginxions.acme.servers.directory-preset" data={{ url: preset.directory }} />{" "}
+									<button
+										type="button"
+										className="btn btn-link btn-sm p-0 align-baseline"
+										onClick={() => set({ directory: preset.directory })}
+									>
+										<T id="nginxions.acme.servers.directory-reset" />
+									</button>
+								</div>
+							)}
 							{preset?.caa && (
 								<div className="form-hint">
 									<T id="nginxions.acme.servers.caa" data={{ caa: preset.caa }} />

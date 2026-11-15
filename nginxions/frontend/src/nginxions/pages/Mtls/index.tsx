@@ -1,19 +1,16 @@
-// Certificates → mTLS: hosts protected by client certificates and the access certificates that open
-// them. A host is protected in one step (its own trust domain is created when needed), a
+// Certificates → mTLS and PKI, tab mTLS (pages/Pki shows it): hosts protected by client certificates and the access
+// certificates that open them. A host is protected in one step (its own trust domain is created when needed), a
 // certificate is issued for a host in a few fields and managed here: details, files, one-time
-// links, renewal, revocation, deletion. The CAs and settings behind it stay in PKI.
+// links, renewal, revocation, deletion. The CAs and settings behind it are the other tabs of the page.
 // ?host=proxy_host-5 filters by a host, ?cert=12 opens a certificate.
 import { IconDots, IconLock, IconPlus } from "@tabler/icons-react";
-import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
 import { useEffect, useMemo, useState } from "react";
 import Alert from "react-bootstrap/Alert";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { HasPermission, LoadingPage } from "src/components";
+import { useSearchParams } from "react-router-dom";
 import { useLocaleState } from "src/context";
 import { useProxyHosts, useStreams } from "src/hooks";
 import { formatDateTime, intl, T } from "src/locale";
-import { VIEW } from "src/modules/Permissions";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showAccessModal } from "../../pki/AccessModal";
@@ -29,7 +26,7 @@ import {
 	type PkiOverview,
 	type ProtectedHost,
 	setMtlsHost,
-	usePki,
+	linkBase,
 } from "../../pki/api";
 import { certStatus, STATUS_TONE, showCertModal } from "../../pki/CertModal";
 import { showHostCertsModal } from "../../pki/HostCertsModal";
@@ -277,7 +274,7 @@ function CertsCard({
 		});
 	}, [certs, host, status, query]);
 	const chosen = rows.filter((c) => selected.includes(c.id));
-	const publicUrl = data.settings.publicUrl;
+	const publicUrl = linkBase(data);
 	const compatible = data.settings.p12Compatible;
 	const open = (c: PkiCert) => showCertModal({ certId: c.id, openHost });
 	const remove = (list: PkiCert[]) =>
@@ -557,17 +554,9 @@ function useUnprotected(data: PkiOverview | undefined) {
 	}, [data, proxy.data, stream.data]);
 }
 
-function MtlsPage() {
-	const can = useCan();
-	const navigate = useNavigate();
-	const queryClient = useQueryClient();
+/** the address keeps ?host= (a filter by a host) and ?cert= (a certificate to open) of the tab mTLS */
+function useHostParam() {
 	const [params, setParams] = useSearchParams();
-	const { data, isLoading, isError, error } = usePki({ refetchInterval: 30000 });
-	const unprotected = useUnprotected(data);
-	const refresh = () => {
-		queryClient.invalidateQueries({ queryKey: ["nginxions-pki"] });
-		queryClient.invalidateQueries({ queryKey: ["nginxions-mtls-hosts"] });
-	};
 	const host = params.get("host") ?? "";
 	const setHost = (key: string) => {
 		const next = new URLSearchParams(params);
@@ -575,109 +564,94 @@ function MtlsPage() {
 		else next.delete("host");
 		setParams(next, { replace: true });
 	};
-	const openHost = (h: HostRef) => setHost(hostKey(h));
+	return { params, setParams, host, setHost };
+}
 
-	// ?cert=12: the certificate opens once the data is there
-	const certParam = Number(params.get("cert")) || 0;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: once per ?cert
-	useEffect(() => {
-		if (!certParam || !data) return;
-		showCertModal({ certId: certParam, openHost });
-		const next = new URLSearchParams(params);
-		next.delete("cert");
-		setParams(next, { replace: true });
-	}, [certParam, data]);
-
-	if (isLoading) return <LoadingPage noLogo />;
-	if (isError || !data)
-		return <Alert variant="danger">{error?.message || <T id="nginxions.common.unknown-error" />}</Alert>;
-
-	const certs = data.certificates.filter((c) => c.profile === "client");
+/** the buttons of the tab mTLS: protect a host, issue an access certificate */
+export function MtlsToolbar({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
+	const can = useCan();
+	const unprotected = useUnprotected(data);
+	const { host } = useHostParam();
 	const protect = (h: HostRef) =>
 		attempt(
 			() => enableMtlsHost(h.hostType, h.hostId),
 			refresh,
 			t("nginxions.mtls.host.enabled", { name: h.name }),
 		);
-
 	return (
-		<div className={hostStyles.page}>
-			<div className={hostStyles.head}>
-				<div>
-					<h1 className={hostStyles.title}>mTLS</h1>
-					<p className={hostStyles.subtitle}>
-						<T id="nginxions.mtls.subtitle" />
-					</p>
-				</div>
-				<div className={hostStyles.toolbar}>
-					{unprotected.length > 0 && (
-						<Dropdown
-							floating
-							ariaLabel={t("nginxions.mtls.protect")}
-							triggerClassName={hostStyles.tool}
-							trigger={
-								<>
-									<IconLock size={16} />
-									<span className={hostStyles.toolText}>
-										<T id="nginxions.mtls.protect" />
-									</span>
-								</>
-							}
-							items={unprotected.map((h) => ({
-								key: hostKey(h),
-								label: h.name,
-								onSelect: () => protect(h),
-							}))}
-						/>
-					)}
-					{can("pki", "issue") && (
-						<button
-							type="button"
-							className={cn("btn btn-primary btn-sm", hostStyles.add)}
-							disabled={!data.protected.length}
-							title={data.protected.length ? undefined : t("nginxions.mtls.access.no-hosts")}
-							onClick={() =>
-								showAccessModal({
-									data,
-									host: data.protected.find((h) => hostKey(h) === host),
-									onDone: refresh,
-								})
-							}
-						>
-							<IconPlus size={16} />
-							<T id="nginxions.mtls.access.issue" />
-						</button>
-					)}
-				</div>
-			</div>
+		<>
+			{unprotected.length > 0 && (
+				<Dropdown
+					floating
+					ariaLabel={t("nginxions.mtls.protect")}
+					triggerClassName={hostStyles.tool}
+					trigger={
+						<>
+							<IconLock size={16} />
+							<span className={hostStyles.toolText}>
+								<T id="nginxions.mtls.protect" />
+							</span>
+						</>
+					}
+					items={unprotected.map((h) => ({
+						key: hostKey(h),
+						label: h.name,
+						onSelect: () => protect(h),
+					}))}
+				/>
+			)}
+			{can("pki", "issue") && (
+				<button
+					type="button"
+					className={cn("btn btn-primary btn-sm", hostStyles.add)}
+					disabled={!data.protected.length}
+					title={data.protected.length ? undefined : t("nginxions.mtls.access.no-hosts")}
+					onClick={() =>
+						showAccessModal({
+							data,
+							host: data.protected.find((h) => hostKey(h) === host),
+							onDone: refresh,
+						})
+					}
+				>
+					<IconPlus size={16} />
+					<T id="nginxions.mtls.access.issue" />
+				</button>
+			)}
+		</>
+	);
+}
 
+/**
+ * Certificates → mTLS and PKI, tab mTLS: hosts protected by client certificates and the access certificates that
+ * open them.
+ */
+export function MtlsTab({ data, refresh }: { data: PkiOverview; refresh: () => void }) {
+	const { params, setParams, host, setHost } = useHostParam();
+	const openHost = (h: HostRef) => setHost(hostKey(h));
+
+	// ?cert=12: the certificate opens once the data is there
+	const certParam = Number(params.get("cert")) || 0;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once per ?cert
+	useEffect(() => {
+		if (!certParam) return;
+		showCertModal({ certId: certParam, openHost });
+		const next = new URLSearchParams(params);
+		next.delete("cert");
+		setParams(next, { replace: true });
+	}, [certParam]);
+
+	const certs = data.certificates.filter((c) => c.profile === "client");
+	return (
+		<>
 			{!data.protected.length && (
 				<Alert variant="info" className="mb-0">
 					<T id="nginxions.mtls.start" />
 				</Alert>
 			)}
-
 			<Summary data={data} certs={certs} />
 			<HostsCard data={data} certs={certs} refresh={refresh} filter={openHost} />
 			<CertsCard data={data} certs={certs} refresh={refresh} host={host} setHost={setHost} openHost={openHost} />
-			<p className="text-secondary small m-0">
-				<T id="nginxions.mtls.pki-hint" />{" "}
-				<button
-					type="button"
-					className="btn btn-link btn-sm p-0 align-baseline"
-					onClick={() => navigate("/pki")}
-				>
-					<T id="nginxions.pki" />
-				</button>
-			</p>
-		</div>
+		</>
 	);
 }
-
-const Mtls = () => (
-	<HasPermission rbac="pki" permission={VIEW} pageLoading loadingNoLogo>
-		<MtlsPage />
-	</HasPermission>
-);
-
-export default Mtls;

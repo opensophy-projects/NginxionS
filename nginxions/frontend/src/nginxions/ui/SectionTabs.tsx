@@ -15,10 +15,14 @@ export function SectionTabs() {
 	const can = useCan();
 	const section = useMemo(() => sectionOf(visibleItems(navigation, me, can), pathname), [me, can, pathname]);
 	if (!section?.tabs || section.tabs.length < 2) return null;
+	// the most specific tab: /certificates/acme is the tab ACME, not "All certificates" (/certificates)
+	const active = section.tabs
+		.filter((tab) => containsActive(tab, pathname))
+		.sort((a, b) => (b.to?.length ?? 0) - (a.to?.length ?? 0))[0];
 	return (
 		<nav className={styles.tabs} aria-label={intl.formatMessage({ id: section.label })}>
 			{section.tabs.map((tab) => {
-				const current = containsActive(tab, pathname);
+				const current = tab === active;
 				return (
 					<Link
 						key={tab.id}
