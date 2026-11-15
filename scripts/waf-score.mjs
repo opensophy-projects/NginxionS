@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 // The summary of a GoTestWAF report (scripts/test-waf-score.sh) for the summary of the run: the score, the attacks
 // blocked and bypassed, the legitimate requests passed and refused (false positives), per set of tests.
-//   node scripts/waf-score.mjs gotestwaf.json [gotestwaf.log]
+// With --baseline <file> (.github/security/waf-baseline.json) the score is held to the baseline: lower than it by more
+// than its tolerance fails (exit 1), so a change that weakens the protection is seen by a number.
+//   node scripts/waf-score.mjs gotestwaf.json [gotestwaf.log] [--baseline file]
 import { readFileSync } from "node:fs";
 
-const [file, logFile] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const bi = args.indexOf("--baseline");
+const baselineFile = bi === -1 ? null : args[bi + 1];
+const [file, logFile] = args.filter((a, i) => !a.startsWith("--") && (bi === -1 || i !== bi + 1));
 const report = JSON.parse(readFileSync(file, "utf8"));
 const num = (v) => (typeof v === "number" ? v : Number.parseFloat(v));
 const pct = (v) => (Number.isFinite(num(v)) ? `${num(v).toFixed(1)} %` : "—");
@@ -47,4 +52,26 @@ if (logFile) {
 		// no log
 	}
 }
+let failed = false;
+if (baselineFile) {
+	const baseline = JSON.parse(readFileSync(baselineFile, "utf8"));
+	const min = baseline.score - baseline.tolerance;
+	if (!Number.isFinite(num(score))) {
+		lines.push("", "**FAIL:** the report has no score to hold to the baseline");
+		failed = true;
+	} else if (num(score) < min) {
+		lines.push(
+			"",
+			`**FAIL:** the score ${pct(score)} is under the baseline ${pct(baseline.score)} minus ${baseline.tolerance} (${pct(min)}): the protection got weaker. If on purpose, lower the baseline in ${baselineFile} with the reason.`,
+		);
+		failed = true;
+	} else {
+		const better = num(score) > baseline.score + baseline.tolerance;
+		lines.push(
+			"",
+			`Baseline ${pct(baseline.score)} ± ${baseline.tolerance}: ${better ? `**better** — raise it in ${baselineFile}` : "held"}.`,
+		);
+	}
+}
 console.log(lines.join("\n"));
+process.exit(failed ? 1 : 0);

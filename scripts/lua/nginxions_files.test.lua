@@ -152,6 +152,49 @@ local tests = {
     ngx.req.get_method = function() return "POST" end
     return ok
   end },
+  -- fuzzing (docs/DEVSECOPS.md): bodies of uploads are the input of the internet. Mutated multipart bodies, archives
+  -- and answers of clamd must give a verdict (nothing or 403), never an error of Lua (an error 500 in nginx).
+  -- FUZZ_ITERATIONS cases (300 in CI, more at night), FUZZ_SEED replays one.
+  { "fuzz: random uploads and answers of clamd give a verdict, never an error of Lua", function()
+    local n = tonumber(os.getenv("FUZZ_ITERATIONS") or "") or 300
+    local seed = tonumber(os.getenv("FUZZ_SEED") or "") or os.time()
+    math.randomseed(seed)
+    local seeds = {
+      "--b\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a.pdf\"\r\nContent-Type: application/pdf\r\n\r\nzz\r\n--b--\r\n",
+      "--b\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\nzz\r\n--b--\r\n",
+      zip_with("a.zip"), zip_with("[Content_Types].xml"), zip_with("mimetype"), "PK\5\6" .. string.rep("\0", 18), "x",
+    }
+    local tokens = { "\r\n", "--b", "--", "PK\3\4", "PK\1\2", "\0", "\255", "filename=", "\"", ";", string.rep("A", 300) }
+    local replies = { "OK", "Win.Test.EICAR_HDB-1 FOUND", "Heuristics.Encrypted.Zip FOUND", "Heuristics.Limits.Exceeded FOUND",
+      "INSTREAM size limit exceeded. ERROR", "garbage", "", " FOUND", nil }
+    local types = { "multipart/form-data; boundary=b", "multipart/form-data", "multipart/form-data; boundary=",
+      "application/octet-stream", "application/zip", "text/plain" }
+    local function mutate(s)
+      for _ = 1, math.random(1, 6) do
+        local at = math.random(0, #s)
+        local op = math.random(1, 4)
+        if op == 1 then s = s:sub(1, at) .. string.char(math.random(0, 255)) .. s:sub(at + 2)
+        elseif op == 2 then s = s:sub(1, at) .. s:sub(at + 1 + math.random(1, 8))
+        elseif op == 3 then s = s:sub(1, at) .. tokens[math.random(#tokens)] .. s:sub(at + 1)
+        else s = s:sub(1, at) end
+      end
+      return s
+    end
+    for i = 1, n do
+      local data = mutate(seeds[math.random(#seeds)])
+      local rule = copy(base, {
+        unnamed_action = ({ "inactive", "detect", "prevent" })[math.random(3)],
+        deep = math.random() < 0.5,
+        archives = { extract = math.random() < 0.5, max_bytes = math.random(0, 64), nested_action = "prevent", failed_action = "detect" },
+      })
+      local vars = { uri = "/up", request_uri = "/up", content_type = types[math.random(#types)] }
+      local ok, e = pcall(run, rule, data, replies[math.random(#replies + 1)], vars)
+      if not ok or (e ~= nil and e ~= 403) then
+        error(string.format("case %d (FUZZ_SEED=%d): %s; body %q", i, seed, tostring(e), data:sub(1, 200)))
+      end
+    end
+    return true
+  end },
 }
 
 local failed = 0

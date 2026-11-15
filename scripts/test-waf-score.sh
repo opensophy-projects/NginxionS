@@ -2,7 +2,8 @@
 # The score of the WAF: GoTestWAF (thousands of attacks of OWASP and API classes, and legitimate requests) against a
 # proxy host in prevent-learn with the recommended practice, from the closed network. The stack has no CrowdSec: a
 # ban of the scanner would block its legitimate requests too and spoil the score. Report in $OUT (reports/waf):
-# gotestwaf.json and the summary of the run. Exits non-zero only when the stack or the scan fails.
+# gotestwaf.json and the summary of the run. Fails when the stack or the scan fails, or when the score is under its
+# baseline (.github/security/waf-baseline.json, minus its tolerance): a change that weakens the protection.
 #
 #   NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/test-waf-score.sh
 set -euo pipefail
@@ -54,7 +55,11 @@ docker run --rm --network "$net" --add-host "test.local:$ip" -v "$out:/out" "$GO
   --workers 8 --reportFormat json --reportPath /out --reportName gotestwaf 2>&1 | tee "$out/gotestwaf.log" | tail -n 60
 [ -s "$out/gotestwaf.json" ] || { echo "FAIL: GoTestWAF left no report"; exit 1; }
 
-node scripts/waf-score.mjs "$out/gotestwaf.json" "$out/gotestwaf.log" > "$out/waf-score.md" || true
+# held to the baseline (.github/security/waf-baseline.json): a weaker protection fails the test
+gate=0
+node scripts/waf-score.mjs "$out/gotestwaf.json" "$out/gotestwaf.log" --baseline .github/security/waf-baseline.json \
+  > "$out/waf-score.md" || gate=$?
 cat "$out/waf-score.md"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$out/waf-score.md" >> "$GITHUB_STEP_SUMMARY"; fi
+[ "$gate" = 0 ] || { echo "FAIL: the WAF score is under its baseline"; exit 1; }
 echo "OK: WAF score in $OUT"

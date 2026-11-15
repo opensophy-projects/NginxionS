@@ -380,22 +380,26 @@ export const isV1 = (doc) =>
  */
 export const fromV1 = (doc) => {
 	if (!isObject(doc)) return {};
+	// an item that is no mapping (null, a string) is passed as it is: the import and the fragment refuse it with its
+	// place (a converter would throw a TypeError, an error 500; found by scripts/fuzz.test.mjs)
+	const each = (convert) => (i) => (isObject(i) ? convert(i) : i);
 	const out = {};
 	if (isObject(doc.policies)) {
 		out.policies = {};
-		if (doc.policies.default) out.policies.default = ruleFromV1(doc.policies.default);
+		if (isObject(doc.policies.default)) out.policies.default = ruleFromV1(doc.policies.default);
+		else if (doc.policies.default) out.policies.default = doc.policies.default;
 		const rules = doc.policies["specific-rules"] ?? doc.policies.specificRules;
-		if (rules) out.policies.specificRules = list(rules).map(ruleFromV1);
+		if (rules) out.policies.specificRules = list(rules).map(each(ruleFromV1));
 	}
 	const section = (v1, v2, convert) => {
 		const items = doc[v1] ?? doc[v2];
-		if (items !== undefined) out[v2] = list(items).map((i) => (v1 in doc ? convert(i) : i));
+		if (items !== undefined) out[v2] = list(items).map((i) => (v1 in doc ? each(convert)(i) : i));
 	};
 	section("practices", "threatPreventionPractices", practiceFromV1);
 	if (doc.accessControlPractices) out.accessControlPractices = list(doc.accessControlPractices);
 	section("log-triggers", "logTriggers", triggerFromV1);
 	section("custom-responses", "customResponses", responseFromV1);
-	if (doc.exceptions !== undefined) out.exceptions = list(doc.exceptions).map(exceptionFromV1);
+	if (doc.exceptions !== undefined) out.exceptions = list(doc.exceptions).map(each(exceptionFromV1));
 	section("trusted-sources", "trustedSources", trustedFromV1);
 	section("source-identifiers", "sourcesIdentifiers", identifiersFromV1);
 	return out;
