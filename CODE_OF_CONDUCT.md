@@ -85,7 +85,6 @@ flowchart TB
         agent["Агент open-appsec (ML-WAF)<br/>127.0.0.1:7777<br/>политика /ext/appsec/local_policy.yaml"]
         storage["Shared storage<br/>127.0.0.1:7811<br/>обучение, decisions.data"]
         tuning["Tuning<br/>127.0.0.1:7813<br/>статистика, подсказки"]
-        control["nginxions-control<br/>127.0.0.1:7080<br/>Docker API по белому списку"]
 
         subgraph np["контейнер nginxions"]
             nginx["nginx (NPMplus)<br/>+ attachment open-appsec"]
@@ -95,6 +94,7 @@ flowchart TB
         end
     end
 
+    control["контейнер control: nginxions-control<br/>:7080 в сети control<br/>Docker API по белому списку"]
     crowdsec["crowdsec — официальный образ<br/>LAPI :8080, AppSec :7422"]
     postgres[("postgres — официальный образ<br/>базы nginxions и appsec")]
     init["nginxions-init — разовый при старте<br/>секреты, тома, снимок hub CrowdSec"]
@@ -116,8 +116,10 @@ flowchart TB
 - **Сети.** `edge` — порты наружу; выход в интернет только для того, что включил администратор (ACME). `internal` —
   без выхода наружу: там `crowdsec` и `postgres`.
 - **Секреты.** Их создаёт `nginxions-init` в томе `secrets`; каждый сервис монтирует только свой подкаталог.
-- **Доступ к Docker** есть только у `nginxions-control`: список, логи и перезапуск контейнеров стека, с токеном и
-  аудитом. Контейнер `nginxions`, который принимает трафик из интернета, сокета не получает.
+- **Доступ к Docker** есть только у `nginxions-control` — отдельного контейнера `control` (образ агента со своей
+  командой): список, логи и перезапуск контейнеров стека, с токеном и аудитом; корень только для чтения, без
+  capabilities, в сети `control` только с `openappsec`. Контейнеры `nginxions` и `openappsec`, которые принимают трафик
+  из интернета, сокета не получают: ошибка в nginx или агенте не даёт доступа к Docker.
 
 ### Путь запроса
 
@@ -193,10 +195,10 @@ flowchart LR
   - `nginxions-init.sh` — разовый старт: секреты, каталоги томов, офлайн-снимок hub CrowdSec
   - `postgres-init.sh` — базы и пользователи postgres при первом запуске
 - **`clamav/`**
-  - `nginxions-clamav.sh` — запуск контейнера `clamav`: clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению
+  - `nginxions-clamav.sh` — запуск контейнера `clamav` (от пользователя clamav, корень только для чтения): clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению; конфигурация clamd из `CLAMD_CONF_*` в /tmp
 - **`openappsec/`** — образ `nginxions-openappsec`
   - `Dockerfile` — агент open-appsec (C++), shared storage и tuning (Go) из исходников корневого `openappsec/`, `nginxions-control`
-  - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning, `nginxions-control`
+  - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning
   - `sources.env` — коммиты upstream open-appsec, от которых взяты исходники в `openappsec/` (для их обновления)
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
@@ -350,13 +352,14 @@ flowchart LR
     - `cert-pair.js` — загруженный сертификат и ключ должны подходить друг к другу
     - `pem.js` — сертификаты из PEM-текста за один проход (без регулярных выражений, медленных на подложенном файле)
     - `files.js` — чтение файла вместе с его stat через один дескриптор (файл не подменить между проверкой и чтением)
+    - `login-guard.js` — блокировка входа: после 5 неверных паролей (или кодов 2FA) за 15 минут учётная запись закрыта на 15 минут, с любых адресов
     - `acme.js` — certbot для ACME-сервера из настроек (регистрация аккаунта, EAB)
     - `acme-csr.js`, `acme-csr-check.js` — выпуск по своему CSR и проверки этого CSR
     - `block-page.js` — Агенты → Страница блокировки: настройки и файл страницы
     - `stream-ports.js` — один входящий порт (диапазон) на протокол у потоков
     - **`acme/`** — `servers.js` (ACME-серверы: пресеты и свои, EAB), `lego.js` (второй ACME-клиент), `certs.js` (сертификаты NPMplus с сервером из настроек)
     - **`audit/`** — `index.js`: журнал аудита со страницами и фильтрами
-    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку)
+    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
       - `lapi.js` — клиент локального API CrowdSec (LAPI)

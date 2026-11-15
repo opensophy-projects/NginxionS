@@ -21,11 +21,34 @@ for f in "$CTL"/db/*.cvd "$CTL"/db/*.cld "$CTL"/db/*.cud; do
   cp -f "$f" /var/lib/clamav/
 done
 
+# clamd and freshclam are started here, not by /init of the image: the container runs as the user clamav with a
+# read-only root filesystem and no capability (deploy/compose.yaml), and /init edits /etc/clamav and chowns as root.
+# The settings of compose (CLAMD_CONF_*) go into copies of the configuration in /tmp (tmpfs).
+conf=/tmp/clamd.conf
+fresh=/tmp/freshclam.conf
+cp /etc/clamav/clamd.conf "$conf"
+env | grep '^CLAMD_CONF_' | while IFS='=' read -r key value; do
+  name=${key#CLAMD_CONF_}
+  sed -i "/^#\{0,1\}$name /d" "$conf"
+  echo "$name $value" >> "$conf"
+done
+sed -e "s|^NotifyClamd .*|NotifyClamd $conf|" /etc/clamav/freshclam.conf > "$fresh"
+
+if [ ! -f /var/lib/clamav/main.cvd ] && [ ! -f /var/lib/clamav/main.cld ]; then
+  if [ -f "$CTL/freshclam" ]; then
+    echo "NginxionS: no signatures yet, downloading them (freshclam)"
+    sed -e '/^NotifyClamd /d' -e '$a TestDatabases no' "$fresh" > /tmp/freshclam-initial.conf
+    freshclam --foreground --stdout --config-file=/tmp/freshclam-initial.conf
+  else
+    echo "NginxionS: no signatures of ClamAV: upload main.cvd in WAF -> Agent or allow online updates" >&2
+    exit 1
+  fi
+fi
+
 if [ -f "$CTL/freshclam" ]; then
   echo "NginxionS: online updates of the signatures are on (freshclam)"
-  export CLAMAV_NO_FRESHCLAMD=false
-else
-  export CLAMAV_NO_FRESHCLAMD=true
+  freshclam --checks="${FRESHCLAM_CHECKS:-1}" --daemon --foreground --stdout --config-file="$fresh" &
 fi
-export CLAMAV_NO_MILTERD=true
-exec /init
+rm -f /tmp/clamd.sock
+echo "NginxionS: starting clamd"
+exec clamd --foreground --config-file="$conf"

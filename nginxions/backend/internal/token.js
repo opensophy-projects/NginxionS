@@ -4,6 +4,7 @@ import { parseDatePeriod } from "../lib/helpers.js";
 import authModel from "../models/auth.js";
 import TokenModel from "../models/token.js";
 import userModel from "../models/user.js";
+import { guarded } from "../nginxions/login-guard.js"; // NginxionS: lockout after wrong passwords
 import twoFactor from "./2fa.js";
 
 const ERROR_MESSAGE_INVALID_AUTH = "Invalid email or password";
@@ -27,27 +28,31 @@ export default {
 		data.scope = data.scope || "user";
 		data.expiry = data.expiry || "1d";
 
-		const user = await userModel
-			.query()
-			.where("email", data.identity.toLowerCase().trim())
-			.andWhere("is_deleted", 0)
-			.andWhere("is_disabled", 0)
-			.first();
+		// NginxionS: an account is locked after a series of wrong passwords, from whatever addresses (login-guard.js)
+		const user = await guarded("password", data.identity, async () => {
+			const user = await userModel
+				.query()
+				.where("email", data.identity.toLowerCase().trim())
+				.andWhere("is_deleted", 0)
+				.andWhere("is_disabled", 0)
+				.first();
 
-		if (!user) {
-			throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH);
-		}
+			if (!user) {
+				throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH);
+			}
 
-		const auth = await authModel.query().where("user_id", "=", user.id).where("type", "=", "password").first();
+			const auth = await authModel.query().where("user_id", "=", user.id).where("type", "=", "password").first();
 
-		if (!auth) {
-			throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH);
-		}
+			if (!auth) {
+				throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH);
+			}
 
-		const valid = await auth.verifyPassword(data.secret);
-		if (!valid) {
-			throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH, ERROR_MESSAGE_INVALID_AUTH_I18N);
-		}
+			const valid = await auth.verifyPassword(data.secret);
+			if (!valid) {
+				throw new errs.AuthError(ERROR_MESSAGE_INVALID_AUTH, ERROR_MESSAGE_INVALID_AUTH_I18N);
+			}
+			return user;
+		});
 
 		if (data.scope !== "user" && _.indexOf(user.roles, data.scope) === -1) {
 			// The scope requested doesn't exist as a role against the user,
@@ -217,10 +222,13 @@ export default {
 		}
 
 		// Verify 2FA code
-		const valid = await twoFactor.verifyForLogin(userId, code);
-		if (!valid) {
-			throw new errs.AuthError(ERROR_MESSAGE_INVALID_2FA, ERROR_MESSAGE_INVALID_2FA_I18N);
-		}
+		// NginxionS: a user is locked after a series of wrong codes (login-guard.js)
+		await guarded("2fa", userId, async () => {
+			const valid = await twoFactor.verifyForLogin(userId, code);
+			if (!valid) {
+				throw new errs.AuthError(ERROR_MESSAGE_INVALID_2FA, ERROR_MESSAGE_INVALID_2FA_I18N);
+			}
+		});
 
 		// Create full token
 		const expiryDate = parseDatePeriod(tokenExpiry);
