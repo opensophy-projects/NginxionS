@@ -56,32 +56,47 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       level: ${{ steps.level.outputs.level }}
+      suites: ${{ steps.level.outputs.suites }}
+      cpp: ${{ steps.level.outputs.cpp }}
+      go: ${{ steps.level.outputs.go }}
+      dast: ${{ steps.level.outputs.dast }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      # the files of the push or of the pull request, from the API (no deep clone); unknown: everything counts
+      - name: changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          : > changed.txt
+          case "$EVENT" in
+            push) from="$BEFORE"; to="$AFTER" ;;
+            pull_request) from="$BASE"; to="$HEAD" ;;
+            *) exit 0 ;;
+          esac
+          # a new branch has no "before"; the compare lists at most 300 files: then the whole run
+          case "$from" in ""|0000000000000000000000000000000000000000) exit 0 ;; esac
+          gh api "repos/$REPO/compare/$from...$to" --jq '.files[].filename' > changed.txt 2> /dev/null || : > changed.txt
+          [ "$(wc -l < changed.txt)" -lt 300 ] || : > changed.txt
+          echo "changed: $(wc -l < changed.txt) files"
       - id: level
         env:
+          CHANGED: changed.txt
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           INPUT: ${{ inputs.level }}
           MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          case ",$LABELS," in *,security-scan,*) labelled=1 ;; *) labelled=0 ;; esac
-          if [ "$EVENT" = pull_request ] && [ "$ACTION" = labeled ] && [ "$LABEL" != security-scan ]; then
-            level=none
-          elif [[ "$GITHUB_REF" == refs/heads/security/* ]] || { [ "$EVENT" = pull_request ] && [ "$labelled" = 1 ]; } ||
-            { [ "$EVENT" = workflow_dispatch ] && [ "$INPUT" = extended ]; }; then
-            level=extended
-          elif [ "$EVENT" = workflow_dispatch ] && [ "$INPUT" = fast ]; then
-            level=fast
-          elif [ "$EVENT" != push ] || [ "$GITHUB_REF" = refs/heads/work ] || [[ "$GITHUB_REF" == refs/tags/v* ]] ||
-            [[ "$MESSAGE" == *"[full]"* ]]; then
-            level=full
-          else
-            level=fast
-          fi
-          echo "level=$level" >> "$GITHUB_OUTPUT"
-          echo "### Глубина прогона: $level" >> "$GITHUB_STEP_SUMMARY"
+        run: node scripts/ci-level.mjs
 
   checks:
     name: Lint, types, tests
@@ -123,6 +138,12 @@ jobs:
         run: scripts/test-go.sh
       - name: converter of Snort signatures of the agent (JavaScript = Python of upstream)
         run: node --test openappsec/agent/nodes/http_transaction_handler/package/snort_to_ips_local.test.mjs
+      - name: Lua modules in nginx (File Security), with LuaJIT
+        run: |
+          sudo apt-get install -y -qq luajit > /dev/null
+          scripts/test-lua.sh
+      - name: scripts of CI (audit of the logs, depth of the run, report of smoke)
+        run: node --test scripts/*.test.mjs
       - name: file tree
         # every file of the code of NginxionS has a line in CODE_OF_CONDUCT.md
         run: node scripts/check-tree.mjs
@@ -130,7 +151,9 @@ jobs:
         # the training cycle itself (numpy, scipy) is tested in training.yml; here the formats and the data
         run: python3 -m unittest discover -s model
       - name: shell scripts
-        run: shellcheck -x -S warning scripts/*.sh deploy/*/*.sh deploy/openappsec/*/*.sh nginxions/crowdsec-seed/*.sh
+        run: |
+          shellcheck -x -S warning scripts/*.sh deploy/*/*.sh deploy/openappsec/*/*.sh nginxions/crowdsec-seed/*.sh
+          shellcheck -S warning -s sh deploy/test/smoke/*.sh
       - name: compose files
         run: |
           docker compose -f deploy/compose.yaml config -q
@@ -157,9 +180,12 @@ jobs:
           done
           # the upstream commits of the sources in openappsec/ are full commits
           . deploy/openappsec/sources.env
-          for ref in "$OPENAPPSEC_REF" "$ATTACHMENT_REF" "$SHARED_FILES_REF" "$TUNING_REF" "$SMARTSYNC_REF"; do
+          for ref in "$OPENAPPSEC_REF" "$ATTACHMENT_REF" "$SHARED_FILES_REF" "$TUNING_REF" "$SMARTSYNC_REF" "$CROWDSEC_HUB_REF"; do
             echo "$ref" | grep -qE '^[0-9a-f]{40}$' || { echo "::error file=deploy/openappsec/sources.env::not a full commit: $ref"; exit 1; }
           done
+          # the IPS signatures of the agent come from that commit of the CrowdSec hub (scripts/update-ips-signatures.mjs)
+          ips_ref=$(jq -r '.source.ref' openappsec/agent/nginxions/ips-protections.json)
+          [ "$ips_ref" = "$CROWDSEC_HUB_REF" ] || { echo "::error file=deploy/openappsec/sources.env::CROWDSEC_HUB_REF $CROWDSEC_HUB_REF != the hub of ips-protections.json $ips_ref"; exit 1; }
           # a rule of renovate.json for a file that was moved stops matching without a word
           for f in $(jq -r '.packageRules[].matchFileNames[]? | select(test("[*?]") | not)' renovate.json); do
             [ -e "$f" ] || { echo "::error file=renovate.json::matchFileNames: $f does not exist"; exit 1; }
@@ -172,6 +198,40 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+  contract:
+    name: Policy contract with the agent (published develop)
+    needs: level
+    if: needs.level.outputs.level != 'none'
+    runs-on: ubuntu-latest
+    # in a full run the contract with the agent of the build (job images) decides: the published develop may lack an
+    # agent change this branch relies on, then this job says so without failing the run
+    continue-on-error: ${{ needs.level.outputs.level != 'fast' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: latest
+      - name: the policies of this commit, given to the agent of the published develop
+        # the agent of this commit is checked the same way in "images", after its build
+        env:
+          NGINXIONS_REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
+          NGINXIONS_VERSION: develop
+        run: |
+          (cd nginxions/backend && pnpm install --frozen-lockfile > /dev/null)
+          scripts/test-policy-contract.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: policy-contract
+          path: reports/policy-contract/
+          if-no-files-found: ignore
+
   security:
     name: Security
     needs: level
@@ -179,13 +239,16 @@ jobs:
     uses: ./.github/workflows/security.yml
     with:
       level: ${{ needs.level.outputs.level }}
+      # incremental: CodeQL of C++ and Go only when their code changed (the extended and weekly runs: always)
+      cpp: ${{ needs.level.outputs.cpp == 'true' }}
+      go: ${{ needs.level.outputs.go == 'true' }}
     permissions:
       contents: read
       security-events: write
       actions: read
 
   images:
-    name: Images (amd64) + closed-network test + image scan + DAST
+    name: "Images (amd64): build, policy contract, image scan"
     needs: [level, checks]
     # the full and the extended run (see the head of this file); other branches stop after the fast checks
     if: needs.level.outputs.level == 'full' || needs.level.outputs.level == 'extended'
@@ -197,6 +260,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # the policy contract runs modules of the backend
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: latest
       - name: versions
         run: |
           v="$(git rev-parse --short HEAD)"
@@ -235,25 +302,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=openappsec-amd64
           # smartsync (central learning) is not built: it needs a Fog token the agent lacks in local-only
           # mode. NginxionS learns locally; see docs/adr/0011-learning.md.
-      - name: closed-network test (full stack)
+      - name: policy contract with the agent of this build
         env:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
           NGINXIONS_VERSION: ${{ env.VERSION }}
-        run: scripts/test-airgap.sh
+          OUT: reports/policy-contract
+        run: |
+          (cd nginxions/backend && pnpm install --frozen-lockfile > /dev/null)
+          scripts/test-policy-contract.sh
       - name: image scan (Trivy, Syft SBOM, Grype, Dockle)
         env:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
           NGINXIONS_VERSION: ${{ env.VERSION }}
           OUT: reports/images
         run: scripts/scan-images.sh
-      - name: DAST (OWASP ZAP, Nuclei, testssl.sh, gixy; extended also Schemathesis and runtime checks)
-        timeout-minutes: ${{ needs.level.outputs.level == 'extended' && 150 || 50 }}
-        env:
-          DAST_LEVEL: ${{ needs.level.outputs.level }}
-          NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
-          NGINXIONS_VERSION: ${{ env.VERSION }}
-          OUT: reports/dast
-        run: scripts/test-dast.sh
       # accepted risks of the images leave the SARIF of code scanning (docs/DEVSECOPS.md); the report keeps them
       - name: accepted risks out of the SARIF of the images
         if: always()
@@ -280,8 +342,103 @@ jobs:
           name: security-images
           path: reports/
           if-no-files-found: ignore
+      - name: the images for the tests of the stack
+        run: |
+          docker save "docker.io/$NAMESPACE/nginxions:$VERSION" "docker.io/$NAMESPACE/nginxions-openappsec:$VERSION" \
+            | zstd -T0 -3 -q -o images.tar.zst
+          ls -lh images.tar.zst
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images
+          path: images.tar.zst
+          retention-days: 1
+          compression-level: 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: tests-policy-contract
+          path: reports/policy-contract/
+          if-no-files-found: ignore
+
+  stack:
+    name: Stack test (${{ matrix.suite }})
+    needs: [level, images]
+    # every test of the stack on a machine of its own, in parallel (scripts/ci-stack.sh); a failed one stops no other
+    strategy:
+      fail-fast: false
+      matrix:
+        # all of them, or those of the message ([smoke:waf], [dast]...: scripts/ci-level.mjs)
+        suite: ${{ fromJSON(needs.level.outputs.suites) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.level.outputs.level == 'extended' && 160 || 60 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+      - name: images of the build
+        run: |
+          echo "VERSION=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          zstd -d -q -c images.tar.zst | docker load
+          rm images.tar.zst
+      - name: ${{ matrix.suite }}
+        env:
+          DAST_LEVEL: ${{ needs.level.outputs.level }}
+          NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          FROM_REGISTRY: docker.io/${{ env.NAMESPACE }}
+          FROM_VERSION: develop
+          SUITE: ${{ matrix.suite }}
+        run: NGINXIONS_VERSION="$VERSION" scripts/ci-stack.sh "$SUITE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          # DAST is a security check: its results go into the security report (artifacts security-*)
+          name: ${{ matrix.suite == 'dast' && 'security-dast' || format('tests-{0}', matrix.suite) }}
+          path: reports/
+          if-no-files-found: ignore
+
+  publish:
+    name: Security gate${{ github.event_name == 'push' && ' + publish' || '' }}
+    needs: [level, images, stack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # keyless signatures (cosign) and the attestations of GitHub (SLSA provenance, SBOM) of the published images
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: security-*
+          path: reports
+          merge-multiple: true
       - name: security gate (nothing is pushed with a blocking finding)
-        run: node scripts/security-report.mjs --in reports --scope images,dast --expect images,dast
+        env:
+          # DAST is expected when it ran (a run of chosen tests of the stack may leave it out)
+          EXPECT: images${{ needs.level.outputs.dast == 'true' && ',dast' || '' }}
+        run: node scripts/security-report.mjs --in reports --scope images,dast --expect "$EXPECT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: env.PUBLISH == 'true'
+        with:
+          name: images
+      - name: images of the build
+        if: env.PUBLISH == 'true'
+        run: |
+          echo "VERSION=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          zstd -d -q -c images.tar.zst | docker load
       - name: docker.io login
         if: env.PUBLISH == 'true'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -306,6 +463,61 @@ jobs:
             fi
           done
 
+      # what was published can be checked: built here, from this commit, not replaced (docs/DEVSECOPS.md, "Подпись")
+      #   gh attestation verify oci://docker.io/<ns>/<image>:<tag> --repo <owner>/<repo>
+      #   cosign verify docker.io/<ns>/<image>:<tag> --certificate-identity-regexp 'https://github.com/<owner>/<repo>/' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: digests of the published images
+        if: env.PUBLISH == 'true'
+        id: digests
+        run: |
+          for img in nginxions nginxions-openappsec; do
+            digest=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "docker.io/$NAMESPACE/$img:$VERSION" \
+              | grep -m1 "^docker.io/$NAMESPACE/$img@" | cut -d@ -f2)
+            [ -n "$digest" ] || digest=$(docker inspect --format '{{index .RepoDigests 0}}' "docker.io/$NAMESPACE/$img:$VERSION" | cut -d@ -f2)
+            echo "${img//-/_}=$digest" >> "$GITHUB_OUTPUT"
+            echo "$img@$digest"
+          done
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+      - name: sign (cosign, keyless)
+        if: env.PUBLISH == 'true'
+        env:
+          NGINXIONS_DIGEST: ${{ steps.digests.outputs.nginxions }}
+          APPSEC_DIGEST: ${{ steps.digests.outputs.nginxions_openappsec }}
+        run: |
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions@$NGINXIONS_DIGEST"
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions-openappsec@$APPSEC_DIGEST"
+      - name: provenance of nginxions (SLSA)
+        if: env.PUBLISH == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions
+          subject-digest: ${{ steps.digests.outputs.nginxions }}
+          push-to-registry: true
+      - name: provenance of nginxions-openappsec (SLSA)
+        if: env.PUBLISH == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions-openappsec
+          subject-digest: ${{ steps.digests.outputs.nginxions_openappsec }}
+          push-to-registry: true
+      - name: SBOM of nginxions as an attestation
+        if: env.PUBLISH == 'true' && hashFiles('reports/images/sbom-nginxions.spdx.json') != ''
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions
+          subject-digest: ${{ steps.digests.outputs.nginxions }}
+          sbom-path: reports/images/sbom-nginxions.spdx.json
+          push-to-registry: true
+      - name: SBOM of nginxions-openappsec as an attestation
+        if: env.PUBLISH == 'true' && hashFiles('reports/images/sbom-nginxions-openappsec.spdx.json') != ''
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: docker.io/${{ env.NAMESPACE }}/nginxions-openappsec
+          subject-digest: ${{ steps.digests.outputs.nginxions_openappsec }}
+          sbom-path: reports/images/sbom-nginxions-openappsec.spdx.json
+          push-to-registry: true
   nginxions-arm64:
     name: nginxions image (arm64)
     needs: [level, checks]
@@ -363,9 +575,12 @@ jobs:
 
   nginxions-manifest:
     name: nginxions multi-arch manifest
-    needs: [images, nginxions-arm64]
+    needs: [publish, nginxions-arm64]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: docker.io login
         if: env.PUBLISH == 'true'
@@ -385,6 +600,17 @@ jobs:
             docker buildx imagetools create -t "docker.io/$NAMESPACE/nginxions:$t" \
               "docker.io/$NAMESPACE/nginxions:$t-amd64" "docker.io/$NAMESPACE/nginxions:$t-arm64"
           done
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+      - name: sign the multi-arch manifest (cosign, keyless)
+        if: env.PUBLISH == 'true'
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) t="${GITHUB_REF#refs/tags/v}" ;;
+            *) t="develop" ;;
+          esac
+          digest=$(docker buildx imagetools inspect "docker.io/$NAMESPACE/nginxions:$t" --format '{{json .Manifest}}' | jq -r .digest)
+          cosign sign --yes "docker.io/$NAMESPACE/nginxions@$digest"
 
   appsec-arm64:
     name: nginxions-openappsec image (arm64, experimental)
@@ -411,7 +637,7 @@ jobs:
 
   report:
     name: Security report
-    needs: [level, checks, security, images]
+    needs: [level, checks, security, images, stack]
     if: always() && needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
     permissions:
@@ -431,7 +657,8 @@ jobs:
         env:
           # the images and DAST are expected only when the images were built, the heavy checks only in the extended run
           EXPECT: >-
-            ${{ needs.images.result == 'skipped' && 'source' || 'source,images,dast' }}${{
+            ${{ needs.images.result == 'skipped' && 'source' || (needs.level.outputs.dast == 'true' && 'source,images,dast' ||
+            'source,images') }}${{
             needs.level.outputs.level == 'extended' && (needs.images.result == 'skipped' && ',published' ||
             ',published,extended') || '' }}
         run: node scripts/security-report.mjs --in reports --out security-report --summary "$GITHUB_STEP_SUMMARY" --expect "$EXPECT"

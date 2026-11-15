@@ -65,16 +65,25 @@ export interface DefaultPolicy extends RuleRefs {
 	mode: PolicyMode;
 }
 
+/** what the agent applies compared with the generated policy (backend waf/applied.js) */
+export interface AppliedCheck {
+	status: "ok" | "drift" | "pending" | "unknown";
+	/** "asset:<host>", "response:<name>", "rate-limit:<practice>" */
+	drift?: string[];
+	modifiedAt?: string | null;
+	error?: string;
+}
+
 interface PolicyState {
 	file: string;
 	generatedAt: string | null;
 	hosts: number;
-	format: "v1beta1" | "v1beta2" | null;
-	/** what needs v1beta2: "rate-limit:<name>", "redirect:<name>", "ips:<name>", "file-security:<name>" */
-	reasons: string[];
-	/** "exceptions:<rule>" (v1beta2 applies the first one), "missing:<rule>:<name>" */
+	/** always v1beta2: the agent of NginxionS applies every field of it (docs/WAF-POLICY.md) */
+	format: "v1beta2" | null;
+	/** "missing:<rule>:<name>", "extra:<rule>:<field>" (the agent takes the first), "unsupported:<object>:<engine>" */
 	warnings: string[];
 	applied: { ok: boolean; at: string; error: string | null } | null;
+	check?: AppliedCheck;
 }
 
 export interface PolicyObjects {
@@ -89,14 +98,40 @@ export interface DiffLine {
 	line: string;
 }
 
+/** dry run of a change on recent WAF events (backend waf/objects/simulate.js) */
+export interface Simulation {
+	/** trial: the hours of a trial of blocking on a host */
+	period: "1h" | "24h" | "7d" | "trial";
+	error?: string;
+	limited?: boolean;
+	events?: number;
+	changed?: number;
+	toPass?: number;
+	toBlock?: number;
+	toDetect?: number;
+	/** events the dry run cannot judge (a condition the events do not record, e.g. the country code) */
+	unknown?: number;
+	samples?: {
+		host: string;
+		uri: string;
+		source_ip: string;
+		time: string;
+		confidence: string;
+		before: Verdict;
+		after: Verdict;
+		count: number;
+	}[];
+}
+export type Verdict = "pass" | "detect" | "block";
+
 export interface Preview {
 	valid: boolean;
 	error?: string;
 	changed?: boolean;
 	diff?: DiffLine[];
-	format?: "v1beta1" | "v1beta2";
-	reasons?: string[];
+	format?: "v1beta2";
 	warnings?: string[];
+	simulation?: Simulation | null;
 }
 
 export type Change =
@@ -128,6 +163,8 @@ export interface ImportResult {
 	update: string[];
 	skipped: string[];
 	errors: string[];
+	/** left out on purpose: Kubernetes, the cloud, engines of the Premium edition, extra practices of a rule */
+	dropped: string[];
 	policy: Record<string, any> | null;
 	rules: number;
 	state?: PolicyState;
@@ -150,6 +187,33 @@ const request = async <T>(method: string, url: string, data?: unknown): Promise<
 	}
 	return payload as T;
 };
+
+/** an OpenAPI file of schemaValidation */
+export interface SchemaFile {
+	name: string;
+	size: number;
+	modifiedOn: string;
+	version: string;
+	title: string;
+	paths: number;
+	/** practices that name it */
+	usedBy: string[];
+}
+export const getSchemaFiles = () => request<SchemaFile[]>("GET", "/schemas");
+export const uploadSchemaFile = async (name: string, file: Blob) => {
+	const response = await fetch(`/api/nginxions/waf/policy/schemas/${encodeURIComponent(name)}`, {
+		method: "PUT",
+		headers: { "Content-Type": "application/octet-stream" },
+		body: file,
+	});
+	if (isNotJson(response)) throw notJsonError(response);
+	const payload = await response.json();
+	if (!response.ok) throw new Error(payload?.error?.message || response.statusText);
+	return payload as SchemaFile;
+};
+export const deleteSchemaFile = (name: string) => request<boolean>("DELETE", `/schemas/${encodeURIComponent(name)}`);
+export const downloadSchemaFile = (name: string) =>
+	base.download({ url: `/nginxions/waf/policy/schemas/${encodeURIComponent(name)}` }, name);
 
 export const getPolicyObjects = () => request<PolicyObjects>("GET", "/objects");
 export const createObject = (data: ObjectInput) =>

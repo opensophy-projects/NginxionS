@@ -2,8 +2,8 @@
 //
 // The source of truth is the database: objects of the policy (nginxions_waf_object, the default policy),
 // WAF settings of proxy hosts and locations (nginxions_waf_host / nginxions_waf_location). The file is
-// generated on every change and is never edited by hand; it is v1beta1 (as open-appsec-npm) unless
-// the policy needs v1beta2 (objects/format.js). Rules keep the names of open-appsec-npm
+// generated on every change and is never edited by hand; it is v1beta2, which the agent of NginxionS applies
+// completely (docs/WAF-POLICY.md, objects/format.js). Rules keep the names of open-appsec-npm
 // (npm-managed-specific-rule-proxyhost-<id>), so an installation of open-appsec-npm is imported as is.
 //
 // The agent sees the file through the shared volume (/ext/appsec in both containers, symlinked by
@@ -17,8 +17,13 @@ import YAML from "yaml";
 import db from "../../db.js";
 import { debug, global as logger } from "../../logger.js";
 import { getCurrentCustom, mergeCustom, parseCustom } from "./custom.js";
-import { asV2, danglingRefs, needsV2, toV1 } from "./objects/format.js";
+import { appsecRules, forAgent, schemaFiles, setEngines } from "./engines.js";
+import { applyFiles } from "./files.js";
+import { asV2, danglingRefs, extraRefs } from "./objects/format.js";
+import { UNSUPPORTED_ENGINES } from "./objects/model.js";
 import { buildDoc, seedBuiltins } from "./objects/store.js";
+import { listSchemas } from "./schemas.js";
+import { applyRelays, withRelays } from "./syslog.js";
 
 const POLICY_FILE = process.env.NGINXIONS_APPSEC_POLICY_FILE || "/ext/appsec/local_policy.yaml";
 const BACKUP_DIR = "/data/nginxions/waf/policy-backups";
@@ -35,8 +40,7 @@ const MODES = ["detect-learn", "prevent-learn"];
 const CONFIDENCES = ["medium", "high", "critical"];
 
 /**
- * The policy to write: built from the objects (objects/store.js), the expert fragment merged over it,
- * in v1beta1 unless it uses what only v1beta2 has (objects/format.js).
+ * The policy to write: built from the objects (objects/store.js), the expert fragment merged over it, in v1beta2.
  * @param   {{custom?: object, candidate?: object}} [options]  parsed expert fragment instead of the one
  *   in force; objects, default policy or objects of hosts instead of the stored ones (store.buildDoc)
  * @returns {Promise<{policy: object, doc: object, hosts: number, customId: number|null,
@@ -63,18 +67,36 @@ const buildPolicy = async ({ custom, candidate } = {}) => {
 			}
 		}
 	}
-	const reasons = needsV2(merged);
-	const format = reasons.length ? "v1beta2" : "v1beta1";
+	const appsec = appsecRules(merged);
+	// syslog and CEF the agent cannot send itself (several servers, a name, IPv6) go through a relay of NginxionS
+	const { doc: forLogs, relays } = withRelays(forAgent(merged));
+	const stored = new Set((await listSchemas().catch(() => [])).map((f) => f.name));
 	return {
-		policy: format === "v1beta2" ? asV2(merged) : toV1(merged),
+		// the engines CrowdSec runs (antiBot, schemaValidation) and File Security are off for the agent
+		policy: asV2(forLogs),
+		appsec,
+		relays,
 		doc: merged,
 		hosts,
 		customId,
-		format,
-		reasons,
+		format: "v1beta2",
+		// kept for the clients of the API: why the file is v1beta2 (it always is)
+		reasons: [],
 		warnings: [
 			// names the agent will not find (an expert fragment refers to a renamed or deleted object)
 			...danglingRefs(merged).map((ref) => `missing:${ref}`),
+			// the agent takes the first practice or trigger of a list
+			...extraRefs(merged).map((ref) => `extra:${ref}`),
+			// an OpenAPI file of schemaValidation NginxionS does not have (deleted, or an imported policy)
+			...schemaFiles(appsec)
+				.filter((f) => !stored.has(f))
+				.map((f) => `schema-missing:${f}`),
+			// engines saved before they were refused (docs/WAF-POLICY.md): the agent does nothing with them
+			...(merged.threatPreventionPractices || []).flatMap((p) =>
+				UNSUPPORTED_ENGINES.filter((e) => p[e]?.overrideMode && p[e].overrideMode !== "inactive").map(
+					(e) => `unsupported:${p.name}:${e}`,
+				),
+			),
 		],
 	};
 };
@@ -114,6 +136,12 @@ const writeAtomic = async (content) => {
 	await writeFile(tmp, content, { mode: 0o644 });
 	await rename(tmp, POLICY_FILE);
 };
+
+// the policy generated last (objects/format.js terms) and when the file last changed: checked against what the
+// agent applies (applied.js)
+let lastDoc = null;
+let lastChangedAt = null;
+export const getLastPolicy = () => ({ doc: lastDoc, changedAt: lastChangedAt });
 
 const state = {
 	generatedAt: null,
@@ -174,7 +202,9 @@ function retryNotify() {
  * @returns {Promise<{changed: boolean, hosts: number}>}
  */
 const regenerate = async ({ force = false } = {}) => {
-	const { policy, hosts, customId, format, reasons, warnings } = await buildPolicy();
+	const { policy, appsec, relays, doc, hosts, customId, format, reasons, warnings } = await buildPolicy();
+	// before the agent reads the policy: its messages find the relay up
+	applyRelays(relays);
 	const content = render(policy, customId !== null);
 	const current = await readPolicyFile();
 	const changed = current !== content;
@@ -184,7 +214,9 @@ const regenerate = async ({ force = false } = {}) => {
 		}
 		await writeAtomic(content);
 		logger.info(`WAF policy generated: ${hosts} protected host(s)`);
+		lastChangedAt = new Date().toISOString();
 	}
+	lastDoc = doc;
 	state.generatedAt = new Date().toISOString();
 	state.hosts = hosts;
 	state.format = format;
@@ -193,6 +225,19 @@ const regenerate = async ({ force = false } = {}) => {
 	if (changed || force) {
 		retries = 0;
 		await notifyAgent();
+	}
+	// File Security: the hosts that check uploads with ClamAV, and clamd itself
+	try {
+		await applyFiles(doc);
+	} catch (err) {
+		logger.error(`WAF: File Security was not applied: ${err.message}`);
+	}
+	// antiBot and schemaValidation run in AppSec of CrowdSec: its appsec-config follows the policy
+	if (setEngines(appsec)) {
+		const { applyPolicyEngines } = await import("../crowdsec/index.js");
+		applyPolicyEngines().catch((err) =>
+			logger.error(`WAF: the engines of CrowdSec were not applied: ${err.message}`),
+		);
 	}
 	return { changed, hosts };
 };

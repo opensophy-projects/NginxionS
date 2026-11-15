@@ -11,6 +11,7 @@ const MAX_PEM = 64 * 1024;
 const run = promisify(execFile);
 
 export const pemBlock = (text, label) => {
+	// nosemgrep: nginxions-regexp-from-variable -- label is a constant of the callers (CERTIFICATE REQUEST, ...)
 	const m = String(text ?? "").match(new RegExp(`-----BEGIN ${label}-----[\\s\\S]+?-----END ${label}-----`));
 	return m ? `${m[0]}\n` : null;
 };

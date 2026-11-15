@@ -1,10 +1,7 @@
 // local_policy.yaml of open-appsec in its two syntaxes. NginxionS keeps the policy in the terms of
-// v1beta2 (camelCase, the objects of the policy editor); the agent gets v1beta1 unless the policy
-// uses what only v1beta2 has (docs/adr/0008-waf-policy.md):
-//   - v1beta1 applies every exception of a rule, v1beta2 only the first (policy_maker_utils.cc);
-//   - v1beta2 adds rate limits (access control practices), redirect responses, IPS and file
-//     security (the last two need the Premium edition of the agent).
-// Pure functions, no database.
+// v1beta2 (camelCase, the objects of the policy editor) and the agent always gets v1beta2: the agent of NginxionS
+// applies every field of it (docs/WAF-POLICY.md). v1beta1 is read (open-appsec-npm, old expert fragments) and
+// written for an export only. Pure functions, no database.
 
 const SECTIONS_V2 = [
 	"threatPreventionPractices",
@@ -224,7 +221,8 @@ const responseFromV1 = (r) =>
 		redirectAddXEventId: r.redirectAddXEventId,
 	});
 
-export const EXCEPTION_KEYS = [
+/** keys of a condition of an exception in v1beta2 (and v1beta1) */
+export const V2_EXCEPTION_KEYS = [
 	"countryCode",
 	"countryName",
 	"hostName",
@@ -236,11 +234,34 @@ export const EXCEPTION_KEYS = [
 	"url",
 ];
 
+/**
+ * Keys the WAF of the agent matches an exception on (Waf2Transaction::getExceptionsDict): those of v1beta2 and the
+ * extension x-nginxions (docs/WAF-POLICY.md 5.2). Header names and values are compared in lower case.
+ */
+export const EXCEPTION_KEYS = [
+	...V2_EXCEPTION_KEYS,
+	"method",
+	"headerName",
+	"headerValue",
+	"paramLocation",
+	"indicator",
+];
+
+/** operators of a condition (x-nginxions): equals when absent; exist has no value */
+export const EXCEPTION_OPS = ["equals", "not-equals", "in", "not-in", "exist"];
+
+/**
+ * An exception that uses the extension x-nginxions: a key or an operator of NginxionS. The agent of open-appsec
+ * reads its operators as equals and drops the keys, so such an exception means something else there.
+ */
+export const usesExtension = (e) =>
+	list(e?.condition).some((c) => !V2_EXCEPTION_KEYS.includes(c?.key) || !["equals", "in", undefined].includes(c?.op));
+
 /** v1beta2 conditions [{key, value}] → v1beta1 lists per key (values of a key: any; keys: all) */
 const exceptionToV1 = (e) => {
 	const out = { name: e.name, action: e.action };
 	for (const { key, value } of list(e.condition)) {
-		if (!EXCEPTION_KEYS.includes(key)) continue;
+		if (!V2_EXCEPTION_KEYS.includes(key)) continue;
 		out[key] = [...(out[key] || []), String(value)];
 	}
 	return out;
@@ -249,7 +270,7 @@ const exceptionToV1 = (e) => {
 /** accepts both forms: v1beta1 lists per key and v1beta2 conditions */
 const exceptionFromV1 = (e) => {
 	const condition = list(e.condition).filter((c) => isObject(c) && c.key !== undefined);
-	for (const key of EXCEPTION_KEYS) {
+	for (const key of V2_EXCEPTION_KEYS) {
 		for (const value of list(e[key])) condition.push({ key, value: String(value) });
 	}
 	return defined({ name: e.name, action: e.action ?? "accept", condition });
@@ -284,7 +305,7 @@ const identifiersFromV1 = (s) => ({
 // ---------------------------------------------------------------- documents
 
 /**
- * A v1beta2 document as v1beta1 (what v1beta1 lacks is left out: check needsV2 first).
+ * A v1beta2 document as v1beta1, for an export (what v1beta1 lacks is left out).
  * @param {object} doc
  */
 const PROTECTIONS = ["csrfProtection", "errorDisclosure", "openRedirect"];
@@ -336,7 +357,10 @@ export const toV1 = (input) => {
 		practices: list(doc.threatPreventionPractices).map(practiceToV1),
 		"log-triggers": list(doc.logTriggers).map(triggerToV1),
 		"custom-responses": list(doc.customResponses).map(responseToV1),
-		exceptions: list(doc.exceptions).map(exceptionToV1),
+		// v1beta1 has no operators and fewer keys: an exception of the extension is left out (export names it)
+		exceptions: list(doc.exceptions)
+			.filter((e) => !usesExtension(e))
+			.map(exceptionToV1),
 		"trusted-sources": list(doc.trustedSources).map(trustedToV1),
 		"source-identifiers": list(doc.sourcesIdentifiers).map(identifiersToV1),
 	});
@@ -356,55 +380,47 @@ export const isV1 = (doc) =>
  */
 export const fromV1 = (doc) => {
 	if (!isObject(doc)) return {};
+	// an item that is no mapping (null, a string) is passed as it is: the import and the fragment refuse it with its
+	// place (a converter would throw a TypeError, an error 500; found by scripts/fuzz.test.mjs)
+	const each = (convert) => (i) => (isObject(i) ? convert(i) : i);
 	const out = {};
 	if (isObject(doc.policies)) {
 		out.policies = {};
-		if (doc.policies.default) out.policies.default = ruleFromV1(doc.policies.default);
+		if (isObject(doc.policies.default)) out.policies.default = ruleFromV1(doc.policies.default);
+		else if (doc.policies.default) out.policies.default = doc.policies.default;
 		const rules = doc.policies["specific-rules"] ?? doc.policies.specificRules;
-		if (rules) out.policies.specificRules = list(rules).map(ruleFromV1);
+		if (rules) out.policies.specificRules = list(rules).map(each(ruleFromV1));
 	}
 	const section = (v1, v2, convert) => {
 		const items = doc[v1] ?? doc[v2];
-		if (items !== undefined) out[v2] = list(items).map((i) => (v1 in doc ? convert(i) : i));
+		if (items !== undefined) out[v2] = list(items).map((i) => (v1 in doc ? each(convert)(i) : i));
 	};
 	section("practices", "threatPreventionPractices", practiceFromV1);
 	if (doc.accessControlPractices) out.accessControlPractices = list(doc.accessControlPractices);
 	section("log-triggers", "logTriggers", triggerFromV1);
 	section("custom-responses", "customResponses", responseFromV1);
-	if (doc.exceptions !== undefined) out.exceptions = list(doc.exceptions).map(exceptionFromV1);
+	if (doc.exceptions !== undefined) out.exceptions = list(doc.exceptions).map(each(exceptionFromV1));
 	section("trusted-sources", "trustedSources", trustedFromV1);
 	section("source-identifiers", "sourcesIdentifiers", identifiersFromV1);
 	return out;
 };
 
-/** the active ("not inactive") state of a mode of v1beta2 */
-const active = (mode) => mode !== undefined && mode !== "inactive";
+/** fields of a rule that name one object each for the agent: it takes the first of a list (policy_maker_utils.cc) */
+const SINGLE_IN_AGENT = ["threatPreventionPractices", "accessControlPractices", "triggers"];
 
 /**
- * Why a v1beta2 document can't be written as v1beta1 (empty: it can).
- * @returns {string[]} reasons
+ * Lists of a rule the agent reads the first item of only: "<rule>:<field>". The GUI keeps one; an expert fragment
+ * or an old version may hold more.
  */
-export const needsV2 = (doc) => {
-	const reasons = [];
-	const rules = [doc.policies?.default, ...list(doc.policies?.specificRules)].filter(Boolean);
-	const used = (field) => new Set(rules.flatMap((r) => (Array.isArray(r[field]) ? r[field] : [r[field]])));
-	const accessUsed = used("accessControlPractices");
-	for (const p of list(doc.accessControlPractices)) {
-		if (accessUsed.has(p.name) && active(p.rateLimit?.overrideMode) && list(p.rateLimit?.rules).length) {
-			reasons.push(`rate-limit:${p.name}`);
+export const extraRefs = (doc) => {
+	const out = [];
+	for (const rule of [doc.policies?.default, ...list(doc.policies?.specificRules)]) {
+		if (!rule) continue;
+		for (const field of SINGLE_IN_AGENT) {
+			if (Array.isArray(rule[field]) && rule[field].length > 1) out.push(`${rule.name || "default"}:${field}`);
 		}
 	}
-	const responses = used("customResponse");
-	for (const r of list(doc.customResponses)) {
-		if (responses.has(r.name) && r.mode === "redirect") reasons.push(`redirect:${r.name}`);
-	}
-	const practices = used("threatPreventionPractices");
-	for (const p of list(doc.threatPreventionPractices)) {
-		if (!practices.has(p.name)) continue;
-		if (active(p.intrusionPrevention?.overrideMode)) reasons.push(`ips:${p.name}`);
-		if (active(p.fileSecurity?.overrideMode)) reasons.push(`file-security:${p.name}`);
-	}
-	return reasons;
+	return out;
 };
 
 /** fields of a rule → the section its names are in */
@@ -443,53 +459,31 @@ export const danglingRefs = (doc) => {
 };
 
 /**
- * A v1beta2 document ready to write: apiVersion first; every rule names its practices (the agent
- * requires both keys, new_appsec_policy_crd_parser.cc; an empty list takes those of the default rule).
- * The agent keeps the rate limit of an access control practice once, for the last rule that uses it
- * (policy_maker_utils.cc, keyed by the name): every further rule gets a copy "<practice>.<n>".
- * The default rule names no practice that limits nothing (no rules, or inactive): the agent takes the first
- * rate limit whose context matches the asset (config.cc), and the one of the default rule, context All(), is
- * written first, so an inactive one there turned off the rate limits of every host.
+ * A v1beta2 document ready to write: apiVersion first; every rule names its practices (the agent requires both
+ * keys, new_appsec_policy_crd_parser.cc; an empty list takes those of the default rule). The agent of NginxionS keeps
+ * a rate limit per asset and writes the one of the default rule last: no copies of practices are needed.
+ * The default rule names no practice that limits nothing (no rules, or inactive): it would only add an inactive
+ * rate limit for every host (context All()) to the configuration of the agent.
  */
 export const asV2 = (doc) => {
 	if (!isObject(doc.policies)) return { apiVersion: "v1beta2", ...doc };
 	const practices = new Map(list(doc.accessControlPractices).map((p) => [p.name, p]));
-	const limits = (name) => list(practices.get(name)?.rateLimit?.rules).length > 0;
-	const inert = (name) => !limits(name) || practices.get(name)?.rateLimit?.overrideMode === "inactive";
-	const defaults = doc.policies.default || {};
-	const used = new Map();
-	const copies = [];
-	const mandatory = (rule, isDefault) => {
-		let access = rule.accessControlPractices ?? [];
-		if (isDefault) access = access.filter((name) => !inert(name));
-		// inherited rate limits made explicit, so that the copies below apply to them too
-		if (!isDefault && !access.length && list(defaults.accessControlPractices).some(limits)) {
-			access = defaults.accessControlPractices;
-		}
-		access = access.map((name) => {
-			if (!limits(name)) return name;
-			const n = used.get(name) ?? 0;
-			used.set(name, n + 1);
-			if (n === 0) return name;
-			const copy = { ...structuredClone(practices.get(name)), name: `${name}.${n}` };
-			copies.push(copy);
-			return copy.name;
-		});
-		return {
-			...rule,
-			threatPreventionPractices: rule.threatPreventionPractices ?? [],
-			accessControlPractices: access,
-		};
-	};
+	const inert = (name) =>
+		!list(practices.get(name)?.rateLimit?.rules).length ||
+		practices.get(name)?.rateLimit?.overrideMode === "inactive";
+	const mandatory = (rule, isDefault = false) => ({
+		...rule,
+		threatPreventionPractices: rule.threatPreventionPractices ?? [],
+		accessControlPractices: (rule.accessControlPractices ?? []).filter((name) => !isDefault || !inert(name)),
+	});
 	return {
 		apiVersion: "v1beta2",
 		...doc,
 		policies: {
 			...doc.policies,
-			default: mandatory(defaults, true),
-			specificRules: list(doc.policies.specificRules).map((rule) => mandatory(rule, false)),
+			default: mandatory(doc.policies.default || {}, true),
+			specificRules: list(doc.policies.specificRules).map(mandatory),
 		},
-		accessControlPractices: [...list(doc.accessControlPractices), ...copies],
 	};
 };
 

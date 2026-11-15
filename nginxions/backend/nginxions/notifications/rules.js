@@ -29,6 +29,10 @@ export const RULE_TYPES = {
 	host_problem: { params: {}, severity: "warning" },
 	// groups of events in the queue of learning (Agents → open-appsec → Learning), last 24 h
 	learning_queue: { params: { threshold: int(1, 100000, 1) }, severity: "warning" },
+	// trials of blocking on hosts (Agents → open-appsec → Learning) that ended and wait for a decision
+	waf_trial: { params: {}, severity: "info" },
+	// a sharp shift of what the agent counts as normal on an asset between two snapshots of learning (poisoning?)
+	learning_shift: { params: {}, severity: "warning" },
 	// short-lived client certificates renewed by NginxionS (auto renewal by link): the one-time link of the new .p12
 	pki_reissued: { params: {}, severity: "info" },
 };
@@ -116,6 +120,26 @@ const TEXT = {
 		ru: (v) => ({
 			title: `Обучение: ${v.count} групп(ы) событий на разметку`,
 			text: `Агент WAF не уверен в ${v.count} групп(ах) запросов за последние 24 ч (заблокированы или со средней оценкой). Разметьте их в «Агенты → open-appsec → Обучение»: легитимное перестанет блокироваться, атаки не попадут в обучение.`,
+		}),
+	},
+	waf_trial: {
+		en: (v) => ({
+			title: `Trial of blocking on ${v.name} is over`,
+			text: `In ${v.hours} h of the trial the WAF saw ${v.events} event(s) of ${v.name}: blocking would have blocked ${v.toBlock} more, ${v.toPass} would pass. Agents → open-appsec → Learning shows the report and switches the host to blocking.`,
+		}),
+		ru: (v) => ({
+			title: `Пробный режим блокировки на ${v.name} завершён`,
+			text: `За ${v.hours} ч пробного режима WAF записал ${v.events} событий хоста ${v.name}: блокировка дополнительно заблокировала бы ${v.toBlock}, пропустила бы ${v.toPass}. Отчёт и переключение хоста в блокировку — в «Агенты → open-appsec → Обучение».`,
+		}),
+	},
+	learning_shift: {
+		en: (v) => ({
+			title: `Learning: the norm of ${v.asset} ${v.direction === "growth" ? "grew" : "shrank"} sharply`,
+			text: `What the WAF agent counts as normal on ${v.asset} went from ${v.before} to ${v.after} learned values between two snapshots (${v.takenOn}). A sudden growth can be poisoning: attacks learned as normal traffic. Agents → open-appsec → Learning → Snapshots compares them and restores an earlier one.`,
+		}),
+		ru: (v) => ({
+			title: `Обучение: норма ${v.asset} резко ${v.direction === "growth" ? "выросла" : "уменьшилась"}`,
+			text: `То, что агент WAF считает нормой на ${v.asset}, изменилось с ${v.before} до ${v.after} выученных значений между двумя снимками (${v.takenOn}). Резкий рост может быть отравлением: атаки выучены как обычный трафик. Сравнение и откат к раннему снимку — «Агенты → open-appsec → Обучение → Снимки».`,
 		}),
 	},
 };
@@ -331,6 +355,40 @@ const CHECKS = {
 					const prev = old.find((o) => o.replaced_by === r.id);
 					return prev ? new Date(prev.not_after).toISOString().slice(0, 16).replace("T", " ") : "—";
 				})(),
+			},
+		}));
+	},
+	waf_trial: async () => {
+		const rows = await db()("nginxions_waf_trial as t")
+			.join("proxy_host as h", "h.id", "t.proxy_host_id")
+			.where("t.outcome", "")
+			.whereNotNull("t.finished_on")
+			.select("t.id", "t.started_on", "t.ends_on", "t.report", "h.domain_names");
+		return rows.map((r) => {
+			const report = parseJson(r.report || "{}");
+			const domains = parseJson(r.domain_names);
+			return {
+				key: `waf-trial:${r.id}`,
+				values: {
+					name: domains[0] || `#${r.id}`,
+					hours: Math.round((new Date(r.ends_on) - new Date(r.started_on)) / 3600e3),
+					events: report.events ?? 0,
+					toBlock: report.toBlock ?? 0,
+					toPass: report.toPass ?? 0,
+				},
+			};
+		});
+	},
+	learning_shift: async () => {
+		const { recentShifts } = await import("../learning/snapshots.js");
+		return (await recentShifts()).map((s) => ({
+			key: `learning-shift:${s.id}:${s.asset}`,
+			values: {
+				asset: s.asset,
+				before: s.before,
+				after: s.after,
+				direction: s.direction,
+				takenOn: s.takenOn.slice(0, 16).replace("T", " "),
 			},
 		}));
 	},

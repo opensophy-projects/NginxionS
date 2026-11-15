@@ -55,7 +55,11 @@ public:
         const std::string &_cefIpAddress,
         int _syslogPortNum,
         const std::string &_syslogIpAddress,
-        bool _beautify_logs
+        bool _beautify_logs,
+        // NginxionS: the response code in the logs (it was always false) and the protocols of syslog and CEF
+        bool _responseCode = false,
+        const std::string &_syslogProtocol = "UDP",
+        const std::string &_cefProtocol = "UDP"
     );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
@@ -90,6 +94,9 @@ private:
     int syslogPortNum;
     std::string syslogIpAddress;
     bool beautify_logs;
+    bool responseCode = false; // NginxionS: see the constructor
+    std::string syslogProtocol = "UDP";
+    std::string cefProtocol = "UDP";
 };
 
 class WebUserResponseTriggerSection
@@ -102,12 +109,18 @@ public:
         const std::string &_details_level,
         const std::string &_response_body,
         int _response_code,
-        const std::string &_response_title
+        const std::string &_response_title,
+        // NginxionS: the target of a redirect response and whether its URL carries the ID of the event (they were
+        // read from the policy and dropped: a redirect response never redirected)
+        const std::string &_redirect_url = "",
+        bool _redirect_add_event_id = false
     );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
     const std::string & getTriggerId() const;
+    // NginxionS: the policy has the response (a response it names but does not have is written empty)
+    bool isResolved() const { return !details_level.empty() && (details_level == "Redirect" || response_code > 0); }
 
 private:
     std::string id;
@@ -117,6 +130,8 @@ private:
     std::string response_body;
     std::string response_title;
     int response_code;
+    std::string redirect_url; // NginxionS: see the constructor
+    bool redirect_add_event_id = false;
 };
 
 class AppSecCustomResponseSpec
