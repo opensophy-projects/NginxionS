@@ -1423,8 +1423,9 @@ print_buffer(ngx_buf_t *buf, int num_bytes, int _dbg_level)
         );
     }
 
-    for(; pos < last; pos++){
-        sprintf(fmt+i*3, "%02X ", *pos);
+    // NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string); at most 16 bytes are left here
+    for(; pos < last && (size_t)(i*3 + 4) <= sizeof(fmt); pos++){
+        snprintf(fmt+i*3, sizeof(fmt) - i*3, "%02X ", *pos);
         i++;
     }
     if (i > 0) {
