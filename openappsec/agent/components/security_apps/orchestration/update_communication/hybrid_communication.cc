@@ -106,8 +106,13 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file,
         << resourse_file.getFileName();
 
     if (resourse_file.getFileName() =="policy") {
-        string downloaded_file = i_declarative_policy->getCurrPolicy();
         auto *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<HybridCommunication>();
+        // NginxionS: the checksum the update announces is the one of /tmp/local_appsec.policy
+        // (DeclarativePolicyUtils::getPolicyChecksum): the file is given, not the copy kept in memory. After a policy
+        // that failed to reach the services the two differed, and every next check failed on "The checksum calculation
+        // is not as the expected": the agent applied no policy any more until it restarted.
+        auto generated = orchestration_tools->readFile("/tmp/local_appsec.policy");
+        string downloaded_file = generated.ok() ? generated.unpack() : i_declarative_policy->getCurrPolicy();
         if (orchestration_tools->writeFile(downloaded_file, file_path)) return downloaded_file;
         return genError("Failed to write the attribute file in hybrid mode. File: " + downloaded_file);
     }
