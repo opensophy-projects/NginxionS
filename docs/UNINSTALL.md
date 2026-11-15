@@ -27,7 +27,7 @@
 
 ```bash
 mkdir -p ~/nginxions-backup
-for v in nginxions-data postgres-data secrets crowdsec-conf crowdsec-data appsec-localconfig appsec-data appsec-storage; do
+for v in nginxions-data postgres-data secrets crowdsec-conf crowdsec-data appsec-localconfig appsec-data appsec-storage clamav-control; do
   docker run --rm -v nginxions_$v:/v:ro -v ~/nginxions-backup:/b alpine tar czf /b/$v.tgz -C /v .
 done
 ```
@@ -37,6 +37,9 @@ done
 - `nginxions_postgres-data` — база: хосты, пользователи, PKI, события;
 - `nginxions_nginxions-data` — сертификаты, конфиги nginx, ключи;
 - `nginxions_secrets` — сгенерированные пароли и ключ шифрования ключей CA. Без него зашифрованные ключи из базы не расшифровать.
+
+Восстановление: создайте тома запуском `docker compose -f deploy/compose.yaml up -d`, остановите стек (`stop`), распакуйте
+архивы обратно (`docker run --rm -v nginxions_$v:/v -v ~/nginxions-backup:/b alpine tar xzf /b/$v.tgz -C /v`) и запустите снова.
 
 ## Всё сразу
 
@@ -52,6 +55,10 @@ if [ -f "$NGINXIONS_DIR/deploy/compose.yaml" ]; then
   docker compose -p nginxions-airgap -f "$D/compose.yaml" -f "$D/test/compose.airgap.yaml" --profile test \
     down --volumes --remove-orphans 2>/dev/null
 fi
+# тестовые стеки scripts/test-*.sh (если запускались и прервались)
+for p in nginxions-airgap nginxions-chaos nginxions-dast nginxions-soak nginxions-upgrade nginxions-wafscore; do
+  docker compose -p "$p" down --volumes --remove-orphans 2>/dev/null
+done
 # свой compose.yaml вместо репозитория
 if [ -f "$NGINXIONS_DIR/compose.yaml" ]; then
   docker compose -f "$NGINXIONS_DIR/compose.yaml" down --volumes --remove-orphans
@@ -65,7 +72,7 @@ docker network ls --format '{{.Name}}' | grep -E '^nginxions' | xargs -r docker 
 
 # 3. образы NginxionS и сторонние образы стека, dev и тестов
 docker images --format '{{.Repository}}:{{.Tag}}' \
-  | grep -E '(^|/)(nginxions(-openappsec|-appsec-[a-z-]+)?|crowdsecurity/crowdsec|tecnativa/docker-socket-proxy|postgres|traefik/whoami|curlimages/curl|zoeyvid/npmplus|node):' \
+  | grep -E '(^|/)(nginxions(-openappsec|-appsec-[a-z-]+)?|npmos[a-z-]*|crowdsecurity/crowdsec|clamav/clamav|tecnativa/docker-socket-proxy|postgres|traefik/whoami|curlimages/curl|zoeyvid/npmplus|node):' \
   | xargs -r docker rmi -f
 
 # 4. кэш сборки и висячие слои
@@ -90,7 +97,7 @@ docker images | grep -iE 'nginxions|npmplus'
 `docker compose … down --volumes --remove-orphans` останавливает контейнеры и удаляет тома и сети проекта `nginxions`.
 
 - `-f deploy/compose.dev.yaml --profile attack` нужны, если запускался dev-стек: тогда удалятся `nginxions-test-upstream` и `nginxions-attacker`. На сервере, где был только прод-стек, лишними они не будут.
-- Тест закрытого контура (`scripts/test-airgap.sh`) — отдельный проект `nginxions-airgap`.
+- Тесты стека — отдельные проекты compose: `nginxions-airgap` (`scripts/test-airgap.sh`), `nginxions-chaos`, `nginxions-dast`, `nginxions-soak`, `nginxions-upgrade`, `nginxions-wafscore`. Обычно скрипты убирают их сами; цикл в блоке нужен, если тест прервали.
 - Если NginxionS запускался из своего `compose.yaml`, а не из репозитория, работает вторая команда.
 
 ## 2. Остатки
@@ -99,16 +106,18 @@ Compose удаляет только то, что знает по текущим 
 
 | Что | Имена |
 |---|---|
-| Контейнеры | `nginxions`, `nginxions-openappsec`, `nginxions-postgres`, `nginxions-crowdsec`, `nginxions-nginxions-init-1`; от версий до ноября 2026: `nginxions-control`, `nginxions-socket-proxy`, `nginxions-appsec-agent`, `nginxions-appsec-shared-storage`, `nginxions-appsec-tuning-svc`; dev и тесты: `nginxions-test-upstream`, `nginxions-attacker`, `nginxions-airgap-*` |
-| Тома | `nginxions_secrets`, `nginxions_nginxions-data`, `nginxions_postgres-data`, `nginxions_appsec-shm`, `nginxions_appsec-conf`, `nginxions_appsec-data`, `nginxions_appsec-logs`, `nginxions_appsec-localconfig`, `nginxions_appsec-model`, `nginxions_appsec-storage`, `nginxions_crowdsec-conf`, `nginxions_crowdsec-data`; тест: `nginxions-airgap_*` |
-| Сети | `nginxions_edge`, `nginxions_internal` (и `nginxions_control` старых версий); тест: `nginxions-airgap_*` |
+| Контейнеры | `nginxions`, `nginxions-openappsec`, `nginxions-postgres`, `nginxions-crowdsec`, `nginxions-clamav`, `nginxions-nginxions-init-1`; от версий до ноября 2026: `nginxions-control`, `nginxions-socket-proxy`, `nginxions-appsec-agent`, `nginxions-appsec-shared-storage`, `nginxions-appsec-tuning-svc`; dev и тесты: `nginxions-test-upstream`, `nginxions-attacker`, `nginxions-<тест>-*` (стеки тестов), `nginxions-<тест>-probe`/`-load` (их клиенты), `nginxions-contract-*` (контракт политики) |
+| Тома | `nginxions_secrets`, `nginxions_nginxions-data`, `nginxions_postgres-data`, `nginxions_appsec-shm`, `nginxions_appsec-conf`, `nginxions_appsec-data`, `nginxions_appsec-logs`, `nginxions_appsec-localconfig`, `nginxions_appsec-model`, `nginxions_appsec-storage`, `nginxions_crowdsec-conf`, `nginxions_crowdsec-data`, `nginxions_clamav-db`, `nginxions_clamav-control`; тесты: `nginxions-<тест>_*`, `nginxions-<тест>-state` |
+| Сети | `nginxions_edge`, `nginxions_internal` (и `nginxions_control` старых версий); тесты: `nginxions-<тест>_*` |
+
+Установка под старым названием NPMOS оставляет то же с префиксом `npmos`: если `scripts/upgrade-from-npmos.sh` не запускался, повторите шаг 2 с `npmos` вместо `nginxions`.
 
 ## 3. Образы
 
 Без этого шага переустановка запустит старую сборку (см. начало).
 
 - Образы NginxionS: `opensophy/nginxions`, `opensophy/nginxions-openappsec` (и `opensophy/nginxions-appsec-{agent,shared-storage,tuning}` старых версий) из Docker Hub, `local/nginxions*:dev` из `scripts/build-images.sh`, `nginxions:dev` из dev-стека.
-- Сторонние: `crowdsecurity/crowdsec`, `postgres` (и `tecnativa/docker-socket-proxy` старых версий); для dev и тестов `traefik/whoami`, `curlimages/curl`, `zoeyvid/npmplus` (база dev-образа), `node` (сборка dev-образа). Если они нужны другим проектам на машине, уберите их из команды. Удалённый образ просто скачается заново при следующем запуске того проекта.
+- Сторонние: `crowdsecurity/crowdsec`, `clamav/clamav`, `postgres` (и `tecnativa/docker-socket-proxy` старых версий); для dev и тестов `traefik/whoami`, `curlimages/curl`, `zoeyvid/npmplus` (база dev-образа), `node` (сборка dev-образа). Если они нужны другим проектам на машине, уберите их из команды. Удалённый образ просто скачается заново при следующем запуске того проекта.
 
 ## 4. Кэш сборки
 
@@ -142,16 +151,20 @@ find ~ -maxdepth 5 -type d \( -iname 'nginxions*' -o -iname 'npmplus*' \) 2>/dev
 ## 7. Переустановка с нуля
 
 ```bash
-git clone -b work https://github.com/opensophy-projects/NPMOS ~/nginxions
+git clone -b work https://github.com/opensophy-projects/NginxionS ~/nginxions
 cd ~/nginxions
 docker compose -f deploy/compose.yaml up -d --pull always
+docker compose -f deploy/compose.yaml ps    # все сервисы healthy
 ```
+
+Репозиторий переехал из `opensophy-projects/NPMOS` в `opensophy-projects/NginxionS`; старый адрес GitHub перенаправляет. В уже
+существующем клоне: `git remote set-url origin https://github.com/opensophy-projects/NginxionS`.
 
 `--pull always` скачивает образы заново, даже если тег уже есть на машине. Проверка: `docker images | grep nginxions` показывает образы, созданные недавно, а не в день первой установки.
 
 ## 8. Что ещё проверить
 
-- **Порты.** После удаления 80, 443 и 81 свободны: `ss -ltnp | grep -E ':(80|443|81)\b'` ничего не выводит.
+- **Порты.** После удаления 80, 443 и 81 свободны (или свои из `NGINXIONS_HTTP_PORT`, `NGINXIONS_HTTPS_PORT`, `NGINXIONS_ADMIN_PORT`): `ss -ltnp | grep -E ':(80|443|81)\b'` ничего не выводит.
 - **Файрвол.** Если для NginxionS открывали порты (ufw, firewalld, security group в облаке), закройте их: `ufw delete allow 81/tcp` и т.п.
 - **DNS.** Записи доменов, которые указывали на этот сервер, перенаправьте или удалите.
 - **Docker Hub.** Если входили в Docker Hub только ради NginxionS: `docker logout`.
