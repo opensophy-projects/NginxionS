@@ -1,0 +1,56 @@
+# Every night: the published develop under a long mixed load (scripts/test-soak.sh): leaks of memory, growth of the
+# database and of the logs, 5xx, latency, attacks still blocked, the audit of the logs. Then the failures of the parts
+# of the stack (scripts/test-chaos.sh) on the same images. By hand: Actions → Nightly → Run workflow (minutes, tag).
+name: Nightly
+on:
+  schedule:
+    - cron: "43 1 * * *"
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "Minutes of load"
+        default: "60"
+      version:
+        description: "Tag of the images on Docker Hub"
+        default: develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  NGINXIONS_REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
+  NGINXIONS_VERSION: ${{ inputs.version || 'develop' }}
+
+jobs:
+  soak:
+    name: Long run under load + failures of the parts
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+      - name: images
+        run: |
+          docker pull "$NGINXIONS_REGISTRY/nginxions:$NGINXIONS_VERSION"
+          docker pull "$NGINXIONS_REGISTRY/nginxions-openappsec:$NGINXIONS_VERSION"
+      - name: long run under load
+        env:
+          DURATION: ${{ inputs.duration || '60' }}
+        run: scripts/test-soak.sh
+      - name: failures of the parts of the stack
+        if: always()
+        run: scripts/test-chaos.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: nightly
+          path: reports/
+          if-no-files-found: ignore
