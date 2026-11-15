@@ -338,6 +338,24 @@ jobs:
         with:
           sarif_file: upload/trivy-nginxions-openappsec.sarif
           category: trivy-nginxions-openappsec
+      # the categories of the images before the rename (trivy-npmos*) get no analysis any more, so their alerts would
+      # stay open for ever: an empty analysis of the same tool closes them (docs/DEVSECOPS.md, retired categories)
+      - name: empty SARIF for the retired categories of the images
+        if: always()
+        run: |
+          mkdir -p upload
+          echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Trivy","informationUri":"https://github.com/aquasecurity/trivy","rules":[]}},"results":[]}]}' \
+            > upload/retired.sarif
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('upload/retired.sarif') != ''
+        with:
+          sarif_file: upload/retired.sarif
+          category: trivy-npmos
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('upload/retired.sarif') != ''
+        with:
+          sarif_file: upload/retired.sarif
+          category: trivy-npmos-openappsec
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

@@ -281,7 +281,7 @@ const internalWafFiles = {
 	 */
 	uploadSignatures: async (access, name, content) => {
 		await access.can("waf_policy:manage");
-		if (!SIGNATURE_FILE.test(String(name))) {
+		if (typeof name !== "string" || !SIGNATURE_FILE.test(name)) {
 			throw new errs.ValidationError(
 				"a signature file of ClamAV is named like main.cvd, daily.cld or bytecode.cvd",
 			);
