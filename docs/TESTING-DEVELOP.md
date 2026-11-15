@@ -1,6 +1,6 @@
 # Как развернуть develop-версию NginxionS и что проверить руками
 
-Документ для команды: как поставить свежую сборку на свой сервер или ноутбук и что проверить самому сверх автотестов CI. Состояние на конец фазы 1.
+Документ для команды: как поставить свежую сборку на свой сервер или ноутбук и что проверить самому сверх автотестов CI. Полная установка и удаление для пользователей — в [README](../README.md#быстрая-установка) и [UNINSTALL.md](UNINSTALL.md).
 
 ## 1. Какая версия где лежит
 
@@ -10,7 +10,7 @@
 | Локальная сборка `local/nginxions*:dev` | Любая ветка, в том числе непослитая | Если изменения ещё не в `work` |
 | Dev-стек (`compose.dev.yaml`) | Upstream-образ NPMplus + наш backend и frontend из исходников | Разработка интерфейса и backend. Агент берётся из Hub, поэтому для проверки WAF не подходит |
 
-> **Важно.** Тег `develop` в Docker Hub обновляется только после слияния в `work`. Изменения фазы 1 пока лежат в `claude/practical-ptolemy-ulj2e4`. Чтобы проверить их из Docker Hub, сначала слейте ветку в `work` и дождитесь зелёного CI: задача «Images (amd64) + closed-network test» опубликует образы, затем соберётся манифест `nginxions multi-arch manifest`. Без слияния подходит только вариант Б (локальная сборка).
+> **Важно.** Тег `develop` в Docker Hub обновляется только после слияния в `work` и зелёного CI: задача `publish` пушит и подписывает образы, затем `manifest` собирает мультиархитектурный `nginxions`. Изменения, которые ещё не в `work`, проверяются только вариантом Б (локальная сборка).
 
 ## 2. Что нужно на машине
 
@@ -34,12 +34,11 @@
 ## 3. Вариант А: образы из Docker Hub
 
 ```bash
-git clone https://github.com/opensophy-projects/NPMOS nginxions && cd nginxions
+git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
 git checkout work                       # ветка, из которой собран тег develop
 
-docker compose -f deploy/compose.yaml pull
-docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml ps   # nginxions и postgres должны быть healthy
+docker compose -f deploy/compose.yaml up -d --pull always
+docker compose -f deploy/compose.yaml ps   # все сервисы healthy
 ```
 
 Версии всех образов закреплены в `deploy/.env` (`NGINXIONS_VERSION=develop`). Другой тег задаётся так: `NGINXIONS_VERSION=<тег> docker compose ...`.
@@ -53,10 +52,10 @@ docker image inspect opensophy/nginxions:develop --format '{{.Created}}'
 ## 4. Вариант Б: собрать образы самому
 
 ```bash
-git clone https://github.com/opensophy-projects/NPMOS nginxions && cd nginxions
+git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
 git checkout claude/practical-ptolemy-ulj2e4      # или любая другая ветка
 
-scripts/build-images.sh                            # все 5 образов, тег local/<имя>:dev
+scripts/build-images.sh                            # nginxions и nginxions-openappsec, тег local/<имя>:dev
 NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev docker compose -f deploy/compose.yaml up -d
 ```
 
@@ -100,19 +99,21 @@ curl -s -H 'Host: test.local' http://<адрес-сервера>/
 
 ```bash
 git pull
-docker compose -f deploy/compose.yaml pull     # для варианта Б: scripts/build-images.sh
-docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml up -d --pull always     # для варианта Б: сначала scripts/build-images.sh, без --pull
 ```
 
 - `nginxions-init` запускается при каждом `up` и только дополняет недостающее: новые секреты (например, ключ bouncer `appsec` для агента) и каталоги. Существующие пароли и данные не трогает.
 - Миграции БД (`nginxions_waf_*`, `nginxions_waf_custom_policy`) применяются при старте `nginxions`.
-- Новые тома (`appsec-model`) compose создаёт сам.
+- Новые тома (например, `clamav-db`, `clamav-control`) compose создаёт сам.
+- Перед обновлением на непроверенную сборку сделайте резервную копию томов ([UNINSTALL.md, раздел 0](UNINSTALL.md#0-резервная-копия-по-желанию)).
 
 Начать с нуля (удалятся **все** данные: хосты, сертификаты, пользователи, БД, обучение агента):
 
 ```bash
 docker compose -f deploy/compose.yaml down -v
 ```
+
+Полное удаление вместе с образами, тестовыми стеками и кэшем браузера — [UNINSTALL.md](UNINSTALL.md).
 
 ## 8. Атаки для проверки WAF
 

@@ -9,8 +9,8 @@
 Обратный прокси на nginx со встроенной защитой: WAF на машинном обучении, CrowdSec, свой центр сертификации
 и mTLS, аналитика трафика и роли. Всё настраивается в одном интерфейсе и работает без облака.
 
-[![CI](https://github.com/opensophy-projects/NPMOS/actions/workflows/ci.yml/badge.svg?branch=work)](https://github.com/opensophy-projects/NPMOS/actions/workflows/ci.yml)
-[![Security](https://github.com/opensophy-projects/NPMOS/actions/workflows/security-weekly.yml/badge.svg)](https://github.com/opensophy-projects/NPMOS/actions/workflows/security-weekly.yml)
+[![CI](https://github.com/opensophy-projects/NginxionS/actions/workflows/ci.yml/badge.svg?branch=work)](https://github.com/opensophy-projects/NginxionS/actions/workflows/ci.yml)
+[![Security](https://github.com/opensophy-projects/NginxionS/actions/workflows/security-weekly.yml/badge.svg)](https://github.com/opensophy-projects/NginxionS/actions/workflows/security-weekly.yml)
 [![Docker](https://img.shields.io/badge/docker-opensophy%2Fnginxions-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/opensophy/nginxions)
 [![WAF](https://img.shields.io/badge/WAF-open--appsec-f4405f)](https://github.com/openappsec/openappsec)
 [![CrowdSec](https://img.shields.io/badge/IPS-CrowdSec-6f42c1)](https://www.crowdsec.net)
@@ -28,15 +28,27 @@
 
 ## Быстрая установка
 
-Нужны Linux-сервер с Docker Engine 26+ и Compose 2.23+.
+Нужны Linux-сервер x86_64 с Docker Engine 26+ и Compose 2.23+, свободные порты 80, 443 и 81, около 10 ГБ на диске.
 
 ```bash
-git clone https://github.com/opensophy-projects/NPMOS nginxions && cd nginxions
-docker compose -f deploy/compose.yaml up -d
+git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
+docker compose -f deploy/compose.yaml up -d --pull always
+docker compose -f deploy/compose.yaml ps    # через 1–2 минуты все сервисы healthy
 ```
 
 Откройте `https://<адрес-сервера>:81` и зарегистрируйте администратора. Пароли сервисов генерируются
 автоматически, `.env` править не нужно. Порты: `80` и `443` для сайтов, `81` для панели.
+
+Обновление — `git pull`, затем та же команда `up -d --pull always`: данные и пароли сохраняются, миграции
+базы применяются при старте. Полное удаление со всеми данными — [docs/UNINSTALL.md](docs/UNINSTALL.md).
+
+Образы подписаны (cosign, keyless) и несут SLSA provenance и SBOM. Проверка подписи:
+
+```bash
+cosign verify docker.io/opensophy/nginxions:develop \
+  --certificate-identity-regexp '^https://github.com/opensophy-projects/NginxionS/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
 
 Подробная установка, обновление и решение проблем — в [документации](https://opensophy.com/).
 
@@ -67,8 +79,9 @@ docker compose -f deploy/compose.yaml up -d
 
 ## Как устроено
 
-Четыре контейнера: `nginxions` (nginx, панель и API), `openappsec` (WAF-агент, его сервисы обучения и
-управление стеком), `crowdsec` и `postgres`; при первом запуске один раз отрабатывает `nginxions-init`.
+Пять контейнеров: `nginxions` (nginx, панель и API), `openappsec` (WAF-агент, его сервисы обучения и
+управление стеком), `crowdsec`, `clamav` (проверка загружаемых файлов политикой WAF) и `postgres`; при каждом
+запуске один раз отрабатывает `nginxions-init` (дополняет недостающие секреты, существующие не трогает).
 Образы — `opensophy/nginxions` и `opensophy/nginxions-openappsec` на Docker Hub, версии закреплены в
 `deploy/.env`. Архитектура — в [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md#3-архитектура-nginxions),
 разработка — в [CONTRIBUTING.md](CONTRIBUTING.md).
