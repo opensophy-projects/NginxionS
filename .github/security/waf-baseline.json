@@ -1,0 +1,6 @@
+{
+  "score": 77.1,
+  "tolerance": 3,
+  "set": "2026-11-14",
+  "why": "the first score of GoTestWAF 0.5.8 against the recommended practice in prevent-learn (attacks blocked 72.7 %, legitimate requests passed 92.9 %); scripts/test-waf-score.sh fails under score - tolerance"
+}

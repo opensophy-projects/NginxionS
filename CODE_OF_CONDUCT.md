@@ -165,7 +165,7 @@ flowchart LR
 - **`.github/`**
   - `workflows/ci.yml` — CI: быстрые проверки на каждый push; полный прогон (сборка образов, закрытый контур, скан
     образов, DAST, отчёт безопасности, публикация на Docker Hub) на `work`, тегах, PR, `security/**`, `[full]`
-  - `workflows/nightly.yml` — каждую ночь: опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке, отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
+  - `workflows/nightly.yml` — каждую ночь: долгий фаззинг парсеров (`fuzz.test.mjs`, Lua File Security), опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке, отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
   - `workflows/security-weekly.yml` — каждую неделю: ветка `security/<дата>` от `work`, полный CI на ней, issue с
     отчётом, удаление веток старше 8 недель
   - `workflows/training.yml` — обучение модели WAF: ветки `training/**`, `[train]` в коммите или кнопка; модель,
@@ -175,7 +175,8 @@ flowchart LR
   - `actionlint.yaml` — настройки actionlint (метки раннеров)
   - **`security/`** — настройки сканеров
     - `tools.env` — образы и версии всех сканеров, закреплённые по digest
-    - `semgrep.yml` — правила Semgrep для NginxionS: таймауты запросов, shell, сырой HTML, SQL из шаблонов
+    - `semgrep.yml` — правила Semgrep для NginxionS: таймауты запросов, shell, сырой HTML, SQL из шаблонов; из наших ошибок — регулярные выражения из переменных, секреты в логах, shell из Lua nginx, сокет Docker и privileged в compose, небезопасные строки C в агенте
+    - `waf-baseline.json` — базовая оценка WAF (GoTestWAF) и допуск: ниже — тест `waf-score` падает
     - `gitleaks.toml` — Gitleaks: стандартные правила и места с примерами вместо секретов
     - `codeql.yml` — CodeQL: что не код продукта
     - `hadolint.yaml` — hadolint: отключённые правила с причинами
@@ -255,6 +256,7 @@ flowchart LR
 - `ci-level.mjs` (+ `ci-level.test.mjs`) — глубина прогона CI по событию, сообщению коммита и изменённым файлам: `fast`/`full`/`extended`, какие тесты стека (`[smoke:waf]`, `[dast]`…), нужен ли CodeQL C++ и Go (инкрементальный скан)
 - `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
 - `flaky-report.mjs` (+ тест) — флейки smoke: по `steps.json` последних прогонов CI (ночной workflow) — какие шаги падали, какие падали и проходили на одном коммите, самые долгие
+- `fuzz.test.mjs` — фаззинг парсеров недоверенного ввода: конвертер правил Snort агента, экспертный фрагмент политики (YAML), объекты и импорт политики; `FUZZ_ITERATIONS` (300 в CI, 40 000 ночью), `FUZZ_SEED` повторяет случай
 - `check.sh` — быстрая часть CI на своей машине одной командой (`--changed` — только затронутое, `--install-hook` — git pre-push)
 - `test-upgrade.sh` — тест обновления: стек опубликованного `develop` наполняется данными, затем образы этой сборки встают на те же тома, и всё должно остаться и работать
 - `test-policy-contract.sh` — контрактный тест политики: политики, которые пишет бэкенд, по одной подаются агенту из образа; каждая должна примениться как написана

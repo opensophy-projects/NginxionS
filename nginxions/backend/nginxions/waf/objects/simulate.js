@@ -38,6 +38,7 @@ const ipMatches = (value, ip) => {
 const textMatches = (value, text) => {
 	if (value === text) return true;
 	try {
+		// nosemgrep: nginxions-regexp-from-variable -- the agent reads these values as regular expressions (match_query.cc): the simulation must too
 		return new RegExp(`^(?:${value})$`).test(text);
 	} catch {
 		return false;

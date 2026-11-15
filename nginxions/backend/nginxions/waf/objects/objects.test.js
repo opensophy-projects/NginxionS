@@ -432,3 +432,14 @@ test("x-nginxions: keys and operators of the WAF beyond v1beta2 are checked, kep
 		true,
 	);
 });
+
+test("an import with an item that is no mapping is refused, not an error 500 (found by fuzzing)", () => {
+	const doc = fromV1({
+		policies: { "specific-rules": [null, { host: "a.test" }] },
+		practices: [null],
+		exceptions: ["x"],
+	});
+	assert.equal(doc.policies.specificRules[0], null);
+	assert.equal(doc.threatPreventionPractices[0], null);
+	assert.equal(doc.exceptions[0], "x");
+});
