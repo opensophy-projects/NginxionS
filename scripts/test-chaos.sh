@@ -63,9 +63,9 @@ for i in $(seq 1 120); do
   sleep 2
 done
 docker volume create "$state" > /dev/null
-docker run --rm --network "$net" -e JAR=/state/cookies -v "$state:/state" \
+docker run --rm --user 0 --network "$net" -e JAR=/state/cookies -v "$state:/state" \
   -v "$PWD/deploy/test/waf-score-setup.sh:/setup.sh:ro" "docker.io/curlimages/curl:$CURL_VERSION" sh /setup.sh
-docker run -d --name "$probe" --network "$net" -v "$state:/state" --entrypoint sleep \
+docker run -d --user 0 --name "$probe" --network "$net" -v "$state:/state" --entrypoint sleep \
   "docker.io/curlimages/curl:$CURL_VERSION" 3600 > /dev/null
 
 echo "==> the agent killed: requests pass while it restarts, then the WAF blocks again"

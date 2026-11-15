@@ -45,7 +45,7 @@ wait_healthy() {
   done
 }
 check() {
-  docker run --rm --network "$net" -v "$PWD/deploy/test/upgrade-check.sh:/check.sh:ro" -v "$state:/state" \
+  docker run --rm --user 0 --network "$net" -v "$PWD/deploy/test/upgrade-check.sh:/check.sh:ro" -v "$state:/state" \
     "docker.io/curlimages/curl:$CURL_VERSION" sh /check.sh "$1"
 }
 

@@ -203,6 +203,9 @@ jobs:
     needs: level
     if: needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
+    # in a full run the contract with the agent of the build (job images) decides: the published develop may lack an
+    # agent change this branch relies on, then this job says so without failing the run
+    continue-on-error: ${{ needs.level.outputs.level != 'fast' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

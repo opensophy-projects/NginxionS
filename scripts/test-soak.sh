@@ -46,12 +46,12 @@ for i in $(seq 1 120); do
   sleep 2
 done
 docker volume create "$state" > /dev/null
-docker run --rm --network "$net" -e JAR=/state/cookies -v "$state:/state" \
+docker run --rm --user 0 --network "$net" -e JAR=/state/cookies -v "$state:/state" \
   -v "$PWD/deploy/test/waf-score-setup.sh:/setup.sh:ro" "docker.io/curlimages/curl:$CURL_VERSION" sh /setup.sh
 
 # the clients: 8 loops of normal pages and an API, one of uploads, one of attacks (about 40 requests a second);
 # each answer is written as <kind> <code> <milliseconds>
-docker run -d --name "$load" --network "$net" -v "$state:/state" --entrypoint sh \
+docker run -d --user 0 --name "$load" --network "$net" -v "$state:/state" --entrypoint sh \
   "docker.io/curlimages/curl:$CURL_VERSION" -c '
     for c in 1 2 3 4 5 6 7 8; do
       ( while :; do
@@ -86,7 +86,7 @@ while [ "$(date +%s)" -lt "$end" ]; do
 done
 docker rm -f "$load" > /dev/null
 
-docker run --rm -v "$state:/state" --entrypoint cat "docker.io/curlimages/curl:$CURL_VERSION" /state/answers > "$out/answers.txt"
+docker run --rm --user 0 -v "$state:/state" --entrypoint cat "docker.io/curlimages/curl:$CURL_VERSION" /state/answers > "$out/answers.txt"
 node --input-type=module - "$out" "$MEM_GROWTH" "$P95_MS" <<'JS'
 import { readFileSync, writeFileSync } from "node:fs";
 const [out, growthMax, p95Max] = process.argv.slice(2);
