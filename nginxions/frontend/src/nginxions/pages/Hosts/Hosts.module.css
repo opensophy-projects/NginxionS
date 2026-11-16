@@ -36,6 +36,17 @@
 		flex-shrink: 0;
 	}
 }
+/* on a phone the title and its description take the whole width, the buttons go under them */
+@media (max-width: 767.98px) {
+	.head {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.75rem;
+	}
+	.head > .toolbar {
+		justify-content: flex-start;
+	}
+}
 /* search in the inset frame of cards (as the theme/language buttons) */
 .searchFrame {
 	display: flex;

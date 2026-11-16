@@ -652,3 +652,80 @@ a.card:focus-visible {
 		display: none;
 	}
 }
+
+/* NginxionS: a table marked nx-stack becomes a list on a phone: a row is a block with its first cell as the title,
+   the other cells under it with their column name (data-label) and the actions (nx-actions) always in view on the
+   right, instead of columns cut by the screen edge behind a horizontal scroll */
+@media (max-width: 575.98px) {
+	.table.nx-stack > thead {
+		display: none;
+	}
+	.table.nx-stack,
+	.table.nx-stack > tbody {
+		display: block;
+		width: 100%;
+	}
+	.table.nx-stack > tbody > tr {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		column-gap: 0.75rem;
+		row-gap: 0.25rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.table.nx-stack > tbody > tr:last-child {
+		border-bottom: 0;
+	}
+	.table.nx-stack > tbody > tr:has(> .nx-check) {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+	}
+	.table.nx-stack > tbody > tr > td {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 0.375rem;
+		grid-column: -3;
+		min-width: 0;
+		max-width: none;
+		padding: 0;
+		border: 0;
+		background: none;
+		box-shadow: none;
+		white-space: normal;
+	}
+	.table.nx-stack > tbody > tr > td:first-child,
+	.table.nx-stack > tbody > tr > td.nx-title {
+		display: block;
+	}
+	.table.nx-stack > tbody > tr > td[colspan] {
+		grid-column: 1 / -1;
+		justify-content: center;
+	}
+	.table.nx-stack > tbody > tr > td.nx-optional {
+		display: none;
+	}
+	.table.nx-stack > tbody > tr > td[data-label] {
+		color: var(--foreground);
+		font-size: 0.8125rem;
+	}
+	.table.nx-stack > tbody > tr > td[data-label]::before {
+		content: attr(data-label);
+		color: var(--foreground-muted);
+	}
+	.table.nx-stack > tbody > tr > td.nx-check {
+		grid-column: 1;
+		grid-row: 1 / span 6;
+		align-self: start;
+	}
+	.table.nx-stack > tbody > tr > td.nx-actions {
+		display: block;
+		grid-column: -2;
+		grid-row: 1 / span 6;
+		align-self: start;
+		text-align: right;
+	}
+	.table.nx-stack > tbody > tr > td.nx-actions .btn {
+		margin: 0 0 0.375rem 0.375rem;
+	}
+}
