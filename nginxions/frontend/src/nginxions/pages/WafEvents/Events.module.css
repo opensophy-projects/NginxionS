@@ -40,6 +40,24 @@
 	gap: 0.25rem;
 	margin-right: auto;
 }
+/* on a phone a switch that does not fit scrolls sideways from its first item, it is not cut at both ends */
+@media (max-width: 767.98px) {
+	.periods,
+	.kinds {
+		flex: 1 1 100%;
+		max-width: 100%;
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.periods::-webkit-scrollbar,
+	.kinds::-webkit-scrollbar {
+		display: none;
+	}
+	.period {
+		flex-shrink: 0;
+	}
+}
 
 /* filter panel */
 .section + .section {

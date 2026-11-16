@@ -708,7 +708,7 @@ function CertificatesPage() {
 							</div>
 						)}
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table className={cn("table table-vcenter card-table nx-stack", hostStyles.table)}>
 								<thead>
 									<tr>
 										{canPki && <th className="w-1" />}
@@ -743,7 +743,7 @@ function CertificatesPage() {
 											return (
 												<tr key={c.key}>
 													{canPki && (
-														<td>
+														<td className="nx-check">
 															{c.source === "pki" && typeof c.id === "number" && (
 																<input
 																	type="checkbox"
@@ -755,7 +755,7 @@ function CertificatesPage() {
 															)}
 														</td>
 													)}
-													<td className={own.name}>
+													<td className={cn(own.name, "nx-title")}>
 														<div className={own.title}>
 															<span>{c.name || "—"}</span>
 															{c.status !== "valid" && (
@@ -773,22 +773,28 @@ function CertificatesPage() {
 															</div>
 														) : null}
 													</td>
-													<td>
+													<td data-label={t("nginxions.certs.kind")}>
 														<div>{kindLabel(c)}</div>
 														<div className={own.sub}>
 															<T id={`nginxions.certs.source.${c.source}`} />
 														</div>
 													</td>
-													<td className="nx-optional">
+													<td
+														className="nx-optional"
+														data-label={t("nginxions.certs.issuer")}
+													>
 														{c.issuer || <span className="text-secondary">—</span>}
 													</td>
-													<td>
+													<td data-label={t("nginxions.certs.expires")}>
 														<Expiry value={c.notAfter} status={c.status} />
 													</td>
-													<td className={cn(own.used, "nx-optional")}>
+													<td
+														className={cn(own.used, "nx-optional")}
+														data-label={t("nginxions.certs.used-by")}
+													>
 														<UsedBy cert={c} />
 													</td>
-													<td className="text-end">
+													<td className="text-end nx-actions">
 														{items.length > 0 && (
 															<Dropdown
 																floating

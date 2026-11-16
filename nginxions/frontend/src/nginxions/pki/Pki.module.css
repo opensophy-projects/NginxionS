@@ -17,6 +17,23 @@
 	color: var(--foreground-muted);
 	font-size: 0.8125rem;
 }
+/* on a phone the counters are three small tiles in a row, not six cards a screen tall */
+@media (max-width: 575.98px) {
+	.summary {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+	.stat {
+		padding: 0.5rem 0.625rem;
+	}
+	.statValue {
+		font-size: 1.125rem;
+	}
+	.statLabel {
+		font-size: 0.6875rem;
+		line-height: 1.25;
+	}
+}
 .card {
 	margin: 0;
 	padding: 1rem 1.125rem;

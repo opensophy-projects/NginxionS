@@ -303,7 +303,7 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 	return (
 		<section className={cn("card", pkiStyles.card)}>
 			<div className="table-responsive">
-				<table className="table table-vcenter card-table">
+				<table className="table table-vcenter card-table nx-stack">
 					<thead>
 						<tr>
 							<th>
@@ -339,12 +339,17 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 										</span>
 									)}
 								</td>
-								<td className="font-monospace small text-break">{s.directory}</td>
-								<td>
+								<td
+									className="font-monospace small text-break"
+									data-label={t("nginxions.acme.servers.directory")}
+								>
+									{s.directory}
+								</td>
+								<td data-label={t("nginxions.acme.servers.client")}>
 									<T id={`nginxions.acme.client.${s.client}`} />
 								</td>
-								<td>{s.usedBy}</td>
-								<td className="text-end text-nowrap">
+								<td data-label={t("nginxions.acme.servers.used")}>{s.usedBy}</td>
+								<td className="text-end text-nowrap nx-actions">
 									{canManage && (
 										<>
 											{!s.isDefault && (
