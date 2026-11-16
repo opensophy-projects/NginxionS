@@ -111,6 +111,10 @@
 .item:first-child {
 	border-top: 0;
 }
+/* a status badge keeps its word whole; the text beside it wraps instead */
+.item > :global(.badge) {
+	flex-shrink: 0;
+}
 /* a reason or a count under a badge wraps in its narrow column instead of widening it */
 .wrap {
 	max-width: 9rem;
