@@ -3,9 +3,10 @@
 # the sources of NginxionS in openappsec/ (build context "openappsec"; upstream commits they started from: sources.env):
 #   - the agent (openappsec/agent), the changes of NginxionS marked "NginxionS:" in its code;
 #   - its shared storage (openappsec/smartsync-shared-files) and tuning (openappsec/smartsync-tuning) services, Go;
-#   - nginxions-control (nginxions/backend/nginxions/control, build context "control"): the Docker API for the GUI.
+#   - nginxions-control (nginxions/backend/nginxions/control, build context "control"): the Docker API for the GUI,
+#     run from this image as a container of its own (service "control" of deploy/compose.yaml), never in this one.
 # nginxions-openappsec.sh starts and keeps them running. The container owns the network namespace nginxions joins, so
-# the services listen on 127.0.0.1 ports there (port 80 is nginx's): shared storage 7811, tuning 7813, control 7080.
+# the services listen on 127.0.0.1 ports there (port 80 is nginx's): shared storage 7811, tuning 7813.
 #
 #   docker build --build-context openappsec=openappsec --build-context control=nginxions/backend/nginxions/control \
 #     -t nginxions-openappsec deploy/openappsec
@@ -21,6 +22,7 @@ ARG AGENT_RUNTIME=agent
 
 # ---------------------------------------------------------------- agent
 FROM docker.io/library/alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS agent-build
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 RUN apk add --no-cache build-base cmake git python3 bash linux-headers \
         boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis \
         libmaxminddb-dev yq brotli-dev zlib-dev pax-utils
@@ -85,11 +87,11 @@ RUN go build -ldflags="-w -s" -a -installsuffix cgo -o /out/app ./cmd/server/ &&
 
 # ---------------------------------------------------------------- the image
 FROM ${AGENT_RUNTIME}
-# Node.js for nginxions-control
+# Node.js for nginxions-control (its own container, deploy/compose.yaml) and the Snort converter of the agent
 RUN apk add --no-cache nodejs
 COPY --from=shared-storage /out/ /opt/appsec-shared-storage/
 COPY --from=tuning /out/ /opt/appsec-tuning/
-COPY --from=control server.js watchdog.js learning.js /opt/nginxions-control/
+COPY --from=control server.js watchdog.js learning.js tar.js /opt/nginxions-control/
 RUN printf '{"type": "module"}\n' > /opt/nginxions-control/package.json && mkdir -p /db
 # the settings of WAF -> Agent (fail-open), applied at every start of the agent; then the services
 # the IPS signatures of NginxionS (CrowdSec virtual patching rules, scripts/update-ips-signatures.mjs): the local policy
@@ -100,11 +102,10 @@ COPY nginxions-openappsec.sh /nginxions-openappsec.sh
 RUN chmod 755 /nginxions-entry.sh /nginxions-openappsec.sh
 LABEL org.opencontainers.image.source="https://github.com/opensophy-projects/NPMOS" \
       org.opencontainers.image.description="open-appsec agent, its learning services and nginxions-control for NginxionS"
-# healthy while nginxions-control answers, or, without the Docker socket (no control), while the agent listens;
-# nginxions-openappsec.sh keeps every service running
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD ["/bin/sh", "-c", "wget -q -T 4 -O /dev/null http://127.0.0.1:7080/healthz || nc -z -w 4 127.0.0.1 7777"]
-# root: the nano agent of open-appsec runs as root (its shared memory and IPC with the attachment of nginx), and
-# nginxions-control reads the Docker socket; its own services listen on 127.0.0.1 only
+# healthy while the agent listens; nginxions-openappsec.sh keeps every service running
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=2s --retries=3 \
+    CMD ["nc", "-z", "-w", "4", "127.0.0.1", "7777"]
+# root: the nano agent of open-appsec runs as root (its shared memory and IPC with the attachment of nginx); its own
+# services listen on 127.0.0.1 only. nginxions-control, run from this image in its container, reads the Docker socket
 # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
 ENTRYPOINT ["/nginxions-openappsec.sh"]

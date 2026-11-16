@@ -1,14 +1,16 @@
-// Settings → ACME → Servers: where ACME certificates come from. A preset (Let's Encrypt, ZeroSSL, Google, SSL.com,
-// the TLS CA of the Russian Federation) or a server of your own; each says its client (certbot or lego) and may be
+// Certificates → ACME servers (a block of the page; its title and "Add" are those of the page): where ACME certificates come from. A preset (Let's Encrypt, ZeroSSL, Google, SSL.com,
+// the TLS CA of TCI, tlscc.ru) or a server of your own; each says its client (certbot or lego) and may be
 // the default one, which the certificate forms choose first.
 import { useQueryClient } from "@tanstack/react-query";
 import EasyModal, { type InnerModalProps } from "ez-modal-react";
+import cn from "classnames";
 import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
+import pkiStyles from "../pki/Pki.module.css";
 import {
 	type AcmeClient,
 	type AcmePreset,
@@ -38,6 +40,7 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 					preset: presets[0]?.id ?? "custom",
 					name: presets[0]?.name ?? "",
 					client: presets[0]?.client ?? "certbot",
+					directory: presets[0]?.directory ?? "",
 					tlsVerify: true,
 					email: "",
 					eabKid: "",
@@ -58,7 +61,6 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 			delete (body as any).id;
 			delete (body as any).usedBy;
 			delete (body as any).isDefault;
-			if (preset) delete body.directory;
 			if (server) await updateAcmeServer(server.id, body);
 			else await createAcmeServer(body);
 			onSaved();
@@ -128,10 +130,21 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 								type="url"
 								className="form-control font-monospace"
 								placeholder={t("nginxions.acme.servers.directory-placeholder")}
-								value={preset ? preset.directory : (v.directory ?? "")}
-								disabled={!!preset}
+								value={v.directory ?? ""}
 								onChange={(e) => set({ directory: e.target.value.trim() })}
 							/>
+							{preset && v.directory !== preset.directory && (
+								<div className="form-hint">
+									<T id="nginxions.acme.servers.directory-preset" data={{ url: preset.directory }} />{" "}
+									<button
+										type="button"
+										className="btn btn-link btn-sm p-0 align-baseline"
+										onClick={() => set({ directory: preset.directory })}
+									>
+										<T id="nginxions.acme.servers.directory-reset" />
+									</button>
+								</div>
+							)}
 							{preset?.caa && (
 								<div className="form-hint">
 									<T id="nginxions.acme.servers.caa" data={{ caa: preset.caa }} />
@@ -266,6 +279,10 @@ const ServerModal = EasyModal.create(({ visible, remove, server, presets, onSave
 	);
 });
 
+/** the form of a new ACME server (the menu "Add" of Certificates) */
+export const showAcmeServerModal = (presets: AcmePreset[], onSaved: () => void) =>
+	EasyModal.show(ServerModal, { presets, onSaved });
+
 export function AcmeServers({ canManage }: { canManage: boolean }) {
 	const queryClient = useQueryClient();
 	const { data, isLoading } = useAcmeServers();
@@ -284,24 +301,9 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 	};
 
 	return (
-		<div className="px-4 pt-4">
-			<div className="d-flex align-items-start mb-2">
-				<div>
-					<h3 className="h4 mb-1">
-						<T id="nginxions.acme.servers.title" />
-					</h3>
-					<p className="text-secondary small mb-0">
-						<T id="nginxions.acme.servers.description" />
-					</p>
-				</div>
-				{canManage && (
-					<Button actionType="primary" className="ms-3 flex-shrink-0 text-nowrap" onClick={() => open()}>
-						<T id="nginxions.acme.servers.add" />
-					</Button>
-				)}
-			</div>
+		<section className={cn("card", pkiStyles.card)}>
 			<div className="table-responsive">
-				<table className="table table-vcenter card-table">
+				<table className="table table-vcenter card-table nx-stack">
 					<thead>
 						<tr>
 							<th>
@@ -337,12 +339,17 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 										</span>
 									)}
 								</td>
-								<td className="font-monospace small text-break">{s.directory}</td>
-								<td>
+								<td
+									className="font-monospace small text-break"
+									data-label={t("nginxions.acme.servers.directory")}
+								>
+									{s.directory}
+								</td>
+								<td data-label={t("nginxions.acme.servers.client")}>
 									<T id={`nginxions.acme.client.${s.client}`} />
 								</td>
-								<td>{s.usedBy}</td>
-								<td className="text-end text-nowrap">
+								<td data-label={t("nginxions.acme.servers.used")}>{s.usedBy}</td>
+								<td className="text-end text-nowrap nx-actions">
 									{canManage && (
 										<>
 											{!s.isDefault && (
@@ -388,6 +395,6 @@ export function AcmeServers({ canManage }: { canManage: boolean }) {
 					</tbody>
 				</table>
 			</div>
-		</div>
+		</section>
 	);
 }

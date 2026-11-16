@@ -8,7 +8,7 @@ import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { useCan } from "../rbac/hooks";
-import { type HostRef, hostKey, type IssueResult, issueCert, issuersFor, type PkiOverview } from "./api";
+import { type HostRef, hostKey, type IssueResult, issueCert, issuersFor, type PkiOverview, linkBase } from "./api";
 import { Delivery } from "./Delivery";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
@@ -92,7 +92,7 @@ const AccessModal = EasyModal.create(({ visible, remove, data, host, onDone }: P
 								data={{ name: result.certificate.commonName, host: chosen?.name ?? "" }}
 							/>
 						</Alert>
-						<Delivery result={result} publicUrl={data.settings.publicUrl} />
+						<Delivery result={result} publicUrl={linkBase(data)} />
 					</>
 				) : hosts.length === 0 ? (
 					<Alert variant="info" className="mb-0">

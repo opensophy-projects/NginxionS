@@ -1,6 +1,6 @@
 # Как развернуть develop-версию NginxionS и что проверить руками
 
-Документ для команды: как поставить свежую сборку на свой сервер или ноутбук и что проверить самому сверх автотестов CI. Состояние на конец фазы 1.
+Документ для команды: как поставить свежую сборку на свой сервер или ноутбук и что проверить самому сверх автотестов CI. Полная установка и удаление для пользователей — в [README](../README.md#быстрая-установка) и [UNINSTALL.md](UNINSTALL.md).
 
 ## 1. Какая версия где лежит
 
@@ -10,13 +10,13 @@
 | Локальная сборка `local/nginxions*:dev` | Любая ветка, в том числе непослитая | Если изменения ещё не в `work` |
 | Dev-стек (`compose.dev.yaml`) | Upstream-образ NPMplus + наш backend и frontend из исходников | Разработка интерфейса и backend. Агент берётся из Hub, поэтому для проверки WAF не подходит |
 
-> **Важно.** Тег `develop` в Docker Hub обновляется только после слияния в `work`. Изменения фазы 1 пока лежат в `claude/practical-ptolemy-ulj2e4`. Чтобы проверить их из Docker Hub, сначала слейте ветку в `work` и дождитесь зелёного CI: задача «Images (amd64) + closed-network test» опубликует образы, затем соберётся манифест `nginxions multi-arch manifest`. Без слияния подходит только вариант Б (локальная сборка).
+> **Важно.** Тег `develop` в Docker Hub обновляется только после слияния в `work` и зелёного CI: задача `publish` пушит и подписывает образы, затем `manifest` собирает мультиархитектурный `nginxions`. Изменения, которые ещё не в `work`, проверяются только вариантом Б (локальная сборка).
 
 ## 2. Что нужно на машине
 
 - Linux x86_64 (amd64). Образы open-appsec собираются только под amd64, arm64 экспериментальный.
-- Docker Engine 26+ и Docker Compose 2.23+ (`docker version`, `docker compose version`).
-- Свободные порты 80, 443 и 81. Другие порты задаются так: `NGINXIONS_HTTP_PORT=8080 NGINXIONS_HTTPS_PORT=8443 NGINXIONS_ADMIN_PORT=8181`. Адрес хоста, на котором они открыты: `NGINXIONS_BIND_IP` (80, 443) и `NGINXIONS_ADMIN_BIND_IP` (81), по умолчанию `0.0.0.0`; например `NGINXIONS_ADMIN_BIND_IP=127.0.0.1` открывает интерфейс только локально.
+- Docker Engine 28+ и Docker Compose 2.23+ (`docker version`, `docker compose version`). Docker 28 закрывает доступ соседних машин локальной сети к портам, опубликованным на `127.0.0.1` (панель :81 по умолчанию); тома с `subpath` работают с Docker 26.
+- Свободные порты 80, 443 и 81. Другие порты задаются так: `NGINXIONS_HTTP_PORT=8080 NGINXIONS_HTTPS_PORT=8443 NGINXIONS_ADMIN_PORT=8181`. Адрес хоста, на котором они открыты: `NGINXIONS_BIND_IP` (80, 443; по умолчанию `0.0.0.0`) и `NGINXIONS_ADMIN_BIND_IP` (81; по умолчанию `127.0.0.1` — панель видна только на самом сервере). Панель в сети управления или VPN: `NGINXIONS_ADMIN_BIND_IP=<адрес>`, на всех адресах — `0.0.0.0` (не советуем).
 - Около 10 ГБ на диске для образов и томов.
 - По умолчанию NginxionS слушает только IPv4. Нужен IPv6 — `NGINXIONS_DISABLE_IPV6=false` в `deploy/.env` (или перед каждой командой `docker compose`); на хосте IPv6 должен работать.
 - `docker compose pull` падает с `TLS handshake timeout` на `auth.docker.io`, хотя `curl https://auth.docker.io/token` отвечает: соединения Docker с Docker Hub обрываются по пути (так бывает у некоторых провайдеров, в том числе в России). Это не лимиты Docker Hub — при них приходит `429 Too Many Requests`. Решение — зеркало Docker Hub, все образы стека берутся с `docker.io`, так что зеркало покрывает их все:
@@ -34,12 +34,11 @@
 ## 3. Вариант А: образы из Docker Hub
 
 ```bash
-git clone https://github.com/opensophy-projects/NPMOS nginxions && cd nginxions
+git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
 git checkout work                       # ветка, из которой собран тег develop
 
-docker compose -f deploy/compose.yaml pull
-docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml ps   # nginxions и postgres должны быть healthy
+docker compose -f deploy/compose.yaml up -d --pull always
+docker compose -f deploy/compose.yaml ps   # все сервисы healthy
 ```
 
 Версии всех образов закреплены в `deploy/.env` (`NGINXIONS_VERSION=develop`). Другой тег задаётся так: `NGINXIONS_VERSION=<тег> docker compose ...`.
@@ -53,10 +52,10 @@ docker image inspect opensophy/nginxions:develop --format '{{.Created}}'
 ## 4. Вариант Б: собрать образы самому
 
 ```bash
-git clone https://github.com/opensophy-projects/NPMOS nginxions && cd nginxions
+git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
 git checkout claude/practical-ptolemy-ulj2e4      # или любая другая ветка
 
-scripts/build-images.sh                            # все 5 образов, тег local/<имя>:dev
+scripts/build-images.sh                            # nginxions и nginxions-openappsec, тег local/<имя>:dev
 NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev docker compose -f deploy/compose.yaml up -d
 ```
 
@@ -70,7 +69,7 @@ NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/test-airgap.sh
 
 ## 5. Первый вход
 
-1. Откройте `https://<адрес-сервера>:81`. Сертификат самоподписанный, браузер предупредит.
+1. Откройте панель. Она слушает `127.0.0.1:81` сервера: на самом сервере — `https://127.0.0.1:81`, с другой машины — через SSH-туннель `ssh -L 8181:127.0.0.1:81 user@<адрес-сервера>` и `https://localhost:8181` (или задайте `NGINXIONS_ADMIN_BIND_IP`, см. раздел 2). Сертификат самоподписанный, браузер предупредит.
 2. Создайте первого администратора. Пароли сервисов, ключи CrowdSec и токен `nginxions-control` уже сгенерировал `nginxions-init`; `.env` и ручные пароли не нужны.
 3. Язык переключается флажком справа вверху.
 
@@ -100,19 +99,21 @@ curl -s -H 'Host: test.local' http://<адрес-сервера>/
 
 ```bash
 git pull
-docker compose -f deploy/compose.yaml pull     # для варианта Б: scripts/build-images.sh
-docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml up -d --pull always     # для варианта Б: сначала scripts/build-images.sh, без --pull
 ```
 
 - `nginxions-init` запускается при каждом `up` и только дополняет недостающее: новые секреты (например, ключ bouncer `appsec` для агента) и каталоги. Существующие пароли и данные не трогает.
 - Миграции БД (`nginxions_waf_*`, `nginxions_waf_custom_policy`) применяются при старте `nginxions`.
-- Новые тома (`appsec-model`) compose создаёт сам.
+- Новые тома (например, `clamav-db`, `clamav-control`) compose создаёт сам.
+- Перед обновлением на непроверенную сборку сделайте резервную копию томов ([UNINSTALL.md, раздел 0](UNINSTALL.md#0-резервная-копия-по-желанию)).
 
 Начать с нуля (удалятся **все** данные: хосты, сертификаты, пользователи, БД, обучение агента):
 
 ```bash
 docker compose -f deploy/compose.yaml down -v
 ```
+
+Полное удаление вместе с образами, тестовыми стеками и кэшем браузера — [UNINSTALL.md](UNINSTALL.md).
 
 ## 8. Атаки для проверки WAF
 
@@ -180,7 +181,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "$H" "$T/?cmd=;cat%20/etc/passwd"   
 - [ ] **Импорт/экспорт:** экспортируйте политику в v1beta2, импортируйте обратно — план без ошибок, всё «обновляется». Импортируйте свой `local_policy.yaml`, если он есть.
 - [ ] Что непонятно в редакторе объектов: подписи полей, подсказки, какие поля стоит добавить (сейчас нет тонких настроек IPS/файлов и антибота — это Premium).
 
-### «Сертификаты → PKI и mTLS» (фаза 6)
+### «Сертификаты»: PKI и mTLS (фаза 6)
 - [ ] **Импорт .p12 на устройствах** (главная приёмка фазы, CI не может): выпустите клиентский сертификат и откройте защищённый хост в Chrome и Firefox на Windows/macOS/Linux, на Android и iOS (одноразовая ссылка + QR удобнее всего). Браузер должен спросить сертификат и пустить. Если какая-то система не импортирует .p12 — напишите, с галочкой «.p12 для любых систем» или без.
 - [ ] **В пару кликов с «Хостов»:** у хоста с TLS в колонке mTLS выберите «Создать домен доверия для хоста» (на пустой установке сначала создастся корень), затем «Выпустить клиентский сертификат». Без сертификата браузер показывает понятную страницу (RU/EN), с сертификатом — сайт.
 - [ ] **Отзыв:** отзовите сертификат, которым только что заходили. Новое подключение получает отказ за секунды. Уже открытое соединение браузера (keep-alive) может жить до его закрытия — проверьте, насколько это заметно.

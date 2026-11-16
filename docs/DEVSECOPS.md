@@ -39,7 +39,7 @@
 | Контракт | **policy contract** (`scripts/test-policy-contract.sh`) | политики бэкенда (встроенные объекты, примеры open-appsec, политика со всеми видами объектов) подаются настоящему агенту; каждая должна примениться как написана | `ci.yml` → `contract`, `images` |
 | Фаззинг | **fuzz** (`scripts/fuzz.test.mjs`, Lua-тест File Security) | парсеры недоверенного ввода (конвертер Snort, экспертный фрагмент и импорт политики, загрузки через File Security) на мутированных входах: только результат или свой отказ, без исключений и зависаний. 300 случаев в CI, десятки тысяч ночью; `FUZZ_SEED` повторяет найденное | `ci.yml` → `checks`, `nightly.yml` |
 | WAF | **GoTestWAF** (`scripts/test-waf-score.sh`) | оценка защиты против базовой (`.github/security/waf-baseline.json`, 77,1 % ± 3): ниже — тест падает | `ci.yml` → `stack` |
-| Сети | **test-airgap** | с внешней сети недоступны база, LAPI и AppSec CrowdSec, clamd и локальные порты контейнера `openappsec` (агент, `nginxions-control`, shared storage, tuning) | `ci.yml` → `stack` |
+| Сети | **test-airgap** | с внешней сети недоступны база, LAPI и AppSec CrowdSec, clamd, `nginxions-control` и локальные порты контейнера `openappsec` (агент, shared storage, tuning) | `ci.yml` → `stack` |
 | Цепочка поставок | **cosign**, **SLSA provenance**, **SBOM-аттестация** | публикуемые образы подписаны (keyless, Sigstore), к ним приложены происхождение сборки и SBOM: `gh attestation verify oci://docker.io/<ns>/<образ>:<тег> --repo <владелец>/<репо>` | `ci.yml` → `publish` |
 | Качество | **jscpd**, покрытие тестами | дублирование кода, покрытие backend (`node --test`), frontend (vitest) и Go-сервисов агента (`scripts/test-go.sh`) | `security.yml` |
 
@@ -230,13 +230,22 @@ GitHub закрывает такие оповещения при следующ�
 этого шага каждое принятое и подавленное оставалось бы открытым оповещением. Полные результаты остаются в артефактах
 и в отчёте.
 
+Оповещения закрываются только анализом той же категории. Категория, в которую больше ничего не загружают (её
+переименовали или убрали), держит свои оповещения открытыми навсегда. Поэтому для старых категорий образов
+`trivy-npmos` и `trivy-npmos-openappsec` (до переименования в NginxionS) задача образов загружает пустой SARIF
+Trivy. Переименовывая категорию, добавьте старое имя туда же или удалите её анализы в Security → Code scanning →
+Tool status.
+
 Как закрыты находки, которые были приняты раньше (их записи удалены из `accepted-risks.json`):
 
 - **возможности контейнеров**: у каждого сервиса `cap_drop: ALL`; `nginxions` добавляет только `SETGID` (порты ниже
   1024 без `NET_BIND_SERVICE`: `sysctls` `net.ipv4.ip_unprivileged_port_start=0` у `openappsec`, владельца сети),
-  `postgres` — пять, нужных его entrypoint; `openappsec`, `crowdsec`, `nginxions-init` — ни одной. У всех
+  `postgres` (uid 70) и `clamav` (uid 100) работают от своих пользователей с корнем только для чтения и без
+  возможностей, `crowdsec` и `control` — с корнем только для чтения; `openappsec`, `crowdsec`, `control`,
+  `nginxions-init` — без возможностей. Лимиты памяти и процессов по умолчанию не заданы, их
+  включают `NGINXIONS_MEM_<СЕРВИС>` / `NGINXIONS_PIDS_<СЕРВИС>`. У всех
   `no-new-privileges` и `healthcheck`; порты публикуются на `NGINXIONS_BIND_IP` / `NGINXIONS_ADMIN_BIND_IP`
-  (по умолчанию `0.0.0.0`). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
+  (по умолчанию `0.0.0.0` для 80/443 и `127.0.0.1` для панели :81). Оверлеи `compose.dev.yaml` и `deploy/test/` повторяют это для своих сервисов;
 - **Python и SQLite в образе агента**: сигнатуры Snort конвертирует `snort_to_ips_local.mjs` (Node.js образа), тест
   `snort_to_ips_local.test.mjs` сверяет его вывод с питоновским оригиналом upstream; из Boost ставятся только
   библиотеки, которые линкуют бинарники агента (`scanelf` в стадии сборки), а не пакет `boost`, тянувший
@@ -266,9 +275,10 @@ GitHub закрывает такие оповещения при следующ�
 Что остаётся принятым риском и почему кодом не закрывается:
 
 - **root в контейнерах** (`DS-0002`, `CIS-DI-0001`, KICS Missing User): NPMplus стартует от root и сам переходит на
-  `PUID`/`PGID`; агенту нужен сокет Docker для `nginxions-control` (System → Services), группа которого на каждом хосте
-  своя. Без привилегий: `cap_drop: ALL`, `no-new-privileges`;
-- **сокет Docker у `openappsec`** — для `nginxions-control` (белый список операций, токен, 127.0.0.1);
+  `PUID`/`PGID`; `nginxions-control` нужен сокет Docker, группа которого на каждом хосте своя. Без привилегий:
+  `cap_drop: ALL`, `no-new-privileges`;
+- **сокет Docker у `control`** — отдельный контейнер `nginxions-control` (белый список операций, токен, сеть `control`
+  только с `openappsec`, корень только для чтения); контейнеры, принимающие трафик из интернета, сокета не получают;
 - **пакеты Alpine без исправления** (`busybox`/`ssl_client`, `coreutils`, `python3`/`sqlite-libs` для certbot в
   `nginxions`, `ada-libs`): записи с `"unfixed": true` перестают действовать, как только в Alpine появится версия с
   исправлением, — тогда находка снова открыта и обновляется пересборкой;

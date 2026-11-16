@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { originLabel, remaining, t } from "../../crowdsec/labels";
 import { useCan } from "../../rbac/hooks";
 import { dateTime, timeAgo } from "../../ui/time";
-import styles from "../Pki/Pki.module.css";
+import styles from "../../pki/Pki.module.css";
 import { SearchField } from "../../ui/SearchField";
 
 const PAGE = 100;

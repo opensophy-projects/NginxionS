@@ -1,6 +1,6 @@
 // lego, the second ACME client of NginxionS (nginxions/acme/servers.js: client "lego"). certbot registers with an RSA key
 // (RS256) and sends a CSR without a subject; some CAs accept only ES256 account keys and need the name in the CN
-// (the TLS CA of the Russian Federation, for one). lego does both, takes EAB, ACME profiles, your own CSR, a reason
+// (the TLS CA of TCI, tlscc.ru, for one). lego does both, takes EAB, ACME profiles, your own CSR, a reason
 // code of revocation, and solves DNS-01 with 150+ providers (credentials as KEY=VALUE, `lego dnshelp -c <code>`).
 // The certificate goes to the place of a certbot one (/data/tls/certbot/live/npm-<id>), so hosts and nginx use it
 // the same way; NginxionS renews it itself (the renewal point of cert-terms.js), like a certificate of your own CSR.

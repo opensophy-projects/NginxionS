@@ -2375,7 +2375,7 @@ router
 				{
 					type: "object",
 					additionalProperties: false,
-					required: ["enabled", "ca_ids"],
+					required: ["enabled"],
 					properties: {
 						enabled: { type: "boolean" },
 						ca_ids: { type: "array", maxItems: 50, items: { type: "integer", minimum: 1 } },

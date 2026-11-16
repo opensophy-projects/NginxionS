@@ -190,7 +190,8 @@ inline std::string repr_uniq(const std::string & value) {
                     }
                     else {
                         char buf[16];
-                        sprintf(buf, "\\" "x%02X", ch);
+                        // NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string)
+                        snprintf(buf, sizeof(buf), "\\" "x%02X", ch);
                         result += buf;
                     }
                 }
