@@ -9,6 +9,9 @@
 }
 .card > :global(.table-responsive:last-child) {
 	margin-bottom: calc(var(--os-frame) + 1px - 1rem);
+	/* the row stripes and hover follow the rounded corners of the surface, not over them */
+	border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+	border-bottom-right-radius: calc(var(--radius-lg) - 1px);
 }
 .cardHead {
 	display: flex;

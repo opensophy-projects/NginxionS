@@ -27,10 +27,15 @@
 }
 .card > :global(.table-responsive:last-child) {
 	margin-bottom: calc(var(--os-frame) + 1px - 1rem);
+	/* the header band, row stripes and hover follow the rounded corners of the surface, not over them */
+	border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+	border-bottom-right-radius: calc(var(--radius-lg) - 1px);
 }
 /* a table that opens the card (no title or filters above it) starts at its top edge, not under an empty strip */
 .card > :global(.table-responsive:first-child) {
 	margin-top: calc(var(--os-frame) + 1px - 1rem);
+	border-top-left-radius: calc(var(--radius-lg) - 1px);
+	border-top-right-radius: calc(var(--radius-lg) - 1px);
 }
 /* long headers (TRUST DOMAIN (CA), REVOCATION LIST) wrap instead of widening their column */
 .card :global(.table) th {
