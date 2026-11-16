@@ -725,6 +725,17 @@ a.card:focus-visible {
 		align-self: start;
 		text-align: right;
 	}
+	/* buttons with words (logs, restart) go in a row under the fields instead of a narrow column */
+	.table.nx-stack > tbody > tr > td.nx-actions-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		grid-column: 1 / -1;
+		margin-top: 0.25rem;
+	}
+	.table.nx-stack > tbody > tr > td.nx-actions-row .btn {
+		margin: 0;
+	}
 	.table.nx-stack > tbody > tr > td.nx-actions .btn {
 		margin: 0 0 0.375rem 0.375rem;
 	}

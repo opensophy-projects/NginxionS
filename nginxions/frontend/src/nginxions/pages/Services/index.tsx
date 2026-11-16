@@ -68,7 +68,7 @@ function ServicesTable({ services }: { services: Service[] }) {
 
 	return (
 		<div className="table-responsive">
-			<table className="table table-vcenter card-table">
+			<table className="table table-vcenter card-table nx-stack">
 				<thead>
 					<tr>
 						<th>
@@ -95,7 +95,7 @@ function ServicesTable({ services }: { services: Service[] }) {
 									<div className="font-weight-medium">{s.service}</div>
 									<div className="text-secondary small">{s.name}</div>
 								</td>
-								<td>
+								<td data-label={intl.formatMessage({ id: "nginxions.services.state" })}>
 									<span className={`badge bg-${STATE_COLORS[s.state] || "secondary"}-lt me-1`}>
 										<T id={`nginxions.services.state.${s.state}`} />
 									</span>
@@ -106,7 +106,10 @@ function ServicesTable({ services }: { services: Service[] }) {
 									)}
 									<div className="text-secondary small mt-1">{s.status}</div>
 								</td>
-								<td className="font-monospace small">
+								<td
+									className="font-monospace small"
+									data-label={intl.formatMessage({ id: "nginxions.services.address" })}
+								>
 									{(s.addresses ?? []).map((a) => (
 										<div key={a.network} title={a.network}>
 											{a.ip}
@@ -128,11 +131,11 @@ function ServicesTable({ services }: { services: Service[] }) {
 											</div>
 										))}
 								</td>
-								<td>
+								<td data-label={intl.formatMessage({ id: "nginxions.services.version" })}>
 									<div>{s.version || "—"}</div>
 									<div className="text-secondary small text-break">{s.image}</div>
 								</td>
-								<td className="text-nowrap">
+								<td className="text-nowrap nx-actions-row">
 									<Button size="sm" className="me-2" onClick={() => showServiceLogsModal(s.service)}>
 										<T id="nginxions.services.logs" />
 									</Button>
@@ -246,7 +249,7 @@ function AppsCard() {
 				</p>
 			) : (
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className="table table-vcenter card-table nx-stack">
 						<thead>
 							<tr>
 								<th>
@@ -265,7 +268,10 @@ function AppsCard() {
 										<div className="font-weight-medium">{app.name}</div>
 										<div className="text-secondary small text-break">{app.image}</div>
 									</td>
-									<td className="font-monospace small">
+									<td
+										className="font-monospace small"
+										data-label={intl.formatMessage({ id: "nginxions.services.address" })}
+									>
 										{app.addresses.map((a) => (
 											<div key={a.network} title={a.network}>
 												{a.ip}
@@ -276,7 +282,7 @@ function AppsCard() {
 											</div>
 										))}
 									</td>
-									<td className="text-nowrap">
+									<td className="text-nowrap nx-actions-row">
 										{publish &&
 											tcp(app).map((p) => (
 												<Button
