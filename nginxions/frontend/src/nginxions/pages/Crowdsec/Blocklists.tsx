@@ -23,7 +23,7 @@ import { showConfirmModal } from "../../modals/ConfirmModal";
 import { useCan } from "../../rbac/hooks";
 import { Dropdown } from "../../ui/Dropdown";
 import { dateTime, timeAgo } from "../../ui/time";
-import styles from "../Pki/Pki.module.css";
+import styles from "../../pki/Pki.module.css";
 
 function Share({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
 	const can = useCan();

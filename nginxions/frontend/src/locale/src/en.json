@@ -648,7 +648,7 @@
 		"defaultMessage": "HTTP-01: the domains must point at this server and port 80 be open from the internet."
 	},
 	"nginxions.acme.csr.intro": {
-		"defaultMessage": "Paste a certificate request made elsewhere — with the key type, subject or extensions you need — and its private key. The ACME server of Settings → ACME signs it; NginxionS renews it with the same CSR and serves it like any ACME certificate. The domains come from the subjectAltName of the CSR."
+		"defaultMessage": "Paste a certificate request made elsewhere — with the key type, subject or extensions you need — and its private key. The ACME server of Certificates → ACME signs it; NginxionS renews it with the same CSR and serves it like any ACME certificate. The domains come from the subjectAltName of the CSR."
 	},
 	"nginxions.acme.csr.key": {
 		"defaultMessage": "Private key of the CSR, PEM"
@@ -704,6 +704,12 @@
 	"nginxions.acme.new": {
 		"defaultMessage": "New ACME certificate"
 	},
+	"nginxions.acme.page.renewal": {
+		"defaultMessage": "Renewal"
+	},
+	"nginxions.acme.page.subtitle": {
+		"defaultMessage": "Where ACME certificates come from: Let's Encrypt and other CAs, your own ACME server; the default one; email, EAB and the client of each. Changes need the permission of the settings."
+	},
 	"nginxions.acme.server": {
 		"defaultMessage": "ACME server"
 	},
@@ -726,7 +732,7 @@
 		"defaultMessage": "certbot: the client of NginxionS, its DNS plugins. Registers with an RSA key and sends a CSR without a subject."
 	},
 	"nginxions.acme.servers.client-hint.lego": {
-		"defaultMessage": "lego: an ES256 account key and the name in the CN of the CSR (needed by the TLS CA of the Russian Federation and others), 150+ DNS providers."
+		"defaultMessage": "lego: an ES256 account key and the name in the CN of the CSR (needed by the CA of TCI, tlscc.ru, and others), 150+ DNS providers."
 	},
 	"nginxions.acme.servers.custom": {
 		"defaultMessage": "Another ACME server (URL)"
@@ -745,6 +751,12 @@
 	},
 	"nginxions.acme.servers.directory-placeholder": {
 		"defaultMessage": "https://acme.example.com/directory"
+	},
+	"nginxions.acme.servers.directory-preset": {
+		"defaultMessage": "The address of the preset: {url}."
+	},
+	"nginxions.acme.servers.directory-reset": {
+		"defaultMessage": "Restore it"
 	},
 	"nginxions.acme.servers.eab-hint": {
 		"defaultMessage": "External account binding, from the account page of the authority. Empty when it is not needed."
@@ -1121,6 +1133,9 @@
 	"nginxions.certs.badge.valid": {
 		"defaultMessage": "Valid"
 	},
+	"nginxions.certs.block.cas": {
+		"defaultMessage": "Certificate authorities"
+	},
 	"nginxions.certs.copy-path": {
 		"defaultMessage": "Copy the path"
 	},
@@ -1128,10 +1143,10 @@
 		"defaultMessage": "{days, plural, one {# day left} other {# days left}}"
 	},
 	"nginxions.certs.default-server": {
-		"defaultMessage": "Requests for unknown names"
+		"defaultMessage": "The panel by IP (:81) and unknown names; replaced by the default certificate (Administration → Settings → General)"
 	},
 	"nginxions.certs.description": {
-		"defaultMessage": "Every certificate of the system in one list: TLS of the hosts, CAs and issued certificates of the PKI, and certificate files on disk that no record describes."
+		"defaultMessage": "Every certificate in one place: TLS of the hosts (ACME and your own), certificates of your own CAs and the access certificates of mTLS; below, the CAs and the ACME servers."
 	},
 	"nginxions.certs.details": {
 		"defaultMessage": "Details"
@@ -1146,7 +1161,7 @@
 		"defaultMessage": "Valid until"
 	},
 	"nginxions.certs.files-hint": {
-		"defaultMessage": "Certificate files found on disk that no record of NginxionS or the PKI describes: copies left by a migration, an old host or a manual change. NginxionS does not use them, except the placeholder of NginxionS; delete the others from the disk if they are not needed."
+		"defaultMessage": "Certificate files found on disk that no record of NginxionS or the PKI describes: copies left by a migration, an old host or a manual change. NginxionS does not use them, except the built-in self-signed one (the panel by IP); delete the others from the disk if they are not needed."
 	},
 	"nginxions.certs.issuer": {
 		"defaultMessage": "Issued by"
@@ -1155,7 +1170,7 @@
 		"defaultMessage": "Type"
 	},
 	"nginxions.certs.kind.dummy": {
-		"defaultMessage": "Placeholder of NginxionS"
+		"defaultMessage": "Self-signed, built in"
 	},
 	"nginxions.certs.kind.external": {
 		"defaultMessage": "External CA (uploaded)"
@@ -1193,6 +1208,21 @@
 	"nginxions.certs.search": {
 		"defaultMessage": "Name, domain, issuer, serial, host or path"
 	},
+	"nginxions.certs.selected": {
+		"defaultMessage": "Selected: {count}"
+	},
+	"nginxions.certs.settings": {
+		"defaultMessage": "Settings"
+	},
+	"nginxions.certs.settings.pki": {
+		"defaultMessage": "PKI"
+	},
+	"nginxions.certs.settings.renewal": {
+		"defaultMessage": "ACME renewal"
+	},
+	"nginxions.certs.settings.templates": {
+		"defaultMessage": "Templates"
+	},
 	"nginxions.certs.sort": {
 		"defaultMessage": "Sort"
 	},
@@ -1222,6 +1252,24 @@
 	},
 	"nginxions.certs.source.tls": {
 		"defaultMessage": "TLS of hosts"
+	},
+	"nginxions.certs.stat.acme": {
+		"defaultMessage": "ACME servers"
+	},
+	"nginxions.certs.stat.cas": {
+		"defaultMessage": "Certificate authorities"
+	},
+	"nginxions.certs.stat.ended": {
+		"defaultMessage": "Expired or revoked"
+	},
+	"nginxions.certs.stat.expiring": {
+		"defaultMessage": "Expire within 30 days"
+	},
+	"nginxions.certs.stat.mtls": {
+		"defaultMessage": "Hosts with mTLS"
+	},
+	"nginxions.certs.stat.valid": {
+		"defaultMessage": "Valid"
 	},
 	"nginxions.certs.status": {
 		"defaultMessage": "Status"
@@ -2408,6 +2456,9 @@
 	"nginxions.events.raw": {
 		"defaultMessage": "Event as written by the agent"
 	},
+	"nginxions.events.repeats": {
+		"defaultMessage": "Requests in this event (same source, host and reason within a minute)"
+	},
 	"nginxions.events.request-row": {
 		"defaultMessage": "HTTP request"
 	},
@@ -2829,7 +2880,7 @@
 		"defaultMessage": "Turn on mTLS: only clients with an access certificate get through"
 	},
 	"nginxions.hosts.mtls.upstream": {
-		"defaultMessage": "mTLS of NginxionS (Certificates → mTLS CA) is on for this host"
+		"defaultMessage": "mTLS of NginxionS (Certificates → Add → mTLS CA) is on for this host"
 	},
 	"nginxions.hosts.no-access": {
 		"defaultMessage": "You have no access to hosts"
@@ -4160,6 +4211,9 @@
 	"nginxions.mtls.trust": {
 		"defaultMessage": "Trusted CAs"
 	},
+	"nginxions.nav.acme": {
+		"defaultMessage": "ACME"
+	},
 	"nginxions.nav.administration": {
 		"defaultMessage": "Administration"
 	},
@@ -4192,6 +4246,9 @@
 	},
 	"nginxions.nav.mtls": {
 		"defaultMessage": "mTLS"
+	},
+	"nginxions.nav.mtls-pki": {
+		"defaultMessage": "mTLS and PKI"
 	},
 	"nginxions.nav.nothing-found": {
 		"defaultMessage": "Nothing found"
@@ -5078,6 +5135,9 @@
 	"nginxions.pki.link.local": {
 		"defaultMessage": "The link uses the address of this GUI; set a public address of the PKI in Settings if clients cannot reach it."
 	},
+	"nginxions.pki.link.localhost": {
+		"defaultMessage": "This address opens only on this machine or in the local network: set the public address of PKI (PKI → Settings) or open the panel through its domain, then make the link again."
+	},
 	"nginxions.pki.link.none": {
 		"defaultMessage": "No link"
 	},
@@ -5327,6 +5387,9 @@
 	"nginxions.pki.tab.certificates": {
 		"defaultMessage": "Certificates"
 	},
+	"nginxions.pki.tab.mtls": {
+		"defaultMessage": "mTLS of hosts"
+	},
 	"nginxions.pki.tab.settings": {
 		"defaultMessage": "Settings"
 	},
@@ -5359,6 +5422,9 @@
 	},
 	"nginxions.pki.templates.none": {
 		"defaultMessage": "No templates."
+	},
+	"nginxions.pki.title": {
+		"defaultMessage": "mTLS and PKI"
 	},
 	"nginxions.pki.used": {
 		"defaultMessage": "Where used"
@@ -6834,7 +6900,7 @@
 		"defaultMessage": "ACME"
 	},
 	"nginxions.system.group.acme.hint": {
-		"defaultMessage": "When ACME certificates are renewed. The servers they come from are above."
+		"defaultMessage": "When ACME certificates are renewed. The servers they come from are in Certificates → ACME servers."
 	},
 	"nginxions.system.group.external": {
 		"defaultMessage": "External services"

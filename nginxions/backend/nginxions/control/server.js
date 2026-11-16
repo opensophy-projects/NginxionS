@@ -2,9 +2,10 @@
 import { timingSafeEqual } from "node:crypto";
 // NginxionS control plane (nginxions-control): the only way the NginxionS backend reaches the Docker API.
 //
-// Runs in the openappsec container (deploy/openappsec/nginxions-openappsec.sh), which has the Docker socket; the
-// nginxions container, internet-facing, never gets Docker access itself. It listens on 127.0.0.1 of the network
-// namespace nginxions shares with openappsec, and allows only a whitelist:
+// Runs in a container of its own (service "control" of deploy/compose.yaml: the image of the agent with a command of
+// its own), the only one with the Docker socket: neither nginxions nor the agent, which take the traffic of the
+// internet, share its processes or files. It listens on the network "control", which only the openappsec container
+// (and nginxions in its namespace) joins, and allows only a whitelist:
 //   - only containers of this compose project labelled nginxions.managed=true;
 //   - only these operations: list (state, health, version), restart, read logs, and a reload
 //     (SIGHUP) of the services that reread their configuration on it (RELOADABLE).
@@ -13,7 +14,6 @@ import { timingSafeEqual } from "node:crypto";
 //
 // No dependencies besides Node.js (the image copies this directory as is).
 import { readFileSync } from "node:fs";
-import { open } from "node:fs/promises";
 import http from "node:http";
 import { hostname } from "node:os";
 import {
@@ -24,20 +24,23 @@ import {
 	snapshotLearning,
 	stageRestore,
 } from "./learning.js";
+import { untarOne } from "./tar.js";
 import { repairNamespaces } from "./watchdog.js";
 
 const PORT = Number.parseInt(process.env.NGINXIONS_CONTROL_PORT || "7080", 10);
-// 127.0.0.1: the namespace is that of nginx, which other containers of the networks also reach
-const LISTEN = process.env.NGINXIONS_CONTROL_LISTEN || "127.0.0.1";
+// every address of this container: its only network is "control" (deploy/compose.yaml)
+const LISTEN = process.env.NGINXIONS_CONTROL_LISTEN || "0.0.0.0";
 const DOCKER_SOCKET = process.env.NGINXIONS_DOCKER_SOCKET || "/var/run/docker.sock";
-// the service of this container: its "restart" restarts the agent process, not the container (with this service)
-const OWN_SERVICE = process.env.NGINXIONS_CONTROL_SERVICE || "openappsec";
-const AGENT_PID_FILE = process.env.NGINXIONS_AGENT_PID_FILE || "/run/nginxions-agent.pid";
+// the service of the agent: its networks are those of nginx, its container holds the policy the agent applies
+const AGENT_SERVICE = process.env.NGINXIONS_AGENT_SERVICE || "openappsec";
 const TOKEN_FILE = process.env.NGINXIONS_CONTROL_TOKEN_FILE || "/run/secrets/control_token";
-// the configuration the agent made of local_policy.yaml (local_policy_mgmt_gen.cc): what it applies
+// the configuration the agent made of local_policy.yaml (local_policy_mgmt_gen.cc): what it applies; a file of the
+// agent's container, read through the Docker API (archive)
 const AGENT_POLICY_FILE = process.env.NGINXIONS_AGENT_POLICY_FILE || "/tmp/local_appsec.policy";
 const AGENT_POLICY_MAX_BYTES = 32 * 1024 * 1024;
 const DOCKER_TIMEOUT_MS = 15000;
+// a restarted container is waited for until its healthcheck passes (the agent: its port 7777 answers)
+const HEALTHY_TIMEOUT_MS = 180000;
 const MAX_LOG_LINES = 5000;
 // nginxions is restarted this long after nginxions-control has answered (see the restart route)
 const RESTART_GRACE_MS = 2000;
@@ -84,14 +87,15 @@ const docker = (method, path) =>
 						text: async () => body.toString("utf8"),
 						json: async () => JSON.parse(body.toString("utf8") || "null"),
 						arrayBuffer: async () => body,
+						headers: res.headers,
 					};
 					if (!response.ok) {
-						reject(
-							new HttpError(
-								502,
-								`Docker API ${method} ${path.split("?")[0]}: ${status} ${body.toString("utf8").trim()}`,
-							),
+						const err = new HttpError(
+							502,
+							`Docker API ${method} ${path.split("?")[0]}: ${status} ${body.toString("utf8").trim()}`,
 						);
+						err.dockerStatus = status;
+						reject(err);
 						return;
 					}
 					resolve(response);
@@ -160,21 +164,29 @@ const listManaged = async () => {
  * what it wrote (WAF -> Policy). null before the agent applied a policy.
  */
 const agentPolicy = async () => {
-	let file;
+	const agent = await findService(AGENT_SERVICE);
+	const path = `/containers/${agent.id}/archive?path=${encodeURIComponent(AGENT_POLICY_FILE)}`;
+	let response;
 	try {
-		file = await open(AGENT_POLICY_FILE, "r");
+		// the size first (a header of the answer to HEAD): a file too large is not read
+		const head = await docker("HEAD", path);
+		const stat = JSON.parse(
+			Buffer.from(head.headers["x-docker-container-path-stat"] || "", "base64").toString() || "{}",
+		);
+		if (stat.size > AGENT_POLICY_MAX_BYTES) throw new HttpError(413, "the policy of the agent is too large");
+		response = await docker("GET", path);
 	} catch (err) {
-		if (err.code === "ENOENT") return { modifiedAt: null, policy: null };
+		if (err.dockerStatus === 404) return { modifiedAt: null, policy: null };
 		throw err;
 	}
-	// size, time and content of the same open file: the agent may replace the file in between
+	let file;
 	try {
-		const info = await file.stat();
-		if (info.size > AGENT_POLICY_MAX_BYTES) throw new HttpError(413, "the policy of the agent is too large");
-		return { modifiedAt: info.mtime.toISOString(), policy: JSON.parse(await file.readFile("utf8")) };
-	} finally {
-		await file.close();
+		file = untarOne(Buffer.from(await response.arrayBuffer()));
+	} catch (err) {
+		throw new HttpError(502, `Docker API: ${err.message}`);
 	}
+	if (file.size > AGENT_POLICY_MAX_BYTES) throw new HttpError(413, "the policy of the agent is too large");
+	return { modifiedAt: file.mtime.toISOString(), policy: JSON.parse(file.content.toString("utf8")) };
 };
 
 /**
@@ -186,7 +198,7 @@ const listApps = async () => {
 	const containers = await (await docker("GET", "/containers/json")).json();
 	// nginx runs in the network namespace of openappsec: its networks are those of nginxions
 	const own = containers.find(
-		(c) => c.Labels?.[PROJECT_LABEL] === project && c.Labels?.[SERVICE_LABEL] === OWN_SERVICE,
+		(c) => c.Labels?.[PROJECT_LABEL] === project && c.Labels?.[SERVICE_LABEL] === AGENT_SERVICE,
 	);
 	const networks = Object.keys(own?.NetworkSettings?.Networks ?? {});
 	return containers
@@ -251,52 +263,31 @@ const logs = async (service, tail, since) => {
 	return demux(Buffer.from(await response.arrayBuffer()));
 };
 
-const agentPid = () => {
-	try {
-		return Number.parseInt(readFileSync(AGENT_PID_FILE, "utf8").trim(), 10);
-	} catch {
-		return Number.NaN;
-	}
-};
-
-/**
- * The agent process of this container: TERM, nginxions-openappsec.sh starts it again with the settings of the GUI.
- * @returns {number} the pid of the old process
- */
-const restartAgentProcess = () => {
-	const pid = agentPid();
-	if (!Number.isInteger(pid) || pid < 2) throw new HttpError(500, `No agent process in ${AGENT_PID_FILE}`);
-	process.kill(pid, "SIGTERM");
-	return pid;
-};
-
-/** the new agent is up: another pid than the old one, and its local API answers (the backend asks it there) */
-const agentUp = async (oldPid, timeoutMs = 120000) => {
+/** a container restarted after `since` is healthy again (its healthcheck passed), or the time is up */
+const healthyAgain = async (id, since, timeoutMs = HEALTHY_TIMEOUT_MS) => {
 	const until = Date.now() + timeoutMs;
 	while (Date.now() < until) {
 		await new Promise((resolve) => setTimeout(resolve, 2000));
-		if (agentPid() === oldPid) continue;
-		const ok = await new Promise((resolve) => {
-			const req = http.get({ host: "127.0.0.1", port: 7777, path: "/", timeout: 2000 }, (res) => {
-				res.resume();
-				resolve(true);
-			});
-			req.on("timeout", () => req.destroy());
-			req.on("error", () => resolve(false));
-		});
-		if (ok) return true;
+		const state = (await (await docker("GET", `/containers/${id}/json`)).json()).State ?? {};
+		if (!(Date.parse(state.StartedAt || "") >= since)) continue;
+		if (!state.Health || state.Health.Status === "healthy") return true;
 	}
 	return false;
 };
 
 /**
- * This container: the agent process is restarted (a restart of the container would end this service in the middle of
- * it); then the containers in its namespaces (nginxions), so that the nginx attachment attaches to the new agent.
+ * A container, then the containers in its namespaces (nginxions in openappsec's): they keep the old namespace after a
+ * restart and lose the network. The restarted one is first waited for until healthy, so that the nginx attachment
+ * attaches to the new agent.
  */
-const restartOwn = async (container, entry) => {
-	const oldPid = restartAgentProcess();
-	if (!(await agentUp(oldPid))) audit({ ...entry, result: "agent slow to start" });
-	for (const dependent of (await listManaged()).filter((c) => c.networkMode === `container:${container.id}`)) {
+const restartWithDependents = async (container, entry) => {
+	const since = Date.now() - 1000;
+	await docker("POST", `/containers/${container.id}/restart?t=10`);
+	const dependents = (await listManaged()).filter((c) => c.networkMode === `container:${container.id}`);
+	if (dependents.length && !(await healthyAgain(container.id, since))) {
+		audit({ ...entry, result: "slow to become healthy", service: container.service });
+	}
+	for (const dependent of dependents) {
 		await docker("POST", `/containers/${dependent.id}/restart?t=10`);
 		audit({ ...entry, result: "restarted dependent", dependent: dependent.service });
 	}
@@ -378,8 +369,8 @@ const server = http.createServer(async (req, res) => {
 			// a snapshot back in place: staged, then put in place by the next start of the agent (nginxions-entry.sh);
 			// the agent and nginxions are restarted as by a restart of this service (base64: a third more than the files)
 			const files = await stageRestore(await readJson(req, Math.ceil(MAX_SNAPSHOT_BYTES * 1.4) + 65536));
-			const container = await findService(OWN_SERVICE);
-			after = () => restartOwn(container, entry);
+			const container = await findService(AGENT_SERVICE);
+			after = () => restartWithDependents(container, entry);
 			result = { restored: files, restarting: true };
 		} else if (parts[0] === "v1" && parts[1] === "services" && parts.length >= 3) {
 			const service = decodeURIComponent(parts[2]);
@@ -398,29 +389,18 @@ const server = http.createServer(async (req, res) => {
 				result = { service, reloaded: true };
 			} else if (req.method === "POST" && action === "restart") {
 				const container = await findService(service);
-				const dependentsOf = async (id) =>
-					(await listManaged()).filter((c) => c.networkMode === `container:${id}`);
-				if (container.service === OWN_SERVICE) {
-					after = () => restartOwn(container, entry);
+				const doRestart = () => restartWithDependents(container, entry);
+				// answer first when the restart reaches nginxions (itself, or openappsec whose namespace it is in): it
+				// cuts the backend's own request
+				const reachesBackend =
+					container.service === "nginxions" ||
+					(await listManaged()).some((c) => c.networkMode === `container:${container.id}`);
+				if (reachesBackend) {
+					after = doRestart;
 					result = { service, restarted: false, restarting: true };
 				} else {
-					const doRestart = async () => {
-						await docker("POST", `/containers/${container.id}/restart?t=10`);
-						// containers in this one's network (and IPC) namespace keep the old namespace after a
-						// restart and lose the network: restart them too
-						for (const dependent of await dependentsOf(container.id)) {
-							await docker("POST", `/containers/${dependent.id}/restart?t=10`);
-							audit({ ...entry, result: "restarted dependent", dependent: dependent.service });
-						}
-					};
-					if (container.service === "nginxions") {
-						// answer first: restarting nginxions cuts the backend's own request
-						after = doRestart;
-						result = { service, restarted: false, restarting: true };
-					} else {
-						await doRestart();
-						result = { service, restarted: true };
-					}
+					await doRestart();
+					result = { service, restarted: true };
 				}
 			}
 		}

@@ -64,6 +64,12 @@
 			"kind": "false-positive"
 		},
 		{
+			"tool": "testssl-ui",
+			"id": "OCSP_stapling",
+			"reason": "OCSP stapling of a custom or PKI certificate is an option the administrator turns on (CUSTOM_OCSP_STAPLING, default off, docs/ENV-INVENTORY.md): the responses are fetched from the responder of the CA, a connection out of the server, which NginxionS makes only when asked (local-first); with it on, start.sh staples the interface too",
+			"until": "2027-05-01"
+		},
+		{
 			"kind": "false-positive",
 			"tool": "testssl-ui",
 			"id": "BREACH",
@@ -281,6 +287,22 @@
 			"kind": "false-positive",
 			"tool": "codeql-js",
 			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/waf/files.js",
+			"reason": "a signature database of ClamAV the administrator uploads (waf_policy:manage): its name must match [a-z0-9][a-z0-9_-]{0,63}.(cvd|cld|cud) (no path), its content must start with the ClamAV-VDB header; written to the fixed directory of clamd as .tmp and renamed",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/waf/schemas.js",
+			"reason": "an OpenAPI file the administrator uploads (waf_policy:manage): checkName allows a plain file name (.yaml, .yml, .json, no '..' or '/'), describe() parses it as OpenAPI first; written 0600 to the fixed directory of the schemas (0700) as .tmp and renamed",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
 			"where": "nginxions/backend/nginxions/pki/openssl.js",
 			"reason": "inputs of openssl written as 0600 files of a private temporary directory, removed afterwards",
 			"until": "2027-05-01"
@@ -305,7 +327,7 @@
 			"tool": "kics",
 			"id": "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b",
 			"where": "deploy/compose.yaml",
-			"reason": "the Docker socket is for nginxions-control alone (System -> Services): a whitelist of operations on containers labelled nginxions.managed, a token, an audit log, 127.0.0.1 only; the container nginxions, which takes traffic from the internet, has no socket (CLAUDE.md, Security)",
+			"reason": "the Docker socket is for nginxions-control alone, a container of its own (service control): a whitelist of operations on containers labelled nginxions.managed, a token, an audit log, a read-only root filesystem, no capability, the network control shared with openappsec only; the containers that take the traffic of the internet (nginxions, openappsec) do not get it",
 			"until": "2027-05-01"
 		},
 		{
@@ -340,7 +362,7 @@
 			"tool": "kics",
 			"id": "ce76b7d0-9e77-464d-b86f-c5c48e03e22d",
 			"where": "deploy/compose.yaml",
-			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), postgres the five its entrypoint needs to give its data directory to the user postgres (CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID)",
+			"reason": "KICS lists every cap_add to be checked: every service drops ALL; nginxions adds SETGID only (nginx, root, sets the groups of its workers; the ports need no capability, sysctls of openappsec), postgres and clamav run as their users with none",
 			"until": "2027-05-01",
 			"kind": "false-positive"
 		},
@@ -516,7 +538,15 @@
 			"id": "*",
 			"where": "sqlite-libs",
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite comes with python3 (certbot of NPMplus), NginxionS keeps its data in PostgreSQL",
+			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite) and of python3 (certbot); NginxionS uses neither node:sqlite nor the sqlite module of Python, its data is in PostgreSQL",
+			"until": "2027-02-01"
+		},
+		{
+			"tool": "grype-nginxions-openappsec",
+			"id": "*",
+			"where": "sqlite-libs",
+			"unfixed": true,
+			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite), installed for nginxions-control, which listens on 127.0.0.1 and does not use node:sqlite; the agent links no sqlite",
 			"until": "2027-02-01"
 		},
 		{

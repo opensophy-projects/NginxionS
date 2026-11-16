@@ -9,7 +9,7 @@
 #      appsec/db_password
 #      appsec-agent/crowdsec_bouncer_key
 #      crowdsec/bouncer_key_{nginxions,appsec}   (official image registers /run/secrets/bouncer_key_<name>)
-#      control/control_token        (nginxions-control in openappsec; the backend gets a copy)
+#      control/control_token        (nginxions-control, its own container; the backend gets a copy)
 # 2. Pre-created directories that other services mount by subpath.
 # 3. CrowdSec volumes seeded from the offline hub snapshot baked into the nginxions image,
 #    so the official crowdsec image starts without internet.

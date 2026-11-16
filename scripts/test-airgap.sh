@@ -131,12 +131,13 @@ if [ "${UI_E2E:-1}" = 1 ]; then
 fi
 
 # the isolation of the networks, as an attacker on the edge network (the internet side) would try it: the internal
-# services (database, LAPI of CrowdSec, clamd) are not on it, and the local services of the openappsec container
-# (agent 7777, nginxions-control 7080 with the Docker API, shared storage 7811, tuning 7813) listen on 127.0.0.1 only
+# services (database, LAPI of CrowdSec, clamd) and nginxions-control (the Docker API, network "control") are not on
+# it, and the local services of the openappsec container (agent 7777, shared storage 7811, tuning 7813) listen on
+# 127.0.0.1 only
 echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
 "${compose[@]}" run --rm -T --entrypoint sh tester -c '
   bad=""
-  for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
+  for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
     # the time of the TCP connection: 0 when none was made (no such name on this network, refused, dropped); a server
     # that waits for its client keeps curl until the timeout, so its exit code does not tell
     tc=$(curl -s -o /dev/null -w "%{time_connect}" --connect-timeout 3 --max-time 4 "telnet://$t" < /dev/null)

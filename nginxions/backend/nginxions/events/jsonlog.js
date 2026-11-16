@@ -16,17 +16,19 @@ const hash = (b) => createHash("sha1").update(b).digest("hex");
 
 /**
  * One round: the new lines of the log → events.
- * @param {{file: string, cursor: string, toEvent: (line: object) => object|null, now?: Date}} options
+ * @param {{file: string, cursor: string, toEvent: (line: object) => object|null, now?: Date,
+ *   collapse?: (events: object[]) => Promise<{events: object[], repeats: object[]}>}} options  collapse: repeated
+ *   events into one row (pki/denials.js)
  * @returns {Promise<object[]>} the events stored
  */
-export const pollJsonLog = async ({ file, cursor: key, toEvent, now = new Date() }) => {
+export const pollJsonLog = async ({ file, cursor: key, toEvent, now = new Date(), collapse }) => {
 	let handle;
 	try {
 		handle = await open(file, "r");
 	} catch {
 		return [];
 	}
-	const events = [];
+	let events = [];
 	try {
 		const { size } = await handle.stat();
 		const cursor = (await loadCursors()).get(key);
@@ -63,8 +65,11 @@ export const pollJsonLog = async ({ file, cursor: key, toEvent, now = new Date()
 			}
 		}
 		offset += end + 1;
+		const collapsed = collapse ? await collapse(events) : { events, repeats: [] };
+		events = collapsed.events;
 		await store({
 			events,
+			repeats: collapsed.repeats,
 			telemetry: [],
 			cursors: [{ key, file, offset, head: hash(headBuf), head_length: headBuf.length }],
 		});

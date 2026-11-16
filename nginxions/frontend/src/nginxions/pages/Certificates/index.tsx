@@ -1,23 +1,27 @@
-// Certificates → All certificates: one registry of every certificate the system has (TLS of the hosts, CAs and
-// issued certificates of the PKI, certificate files on disk no record describes) with pages from the server,
-// search, the soonest expiry first, filters by source, status, type and use. TLS rows keep the actions of
-// NPMplus (renew, download, edit, test, delete), PKI rows open their card or the PKI page.
+// Certificates: the whole section on one page, like Hosts. A summary; the hosts protected by mTLS; one table of
+// every certificate (TLS of the hosts from ACME or uploaded, certificates issued by the PKI with the access
+// certificates of mTLS, files on disk no record describes) with pages from the server, search, the soonest expiry
+// first, filters by source, status, type and use, bulk revocation; then the CAs and the ACME servers, each a block
+// of its own; the settings (PKI, templates, renewal) in a window. ?cert=12 opens a certificate of the PKI,
+// ?section=cas|acme|mtls scrolls to a block (the old pages /pki, /mtls and /certificates/acme lead here).
 import {
 	IconChevronLeft,
 	IconChevronRight,
 	IconDots,
 	IconFilter,
 	IconPlus,
+	IconSettings,
 	IconSortDescending,
 } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import Alert from "react-bootstrap/Alert";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { deleteCertificate, downloadCertificate, getCertificate } from "src/api/backend";
 import { HasPermission, LoadingPage } from "src/components";
 import { useUser } from "src/hooks";
-import { formatDateTime, intl, T } from "src/locale";
+import { intl, T } from "src/locale";
 import {
 	showCustomCertificateModal,
 	showDeleteConfirmModal,
@@ -25,10 +29,23 @@ import {
 	showRenewCertificateModal,
 } from "src/modals";
 import { CERTIFICATES, hasPermission, MANAGE, VIEW } from "src/modules/Permissions";
-import { showError, showObjectSuccess } from "src/notifications";
+import { showError, showObjectSuccess, showSuccess } from "src/notifications";
 import type { CertSource, CertStatus, EventQuery, RegistryCert } from "../../api";
 import { useCertificateRegistry } from "../../hooks";
+import { AcmeServers, showAcmeServerModal } from "../../acme/AcmeServers";
+import { useAcmeServers } from "../../acme/api";
+import { showAccessModal } from "../../pki/AccessModal";
+import { deleteCerts, formatShort, type PkiOverview, usePki } from "../../pki/api";
+import { showCaModal } from "../../pki/CaModal";
 import { showCertModal } from "../../pki/CertModal";
+import { showIssueModal } from "../../pki/IssueModal";
+import { HostsCard, ProtectHost } from "../../pki/MtlsHosts";
+import pkiStyles from "../../pki/Pki.module.css";
+import { showRevokeModal } from "../../pki/RevokeModal";
+import { CasTab } from "../../pki/Sections";
+import { showCertSettingsModal } from "../../pki/SettingsModal";
+import { useCan } from "../../rbac/hooks";
+import { showConfirmModal } from "../../modals/ConfirmModal";
 import { Dropdown, type DropdownItem } from "../../ui/Dropdown";
 import { Popover } from "../../ui/Popover";
 import hostStyles from "../Hosts/Hosts.module.css";
@@ -40,7 +57,8 @@ import { showAcmeLogModal } from "../../certs/AcmeLog";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 25;
-const SOURCES: CertSource[] = ["tls", "ca", "pki", "file"];
+// the CAs are a block of their own below the table
+const SOURCES: CertSource[] = ["tls", "pki", "file"];
 const STATUSES: CertStatus[] = ["expiring", "expired", "revoked"];
 const SORTS = ["expires", "-expires", "name", "-created"] as const;
 const DAY = 86400000;
@@ -82,7 +100,7 @@ function Expiry({ value, status }: { value: string | null; status: CertStatus })
 	const days = Math.floor((new Date(value).getTime() - Date.now()) / DAY);
 	return (
 		<>
-			<div>{formatDateTime(value, intl.locale)}</div>
+			<div>{formatShort(value, intl.locale)}</div>
 			<div className={cn(own.left, (status === "expiring" || status === "expired") && own[status])}>
 				{days < 0 ? (
 					<T id="nginxions.certs.expired-ago" data={{ days: -days }} />
@@ -106,11 +124,62 @@ function UsedBy({ cert }: { cert: RegistryCert }) {
 	);
 }
 
+/** a tile of the summary */
+function Stat({ value, label, tone }: { value: number; label: ReactNode; tone?: string }) {
+	return (
+		<div className={cn("card", pkiStyles.stat)}>
+			<div className={cn(pkiStyles.statValue, tone)}>{value}</div>
+			<div className={pkiStyles.statLabel}>{label}</div>
+		</div>
+	);
+}
+
+/** a block of the page with its title and buttons */
+function Block({
+	id,
+	title,
+	hint,
+	extra,
+	children,
+}: {
+	id: string;
+	title: ReactNode;
+	hint?: ReactNode;
+	extra?: ReactNode;
+	children: ReactNode;
+}) {
+	return (
+		<section id={id} className={own.block}>
+			<div className={own.blockHead}>
+				<div>
+					<h2 className={own.blockTitle}>{title}</h2>
+					{hint && <p className={own.blockHint}>{hint}</p>}
+				</div>
+				{extra && <div className={hostStyles.toolbar}>{extra}</div>}
+			</div>
+			{children}
+		</section>
+	);
+}
+
 function CertificatesPage() {
-	const navigate = useNavigate();
 	const [params, setParams] = useSearchParams();
+	const queryClient = useQueryClient();
 	const { data: me } = useUser("me");
+	const can = useCan();
 	const canManageTls = hasPermission(CERTIFICATES, MANAGE, me?.permissions, me?.roles);
+	const canTls = hasPermission(CERTIFICATES, VIEW, me?.permissions, me?.roles);
+	const canPki = can("pki", "view");
+	const pki = usePki({ enabled: canPki, refetchInterval: 30000 });
+	const pkiData: PkiOverview | undefined = canPki ? pki.data : undefined;
+	const acme = useAcmeServers();
+	const [selected, setSelected] = useState<number[]>([]);
+	const refresh = () => {
+		queryClient.invalidateQueries({ queryKey: ["nginxions-pki"] });
+		queryClient.invalidateQueries({ queryKey: ["nginxions-mtls-hosts"] });
+		queryClient.invalidateQueries({ queryKey: ["certificates"] });
+		queryClient.invalidateQueries({ queryKey: ["nginxions-acme-servers"] });
+	};
 	const source = (SOURCES as string[]).includes(params.get("source") || "")
 		? (params.get("source") as CertSource)
 		: "";
@@ -137,6 +206,24 @@ function CertificatesPage() {
 	};
 
 	useEffect(() => setSearch(q), [q]);
+	// ?cert=12: a certificate of the PKI opens (links of notifications, of the hosts, of the old mTLS page)
+	const certParam = Number(params.get("cert")) || 0;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once per ?cert
+	useEffect(() => {
+		if (!certParam) return;
+		showCertModal({ certId: certParam, openHost: (h) => update({ q: h.name, source: "pki" }) });
+		const next = new URLSearchParams(params);
+		next.delete("cert");
+		setParams(next, { replace: true });
+	}, [certParam]);
+	// ?section=cas|acme|mtls: the block of the old page that was asked for
+	const sectionParam = params.get("section") || "";
+	// biome-ignore lint/correctness/useExhaustiveDependencies: once the blocks are drawn
+	useEffect(() => {
+		if (!sectionParam || (canPki && !pkiData)) return;
+		if (sectionParam === "settings") showCertSettingsModal({ refresh });
+		else document.getElementById(`certs-${sectionParam}`)?.scrollIntoView({ block: "start" });
+	}, [sectionParam, pkiData]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when the typed text changes
 	useEffect(() => {
 		if (search === q) return;
@@ -145,7 +232,7 @@ function CertificatesPage() {
 	}, [search]);
 
 	const query: EventQuery = {
-		source: source || undefined,
+		source: source || SOURCES.join(","),
 		status: status || undefined,
 		kind: kinds.join(",") || undefined,
 		used: used || undefined,
@@ -157,7 +244,7 @@ function CertificatesPage() {
 	const { data, isLoading, isError, error, isFetching } = useCertificateRegistry(query);
 	const pages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
 	const filterCount = kinds.length + (used ? 1 : 0);
-	const allCount = data ? Object.values(data.counts.source).reduce((a, b) => a + (b || 0), 0) : 0;
+	const allCount = data ? SOURCES.reduce((a, s) => a + (data.counts.source[s] || 0), 0) : 0;
 	const anyStatusCount = data ? Object.values(data.counts.status).reduce((a, b) => a + (b || 0), 0) : 0;
 
 	const remove = (id: number) =>
@@ -225,31 +312,14 @@ function CertificatesPage() {
 				label: <T id="nginxions.certs.details" />,
 				onSelect: () => showCertModal({ certId: id }),
 			});
-			if (c.kind === "client") {
+			const cert = pkiData?.certificates.find((x) => x.id === id);
+			if (cert && !cert.revokedOn && can("pki", "revoke")) {
 				items.push({
-					key: "mtls",
-					label: <T id="nginxions.certs.open-mtls" />,
-					onSelect: () => navigate(`/mtls?cert=${id}`),
+					key: "revoke",
+					divider: true,
+					label: <T id="nginxions.pki.revoke" />,
+					onSelect: () => showRevokeModal({ certs: [cert], onDone: refresh }),
 				});
-			}
-		}
-		if (c.source === "ca") {
-			items.push({
-				key: "cas",
-				label: <T id="nginxions.certs.open-cas" />,
-				onSelect: () => navigate("/pki?tab=cas"),
-			});
-			if (c.tlsId && canManageTls) {
-				const tlsId = c.tlsId;
-				items.push({ key: "edit", label: <T id="action.edit" />, onSelect: () => edit(tlsId) });
-				if (!c.usedBy.length) {
-					items.push({
-						key: "delete",
-						divider: true,
-						label: <T id="action.delete" />,
-						onSelect: () => remove(tlsId),
-					});
-				}
 			}
 		}
 		if (c.source === "file" && c.path) {
@@ -262,6 +332,108 @@ function CertificatesPage() {
 		}
 		return items;
 	};
+
+	const addItems: DropdownItem[] = [
+		...(canManageTls
+			? [
+					{
+						// one form for every ACME server; your own CSR is reached from it
+						key: "acme",
+						label: <T id="nginxions.acme.menu" />,
+						onSelect: showAcmeCertificateModal,
+					},
+					{
+						key: "custom",
+						label: <T id="certificates.custom" />,
+						onSelect: () => showCustomCertificateModal(),
+					},
+					{
+						key: "mtls-file",
+						label: <T id="nginxions.certificates.mtls" />,
+						onSelect: () => showCustomCertificateModal(undefined, "mtls"),
+					},
+				]
+			: []),
+		...(pkiData &&
+		can("pki", "issue") &&
+		pkiData.cas.some((ca) => ca.kind === "intermediate" && ca.hasKey && !ca.revokedOn)
+			? [
+					{
+						key: "issue",
+						divider: canManageTls,
+						label: <T id="nginxions.pki.issue" />,
+						onSelect: () => showIssueModal({ data: pkiData, onDone: refresh }),
+					},
+				]
+			: []),
+		...(pkiData && can("pki", "issue") && pkiData.protected.length
+			? [
+					{
+						key: "access",
+						label: <T id="nginxions.mtls.access.issue" />,
+						onSelect: () => showAccessModal({ data: pkiData, onDone: refresh }),
+					},
+				]
+			: []),
+		...(pkiData && can("pki", "manage")
+			? [
+					{
+						key: "ca",
+						divider: true,
+						label: <T id="nginxions.pki.ca.add" />,
+						onSelect: () => showCaModal({ data: pkiData, onDone: refresh }),
+					},
+				]
+			: []),
+		...(can("settings", "manage") && acme.data
+			? [
+					{
+						key: "acme-server",
+						divider: !(pkiData && can("pki", "manage")),
+						label: <T id="nginxions.acme.servers.add" />,
+						onSelect: () => showAcmeServerModal(acme.data?.presets ?? [], refresh),
+					},
+				]
+			: []),
+		...(canManageTls
+			? [
+					{
+						key: "acme-log",
+						divider: true,
+						label: <T id="nginxions.acme.log.open" />,
+						onSelect: showAcmeLogModal,
+					},
+				]
+			: []),
+	];
+
+	// bulk actions on the selected certificates of the PKI (revoke, delete)
+	const selectedCerts = (pkiData?.certificates ?? []).filter((c) => selected.includes(c.id));
+	const toggle = (id: number) =>
+		setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+	const removeSelected = () =>
+		showConfirmModal({
+			tTitle: "nginxions.mtls.delete",
+			tConfirm: "nginxions.mtls.delete",
+			danger: true,
+			onConfirm: async () => {
+				const r = await deleteCerts(selectedCerts.map((c) => c.id));
+				showSuccess(t("nginxions.mtls.deleted", { count: r.deleted }));
+				setSelected([]);
+				refresh();
+			},
+			children: (
+				<>
+					<T id="nginxions.mtls.delete.text" data={{ count: selectedCerts.length }} />
+					<div className="small font-monospace text-secondary mt-2">
+						{selectedCerts
+							.slice(0, 20)
+							.map((c) => c.commonName)
+							.join(", ")}
+					</div>
+				</>
+			),
+		});
 
 	const segment = (active: boolean, onClick: () => void, label: React.ReactNode, n?: number, key?: string) => (
 		<button
@@ -281,52 +453,73 @@ function CertificatesPage() {
 			<div className={hostStyles.head}>
 				<div>
 					<h1 className={hostStyles.title}>
-						<T id="nginxions.certs.title" />
+						<T id="certificates" />
 					</h1>
 					<p className={hostStyles.subtitle}>
 						<T id="nginxions.certs.description" />
 					</p>
 				</div>
-				{canManageTls && (
-					<Dropdown
-						floating
-						inline
-						ariaLabel={t("nginxions.certs.add")}
-						triggerClassName="btn btn-primary"
-						trigger={
-							<>
-								<IconPlus size={16} className="me-1" />
-								<T id="nginxions.certs.add" />
-							</>
-						}
-						items={[
-							{
-								// one form for every ACME server (Settings → ACME); your own CSR is reached from it
-								key: "acme",
-								label: <T id="nginxions.acme.menu" />,
-								onSelect: showAcmeCertificateModal,
-							},
-							{
-								key: "custom",
-								divider: true,
-								label: <T id="certificates.custom" />,
-								onSelect: () => showCustomCertificateModal(),
-							},
-							{
-								key: "mtls",
-								label: <T id="nginxions.certificates.mtls" />,
-								onSelect: () => showCustomCertificateModal(undefined, "mtls"),
-							},
-							{
-								key: "acme-log",
-								divider: true,
-								label: <T id="nginxions.acme.log.open" />,
-								onSelect: showAcmeLogModal,
-							},
-						]}
-					/>
-				)}
+				<div className={hostStyles.toolbar}>
+					{(canPki || can("settings", "view")) && (
+						<button
+							type="button"
+							className={hostStyles.tool}
+							onClick={() => showCertSettingsModal({ refresh })}
+						>
+							<IconSettings size={16} />
+							<span className={hostStyles.toolText}>
+								<T id="nginxions.certs.settings" />
+							</span>
+						</button>
+					)}
+					{addItems.length > 0 && (
+						<Dropdown
+							floating
+							inline
+							ariaLabel={t("nginxions.certs.add")}
+							triggerClassName={cn("btn btn-primary btn-sm", hostStyles.add)}
+							trigger={
+								<>
+									<IconPlus size={16} />
+									<T id="nginxions.certs.add" />
+								</>
+							}
+							items={addItems}
+						/>
+					)}
+				</div>
 			</div>
+
+			<div className={pkiStyles.summary}>
+				<Stat
+					value={allCount - (data?.counts.status.expired ?? 0) - (data?.counts.status.revoked ?? 0)}
+					label={<T id="nginxions.certs.stat.valid" />}
+				/>
+				<Stat
+					value={data?.counts.status.expiring ?? 0}
+					label={<T id="nginxions.certs.stat.expiring" />}
+					tone={data?.counts.status.expiring ? "text-warning" : undefined}
+				/>
+				<Stat
+					value={(data?.counts.status.expired ?? 0) + (data?.counts.status.revoked ?? 0)}
+					label={<T id="nginxions.certs.stat.ended" />}
+				/>
+				{pkiData && <Stat value={pkiData.protected.length} label={<T id="nginxions.certs.stat.mtls" />} />}
+				{pkiData && <Stat value={pkiData.cas.length} label={<T id="nginxions.certs.stat.cas" />} />}
+				{canTls && <Stat value={acme.data?.items.length ?? 0} label={<T id="nginxions.certs.stat.acme" />} />}
+			</div>
+
+			{pkiData && (
+				<div id="certs-mtls">
+					<HostsCard
+						data={pkiData}
+						certs={pkiData.certificates.filter((c) => c.profile === "client")}
+						refresh={refresh}
+						filter={(h) => update({ q: h.name, source: "pki" })}
+						extra={<ProtectHost data={pkiData} refresh={refresh} />}
+					/>
+				</div>
+			)}
 
 			<div className={hostStyles.toolbar}>
 				<SearchField value={search} onChange={setSearch} placeholder={t("nginxions.certs.search")} />
@@ -445,6 +638,38 @@ function CertificatesPage() {
 						)}
 					</div>
 					{isFetching && <span className="spinner-border spinner-border-sm text-secondary" />}
+					{selectedCerts.length > 0 && (
+						<div className={own.bulk}>
+							<span className={own.bulkCount}>
+								<T id="nginxions.certs.selected" data={{ count: selectedCerts.length }} />
+							</span>
+							{can("pki", "revoke") && selectedCerts.some((c) => !c.revokedOn) && (
+								<button
+									type="button"
+									className={hostStyles.tool}
+									onClick={() =>
+										showRevokeModal({
+											certs: selectedCerts.filter((c) => !c.revokedOn),
+											onDone: () => {
+												setSelected([]);
+												refresh();
+											},
+										})
+									}
+								>
+									<T id="nginxions.pki.revoke" />
+								</button>
+							)}
+							{can("pki", "issue") && (
+								<button type="button" className={hostStyles.tool} onClick={removeSelected}>
+									<T id="action.delete" />
+								</button>
+							)}
+							<button type="button" className={hostStyles.tool} onClick={() => setSelected([])}>
+								<T id="cancel" />
+							</button>
+						</div>
+					)}
 					<Dropdown
 						floating
 						inline
@@ -483,22 +708,23 @@ function CertificatesPage() {
 							</div>
 						)}
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table className={cn("table table-vcenter card-table nx-stack", hostStyles.table)}>
 								<thead>
 									<tr>
+										{canPki && <th className="w-1" />}
 										<th>
 											<T id="nginxions.certs.name" />
 										</th>
 										<th>
 											<T id="nginxions.certs.kind" />
 										</th>
-										<th>
+										<th className="nx-optional">
 											<T id="nginxions.certs.issuer" />
 										</th>
 										<th>
 											<T id="nginxions.certs.expires" />
 										</th>
-										<th>
+										<th className="nx-optional">
 											<T id="nginxions.certs.used-by" />
 										</th>
 										<th />
@@ -507,7 +733,7 @@ function CertificatesPage() {
 								<tbody>
 									{data.items.length === 0 ? (
 										<tr>
-											<td colSpan={6} className={hostStyles.empty}>
+											<td colSpan={canPki ? 7 : 6} className={hostStyles.empty}>
 												<T id="nginxions.certs.empty" />
 											</td>
 										</tr>
@@ -516,7 +742,20 @@ function CertificatesPage() {
 											const items = actions(c);
 											return (
 												<tr key={c.key}>
-													<td className={own.name}>
+													{canPki && (
+														<td className="nx-check">
+															{c.source === "pki" && typeof c.id === "number" && (
+																<input
+																	type="checkbox"
+																	className="form-check-input"
+																	aria-label={c.name}
+																	checked={selected.includes(c.id)}
+																	onChange={() => toggle(c.id as number)}
+																/>
+															)}
+														</td>
+													)}
+													<td className={cn(own.name, "nx-title")}>
 														<div className={own.title}>
 															<span>{c.name || "—"}</span>
 															{c.status !== "valid" && (
@@ -534,20 +773,28 @@ function CertificatesPage() {
 															</div>
 														) : null}
 													</td>
-													<td>
+													<td data-label={t("nginxions.certs.kind")}>
 														<div>{kindLabel(c)}</div>
 														<div className={own.sub}>
 															<T id={`nginxions.certs.source.${c.source}`} />
 														</div>
 													</td>
-													<td>{c.issuer || <span className="text-secondary">—</span>}</td>
-													<td>
+													<td
+														className="nx-optional"
+														data-label={t("nginxions.certs.issuer")}
+													>
+														{c.issuer || <span className="text-secondary">—</span>}
+													</td>
+													<td data-label={t("nginxions.certs.expires")}>
 														<Expiry value={c.notAfter} status={c.status} />
 													</td>
-													<td className={own.used}>
+													<td
+														className={cn(own.used, "nx-optional")}
+														data-label={t("nginxions.certs.used-by")}
+													>
 														<UsedBy cert={c} />
 													</td>
-													<td className="text-end">
+													<td className="text-end nx-actions">
 														{items.length > 0 && (
 															<Dropdown
 																floating
@@ -597,6 +844,54 @@ function CertificatesPage() {
 					</>
 				)}
 			</div>
+
+			{pkiData && (
+				<Block
+					id="certs-cas"
+					title={<T id="nginxions.certs.block.cas" />}
+					extra={
+						can("pki", "manage") && (
+							<button
+								type="button"
+								className={hostStyles.tool}
+								onClick={() => showCaModal({ data: pkiData, onDone: refresh })}
+							>
+								<IconPlus size={16} />
+								<span className={hostStyles.toolText}>
+									<T id="nginxions.pki.ca.add" />
+								</span>
+							</button>
+						)
+					}
+				>
+					<CasTab data={pkiData} refresh={refresh} />
+				</Block>
+			)}
+
+			{canTls && (
+				<Block
+					id="certs-acme"
+					title={<T id="nginxions.acme.servers.title" />}
+					hint={<T id="nginxions.acme.servers.description" />}
+					extra={
+						can("settings", "manage") &&
+						acme.data && (
+							<button
+								type="button"
+								className={hostStyles.tool}
+								onClick={() => showAcmeServerModal(acme.data?.presets ?? [], refresh)}
+							>
+								<IconPlus size={16} />
+								<span className={hostStyles.toolText}>
+									<T id="nginxions.acme.servers.add" />
+								</span>
+							</button>
+						)
+					}
+				>
+					<AcmeServers canManage={can("settings", "manage")} />
+				</Block>
+			)}
 		</div>
 	);
 }

@@ -11,7 +11,7 @@ import { showBanModal } from "../../crowdsec/BanModal";
 import { useCan } from "../../rbac/hooks";
 import { dateTime, timeAgo } from "../../ui/time";
 import { AGENT_OF } from "../WafEvents/filters";
-import styles from "../Pki/Pki.module.css";
+import styles from "../../pki/Pki.module.css";
 
 const LIMIT = 100;
 // open-appsec: Prevent; CrowdSec: the decision of an alert (a simulated one or an alert without one did not block)

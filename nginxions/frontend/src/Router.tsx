@@ -28,8 +28,6 @@ const Notifications = lazy(() => import("src/nginxions/pages/Notifications"));
 // NginxionS: one page per agent: its policies (GUI or code) and the agent itself
 const AgentOpenappsec = lazy(() => import("src/nginxions/pages/AgentOpenappsec"));
 const BlockPage = lazy(() => import("src/nginxions/pages/BlockPage"));
-const Pki = lazy(() => import("src/nginxions/pages/Pki"));
-const Mtls = lazy(() => import("src/nginxions/pages/Mtls"));
 const Crowdsec = lazy(() => import("src/nginxions/pages/Crowdsec"));
 // NginxionS: the decisions of CrowdSec are in Analytics → Blocks
 const Blocks = lazy(() => import("src/nginxions/pages/Crowdsec").then((m) => ({ default: m.Blocks })));
@@ -40,6 +38,20 @@ function RequestsRedirect() {
 	const params = new URLSearchParams(window.location.search);
 	params.set("kind", "requests");
 	return <Navigate to={`/waf/events?${params}`} replace />;
+}
+
+// NginxionS: Certificates is one page; the old pages of PKI, mTLS and ACME lead to their block of it
+/** /pki?tab=cas, /mtls?cert=12, /certificates/acme → /certificates?section=…&cert=… */
+function CertificatesRedirect({ section }: { section: string }) {
+	const old = new URLSearchParams(window.location.search);
+	const tab = old.get("tab");
+	const params = new URLSearchParams();
+	const block = tab === "cas" ? "cas" : tab === "mtls" || section === "mtls" ? "mtls" : section;
+	if (block) params.set("section", block);
+	if (old.get("cert")) params.set("cert", old.get("cert") as string);
+	if (tab === "certificates") params.set("source", "pki");
+	if (tab === "settings" || tab === "templates") params.set("section", "settings");
+	return <Navigate to={`/certificates${params.size ? `?${params}` : ""}`} replace />;
 }
 
 function Router() {
@@ -92,8 +104,9 @@ function Router() {
 						<Route path="/roles" element={<Roles />} />
 						<Route path="/system/services" element={<Services />} />
 						<Route path="/system/notifications" element={<Notifications />} />
-						<Route path="/pki" element={<Pki />} />
-						<Route path="/mtls" element={<Mtls />} />
+						<Route path="/pki" element={<CertificatesRedirect section="" />} />
+						<Route path="/mtls" element={<CertificatesRedirect section="mtls" />} />
+						<Route path="/certificates/acme" element={<CertificatesRedirect section="acme" />} />
 						<Route path="/crowdsec" element={<Crowdsec />} />
 						<Route path="/agents/open-appsec" element={<AgentOpenappsec />} />
 						<Route path="/agents/block-page" element={<BlockPage />} />

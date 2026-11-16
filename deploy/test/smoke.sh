@@ -17,7 +17,7 @@ PASSWORD="nginxions-airgap-$(date +%s)"
 JAR=/state/cookies
 CURL="curl -sS --fail-with-body --max-time 30 -k -b $JAR -c $JAR"
 GROUPS_DIR="${GROUPS_DIR:-/smoke.d}"
-ALL_GROUPS="services waf hosts rbac events pki crowdsec migration"
+ALL_GROUPS="services waf hosts rbac events pki certs crowdsec migration"
 STEPS=/state/smoke-steps.tsv
 GROUP=base
 

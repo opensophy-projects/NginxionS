@@ -129,7 +129,10 @@ createRangeFromCidrV6(const pair<string, int> &cidr_values)
     for (int i=0; i<15; i+=2){
         char hex[8];
         unsigned int num;
-        sprintf(hex, "%02x%02x", static_cast<int>(addr->s6_addr[i]), static_cast<int>(addr->s6_addr[i+1]));
+        // NginxionS: a bounded write (Semgrep nginxions-agent-unsafe-string)
+        snprintf(
+            hex, sizeof(hex), "%02x%02x", static_cast<int>(addr->s6_addr[i]), static_cast<int>(addr->s6_addr[i+1])
+        );
         sscanf(hex, "%x", &num);
         oct_from_str.push_back(num);
     }

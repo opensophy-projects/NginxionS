@@ -15,8 +15,10 @@ const PAGES = [
 	["hosts-proxy", "/hosts?f=type:is:proxy"],
 	["certificates", "/certificates"],
 	["access", "/access"],
-	["pki", "/pki"],
-	["mtls", "/mtls"],
+	// the old pages of PKI, mTLS and ACME lead to their blocks of Certificates
+	["certificates-cas", "/pki?tab=cas"],
+	["certificates-mtls", "/mtls"],
+	["certificates-acme", "/certificates/acme"],
 	["crowdsec", "/crowdsec"],
 	["open-appsec", "/agents/open-appsec"],
 	["open-appsec-agent", "/agents/open-appsec?tab=agent"],
