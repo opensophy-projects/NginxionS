@@ -87,6 +87,15 @@ app.use((err, req, res, _) => {
 	if (!err.status && err instanceof DBError) {
 		err.status = 400;
 	}
+	// NginxionS: a multipart body that ends before its boundary (busboy of express-fileupload) is a broken request of the
+	// client, not an internal error (DAST: ZAP got 500 on POST /api/nginx/certificates/validate and /upload)
+	if (
+		!err.status &&
+		/^(Unexpected end of form|Malformed part header|Multipart: Boundary not found)/.test(String(err.message))
+	) {
+		err.status = 400;
+		err.public = true;
+	}
 	const payload = {
 		error: {
 			code: err.status || 500,

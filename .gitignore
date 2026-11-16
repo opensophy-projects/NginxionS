@@ -3,3 +3,6 @@ __pycache__/
 /model-work/
 /data/
 /.venv/
+
+# reports of local runs of the tests (scripts/test-*.sh)
+reports/

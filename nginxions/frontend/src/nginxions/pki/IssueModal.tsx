@@ -19,6 +19,7 @@ import {
 	renewCert,
 	type Subject,
 	type SubjectField,
+	linkBase,
 } from "./api";
 import { Delivery } from "./Delivery";
 
@@ -179,7 +180,7 @@ const IssueModal = EasyModal.create(({ visible, remove, data, preset, renew, onD
 			<Modal.Body>
 				{error && <Alert variant="danger">{error}</Alert>}
 				{result ? (
-					<Delivery result={result} publicUrl={data.settings.publicUrl} />
+					<Delivery result={result} publicUrl={linkBase(data)} />
 				) : !issuers.length ? (
 					<Alert variant="warning" className="mb-0">
 						<T id="nginxions.pki.no-issuer" />

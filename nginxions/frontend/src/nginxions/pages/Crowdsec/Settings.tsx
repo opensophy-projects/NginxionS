@@ -19,7 +19,7 @@ import {
 import { durationLabel, t } from "../../crowdsec/labels";
 import { showProfileModal } from "../../crowdsec/ProfileModal";
 import { useCan } from "../../rbac/hooks";
-import styles from "../Pki/Pki.module.css";
+import styles from "../../pki/Pki.module.css";
 import { HiddenUsername } from "../../ui/HiddenUsername";
 
 const SCENARIO_PLACEHOLDER = "crowdsecurity/http-probing\nnginxions/openappsec-prevent";

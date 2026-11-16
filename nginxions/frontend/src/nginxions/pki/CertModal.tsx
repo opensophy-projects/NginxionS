@@ -23,6 +23,7 @@ import {
 	saveFile,
 	updateCert,
 	usePki,
+	linkBase,
 } from "./api";
 import { showIssueModal } from "./IssueModal";
 import { showRevokeModal } from "./RevokeModal";
@@ -115,7 +116,7 @@ const CertModal = EasyModal.create(({ visible, remove, certId, openHost }: Props
 			action,
 			objectId: c.id,
 			name: c.commonName,
-			publicUrl: data.settings.publicUrl,
+			publicUrl: linkBase(data),
 			compatible: data.settings.p12Compatible,
 		});
 	const remove_ = () => {

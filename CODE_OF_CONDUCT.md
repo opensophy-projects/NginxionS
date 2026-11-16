@@ -79,13 +79,12 @@
 
 ```mermaid
 flowchart TB
-    internet(["Интернет<br/>:80 · :443 tcp/udp · :81"])
+    internet(["Интернет<br/>:80 · :443 tcp/udp<br/>(:81 панели — 127.0.0.1 сервера)"])
 
     subgraph oa["контейнер openappsec"]
         agent["Агент open-appsec (ML-WAF)<br/>127.0.0.1:7777<br/>политика /ext/appsec/local_policy.yaml"]
         storage["Shared storage<br/>127.0.0.1:7811<br/>обучение, decisions.data"]
         tuning["Tuning<br/>127.0.0.1:7813<br/>статистика, подсказки"]
-        control["nginxions-control<br/>127.0.0.1:7080<br/>Docker API по белому списку"]
 
         subgraph np["контейнер nginxions"]
             nginx["nginx (NPMplus)<br/>+ attachment open-appsec"]
@@ -95,6 +94,7 @@ flowchart TB
         end
     end
 
+    control["контейнер control: nginxions-control<br/>:7080 в сети control<br/>Docker API по белому списку"]
     crowdsec["crowdsec — официальный образ<br/>LAPI :8080, AppSec :7422"]
     postgres[("postgres — официальный образ<br/>базы nginxions и appsec")]
     init["nginxions-init — разовый при старте<br/>секреты, тома, снимок hub CrowdSec"]
@@ -116,8 +116,10 @@ flowchart TB
 - **Сети.** `edge` — порты наружу; выход в интернет только для того, что включил администратор (ACME). `internal` —
   без выхода наружу: там `crowdsec` и `postgres`.
 - **Секреты.** Их создаёт `nginxions-init` в томе `secrets`; каждый сервис монтирует только свой подкаталог.
-- **Доступ к Docker** есть только у `nginxions-control`: список, логи и перезапуск контейнеров стека, с токеном и
-  аудитом. Контейнер `nginxions`, который принимает трафик из интернета, сокета не получает.
+- **Доступ к Docker** есть только у `nginxions-control` — отдельного контейнера `control` (образ агента со своей
+  командой): список, логи и перезапуск контейнеров стека, с токеном и аудитом; корень только для чтения, без
+  capabilities, в сети `control` только с `openappsec`. Контейнеры `nginxions` и `openappsec`, которые принимают трафик
+  из интернета, сокета не получают: ошибка в nginx или агенте не даёт доступа к Docker.
 
 ### Путь запроса
 
@@ -193,16 +195,16 @@ flowchart LR
   - `nginxions-init.sh` — разовый старт: секреты, каталоги томов, офлайн-снимок hub CrowdSec
   - `postgres-init.sh` — базы и пользователи postgres при первом запуске
 - **`clamav/`**
-  - `nginxions-clamav.sh` — запуск контейнера `clamav`: clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению
+  - `nginxions-clamav.sh` — запуск контейнера `clamav` (от пользователя clamav, корень только для чтения): clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению; конфигурация clamd из `CLAMD_CONF_*` в /tmp
 - **`openappsec/`** — образ `nginxions-openappsec`
   - `Dockerfile` — агент open-appsec (C++), shared storage и tuning (Go) из исходников корневого `openappsec/`, `nginxions-control`
-  - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning, `nginxions-control`
+  - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning
   - `sources.env` — коммиты upstream open-appsec, от которых взяты исходники в `openappsec/` (для их обновления)
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
   - `compose.airgap.yaml` — стек без выхода в интернет
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
-  - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
+  - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
   - `upgrade-check.sh` — данные теста обновления (`seed`) и их проверка после обновления (`verify`)
   - `waf-score-setup.sh` — подготовка стека для оценки WAF: админ, хост `test.local` под WAF в режиме блокировки
@@ -350,13 +352,14 @@ flowchart LR
     - `cert-pair.js` — загруженный сертификат и ключ должны подходить друг к другу
     - `pem.js` — сертификаты из PEM-текста за один проход (без регулярных выражений, медленных на подложенном файле)
     - `files.js` — чтение файла вместе с его stat через один дескриптор (файл не подменить между проверкой и чтением)
+    - `login-guard.js` — блокировка входа: после 5 неверных паролей (или кодов 2FA) за 15 минут учётная запись закрыта на 15 минут, с любых адресов
     - `acme.js` — certbot для ACME-сервера из настроек (регистрация аккаунта, EAB)
     - `acme-csr.js`, `acme-csr-check.js` — выпуск по своему CSR и проверки этого CSR
     - `block-page.js` — Агенты → Страница блокировки: настройки и файл страницы
     - `stream-ports.js` — один входящий порт (диапазон) на протокол у потоков
     - **`acme/`** — `servers.js` (ACME-серверы: пресеты и свои, EAB), `lego.js` (второй ACME-клиент), `certs.js` (сертификаты NPMplus с сервером из настроек)
     - **`audit/`** — `index.js`: журнал аудита со страницами и фильтрами
-    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку)
+    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
       - `lapi.js` — клиент локального API CrowdSec (LAPI)
@@ -459,8 +462,7 @@ flowchart LR
       - `WafAgent/` — состояние, метрики (`AgentMetrics.tsx`), настройки агента (`AgentSettings.tsx`), File Security / ClamAV (`FileSecurity.tsx`)
       - `WafPolicy/`, `WafExpert/` — политика из объектов и режим эксперта
       - `BlockPage/` — Агенты → Страница блокировки с предпросмотром
-      - `Certificates/` — реестр всех сертификатов
-      - `Pki/`, `Mtls/` — PKI и mTLS
+      - `Certificates/` — раздел «Сертификаты» одной страницей: сводка, хосты с mTLS, таблица всех сертификатов (ACME, свои, PKI, пропуска mTLS, файлы) с массовым отзывом, блоки «Центры сертификации» и «ACME-серверы», окно настроек; старые `/pki`, `/mtls`, `/certificates/acme` ведут сюда
       - `Notifications/` — уведомления
       - `Roles/` — роли и права
       - `Services/` — сервисы стека
@@ -472,7 +474,7 @@ flowchart LR
     - **`crowdsec/`** — окна бана (`BanModal.tsx`), заблокированного адреса (`DecisionModal.tsx`), блок-листа (`BlocklistModal.tsx`), профиля (`ProfileModal.tsx`); подписи (`labels.ts`), API
     - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), пробный режим хоста (`TrialModal.tsx`), что выучил агент (`LearnedModal.tsx`), снимки обучения (`SnapshotsModal.tsx`), API
     - **`notifications/`** — канал (`ChannelModal.tsx`), правило (`RuleModal.tsx`), быстрая настройка (`SetupModal.tsx`), API
-    - **`pki/`** — CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
+    - **`pki/`** — блоки страницы «Сертификаты»: центры сертификации, шаблоны и настройки PKI (`Sections.tsx`), хосты с mTLS и «Защитить хост» (`MtlsHosts.tsx`), окно настроек раздела (`SettingsModal.tsx`); CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
     - **`policy/`** — редактор политики: объект (`ObjectModal.tsx`, поля в `fields.ts`), файлы OpenAPI практики (`SchemaFiles.tsx`), ссылки на объекты (`RefsEditor.tsx`), просмотр изменения (`Review.tsx`, `ReviewModal.tsx`), код (`CodePane.tsx`), импорт (`ImportModal.tsx`), имена встроенных объектов (`names.ts`), API
     - **`rbac/`** — роль (`RoleModal.tsx`), хосты роли (`HostPicker.tsx`), роли пользователя (`UserRolesModal.tsx`, `UserRoleBadges.tsx`), подписи (`labels.ts`), хуки и API
     - **`system/`** — Настройки: env-настройки (`EnvSection.tsx`, `sections.tsx`), GeoIP (`Geoip.tsx`), перенос (`Migration.tsx`), API

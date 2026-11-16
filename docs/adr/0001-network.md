@@ -43,3 +43,20 @@ NPMplus рекомендует `network_mode: host`. NginxionS — это сте
 - «Перезапуск» `openappsec` из GUI перезапускает процесс агента (не контейнер, в котором работает сам
   `nginxions-control`), затем `nginxions`, чтобы attachment nginx подключился к новому агенту. Перезапуск `nginxions` агент не
   трогает. Watchdog `nginxions-control` перезапускает `nginxions`, если `openappsec` перезапустили в обход NginxionS.
+
+## Пересмотр (ноябрь 2026): `nginxions-control` в своём контейнере
+
+`nginxions-control` вынесен из `openappsec` в отдельный контейнер `control` (тот же образ `nginxions-openappsec`,
+команда `node /opt/nginxions-control/server.js`). Причина: в одном контейнере с сокетом Docker работал агент, который
+разбирает трафик из интернета, — выполнение кода в агенте давало сокет, то есть root на хосте. Теперь:
+
+- сокет и токен control есть только в `control`; у `openappsec` нет ни сокета, ни токена;
+- `control` в своей сети `control` (`internal: true`), где кроме него только `openappsec` (и `nginxions` в его
+  пространстве имён: клиент с копией токена); корень только для чтения, `cap_drop: ALL`, `no-new-privileges`;
+- политику, которую применяет агент (`/tmp/local_appsec.policy`), `control` читает через Docker API (архив файла
+  контейнера), файлы обучения — через том `appsec-conf`;
+- «перезапуск» `openappsec` теперь перезапускает контейнер; `control` ждёт, пока агент станет healthy (проверка порта
+  7777 каждые 2 с при старте), и перезапускает `nginxions`. Watchdog работает, как раньше, и переживает перезапуск
+  `openappsec`.
+
+Цена — на один контейнер больше.

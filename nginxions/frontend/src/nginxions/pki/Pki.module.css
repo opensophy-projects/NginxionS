@@ -1,7 +1,7 @@
 /* Certificates → PKI and mTLS */
 .summary {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 	gap: 0.75rem;
 }
 .stat {
@@ -17,6 +17,23 @@
 	color: var(--foreground-muted);
 	font-size: 0.8125rem;
 }
+/* on a phone the counters are three small tiles in a row, not six cards a screen tall */
+@media (max-width: 575.98px) {
+	.summary {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+	.stat {
+		padding: 0.5rem 0.625rem;
+	}
+	.statValue {
+		font-size: 1.125rem;
+	}
+	.statLabel {
+		font-size: 0.6875rem;
+		line-height: 1.25;
+	}
+}
 .card {
 	margin: 0;
 	padding: 1rem 1.125rem;
@@ -27,6 +44,19 @@
 }
 .card > :global(.table-responsive:last-child) {
 	margin-bottom: calc(var(--os-frame) + 1px - 1rem);
+	/* the header band, row stripes and hover follow the rounded corners of the surface, not over them */
+	border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+	border-bottom-right-radius: calc(var(--radius-lg) - 1px);
+}
+/* a table that opens the card (no title or filters above it) starts at its top edge, not under an empty strip */
+.card > :global(.table-responsive:first-child) {
+	margin-top: calc(var(--os-frame) + 1px - 1rem);
+	border-top-left-radius: calc(var(--radius-lg) - 1px);
+	border-top-right-radius: calc(var(--radius-lg) - 1px);
+}
+/* long headers (TRUST DOMAIN (CA), REVOCATION LIST) wrap instead of widening their column */
+.card :global(.table) th {
+	white-space: normal;
 }
 .cardHead {
 	display: flex;
@@ -49,14 +79,14 @@
 }
 .sub {
 	overflow: hidden;
-	max-width: 32rem;
+	max-width: 13rem;
 	color: var(--foreground-muted);
 	font-size: 0.8125rem;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .used {
-	max-width: 14rem;
+	max-width: 8rem;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -80,4 +110,13 @@
 }
 .item:first-child {
 	border-top: 0;
+}
+/* a status badge keeps its word whole; the text beside it wraps instead */
+.item > :global(.badge) {
+	flex-shrink: 0;
+}
+/* a reason or a count under a badge wraps in its narrow column instead of widening it */
+.wrap {
+	max-width: 9rem;
+	white-space: normal;
 }

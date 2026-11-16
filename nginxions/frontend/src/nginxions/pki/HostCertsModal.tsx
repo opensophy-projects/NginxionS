@@ -15,7 +15,17 @@ import { showConfirmModal } from "../modals/ConfirmModal";
 import { useCan } from "../rbac/hooks";
 import { Dropdown, type DropdownItem } from "../ui/Dropdown";
 import { showAccessModal } from "./AccessModal";
-import { deleteCerts, downloadCert, type HostRef, hostKey, issuersFor, type PkiCert, saveFile, usePki } from "./api";
+import {
+	deleteCerts,
+	downloadCert,
+	type HostRef,
+	hostKey,
+	issuersFor,
+	linkBase,
+	type PkiCert,
+	saveFile,
+	usePki,
+} from "./api";
 import { SearchField } from "../ui/SearchField";
 import { certStatus, STATUS_TONE, showCertModal } from "./CertModal";
 import { showIssueModal } from "./IssueModal";
@@ -79,7 +89,7 @@ const HostCertsModal = EasyModal.create(({ visible, remove, host, openHost }: Pr
 			action: "p12",
 			objectId: c.id,
 			name: c.commonName,
-			publicUrl: settings.publicUrl,
+			publicUrl: linkBase(data),
 			compatible: settings.p12Compatible,
 		});
 	const run = async (action: () => Promise<unknown>) => {
@@ -107,7 +117,7 @@ const HostCertsModal = EasyModal.create(({ visible, remove, host, openHost }: Pr
 								action: "link",
 								objectId: c.id,
 								name: c.commonName,
-								publicUrl: settings.publicUrl,
+								publicUrl: linkBase(data),
 								compatible: settings.p12Compatible,
 							}),
 					},

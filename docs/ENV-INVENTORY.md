@@ -23,8 +23,8 @@
 | `DB_MYSQL_*` | — | не используется | Bootstrap (поддержка upstream сохраняется) | — |
 | `COOKIE_SECRET` | случайный при каждом старте | `COOKIE_SECRET_FILE` от `nginxions-init` ✅ | Bootstrap (секрет) | 0 |
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` | — | не задаём: первый админ создаётся мастером в GUI | Bootstrap | — |
-| `ACME_SERVER`, `ACME_EMAIL`, `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`, `ACME_PROFILE`, `ACME_SERVER_TLS_VERIFY` | Let's Encrypt | Аккаунт регистрируется при первом запросе сертификата, при старте обращений нет ✅ | GUI (Администрирование → Настройки → ACME → «ACME-серверы»): несколько серверов (Let's Encrypt, его staging, ZeroSSL, Google Trust Services, SSL.com, ТЦИ / НУЦ Минцифры (stage) или свой directory), у каждого email, EAB, профиль, проверка TLS и клиент certbot или lego; один — по умолчанию. Значения env прежних версий становятся первым сервером при старте | 6 ✅ |
-| `ACME_RENEW`, `ACME_RENEW_DAYS` | продление вкл., окно certbot | — | GUI (Настройки → ACME) | 6 ✅ |
+| `ACME_SERVER`, `ACME_EMAIL`, `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`, `ACME_PROFILE`, `ACME_SERVER_TLS_VERIFY` | Let's Encrypt | Аккаунт регистрируется при первом запросе сертификата, при старте обращений нет ✅ | GUI (Сертификаты: блок «ACME-серверы», «Настройки → Продление ACME»): несколько серверов (Let's Encrypt, его staging, ZeroSSL, Google Trust Services, SSL.com, ТЦИ, tlscc.ru (stage) или свой directory), у каждого email, EAB, профиль, проверка TLS и клиент certbot или lego; один — по умолчанию. Значения env прежних версий становятся первым сервером при старте | 6 ✅ |
+| `ACME_RENEW`, `ACME_RENEW_DAYS` | продление вкл., окно certbot | — | GUI (Сертификаты: блок «ACME-серверы», «Настройки → Продление ACME») | 6 ✅ |
 | `ACME_KEY_TYPE`, `ACME_KEY_SIZE`, `ACME_MUST_STAPLE`, `ACME_OCSP_STAPLING` | | те же | env (редко нужны) | 6 |
 | `CUSTOM_OCSP_STAPLING` | `false` | `false` | GUI (Сертификаты) | 6 |
 | `CERTBOT_RUN_INTERVAL` | 3 ч | 3 ч | GUI (Сертификаты) | 6 |
@@ -100,10 +100,12 @@
 
 Задаются один раз в `deploy/compose.yaml` и меняются только при обновлении NginxionS:
 
-- сети `edge` и `internal` (у второй нет выхода в интернет);
+- сети `edge`, `internal` и `control` (у двух последних нет выхода в интернет; в `control` только `nginxions-control` и `openappsec`);
+- лимиты памяти и процессов каждого сервиса, по умолчанию без ограничений: `NGINXIONS_MEM_<СЕРВИС>` (например `2g`) и `NGINXIONS_PIDS_<СЕРВИС>` (например `1024`) в `deploy/.env`; сервисы `NGINXIONS`, `OPENAPPSEC`, `CONTROL`, `POSTGRES`, `CROWDSEC`, `CLAMAV`, `NGINXIONS_INIT`;
+- адрес панели `NGINXIONS_ADMIN_BIND_IP` (по умолчанию `127.0.0.1`) и сайтов `NGINXIONS_BIND_IP` (по умолчанию `0.0.0.0`);
 - `openappsec` владеет сетью и IPC (`ipc: shareable`, опубликованные порты), `nginxions` подключается к ним (`network_mode`/`ipc: service:openappsec`); tmpfs-том `appsec-shm`;
 - общие тома: `appsec-localconfig` (политика), `appsec-logs` (события, только чтение для NginxionS и CrowdSec), логи nginx для CrowdSec, `crowdsec-conf` и `crowdsec-data` в `nginxions` (настройки CrowdSec из GUI, список машин и баунсеров);
-- метки `nginxions.managed=true`, по которым `nginxions-control` решает, чем можно управлять; сокет Docker смонтирован только в `openappsec`, где работает `nginxions-control` со своим белым списком операций;
+- метки `nginxions.managed=true`, по которым `nginxions-control` решает, чем можно управлять; сокет Docker смонтирован только в `control` — отдельном контейнере `nginxions-control` со своим белым списком операций;
 - образы и версии (`deploy/.env`): `NGINXIONS_REGISTRY`, `NGINXIONS_VERSION`, `CROWDSEC_VERSION`, `POSTGRES_VERSION`, `CLAMAV_VERSION`.
 
 ## Обращения наружу только по действию администратора
@@ -112,7 +114,7 @@
 
 | Действие | Куда | Фаза, в которой довести до local-first |
 |---|---|---|
-| Запрос и продление ACME-сертификата (первый запрос регистрирует аккаунт) | ACME-сервер сертификата (Настройки → ACME), для ZeroSSL — api.zerossl.com | 6: свой ACME-сервер/PKI как локальная альтернатива |
+| Запрос и продление ACME-сертификата (первый запрос регистрирует аккаунт) | ACME-сервер сертификата (Сертификаты, блок «ACME-серверы»), для ZeroSSL — api.zerossl.com | 6: свой ACME-сервер/PKI как локальная альтернатива |
 | DNS-challenge: установка DNS-плагина certbot (`pip install` при первом использовании провайдера) | PyPI | 6: предустановленные плагины для популярных провайдеров или загрузка wheel через GUI |
 | «Проверить доступность» домена при выпуске сертификата | site24x7.com | 6: проверка без внешнего сервиса или явное предупреждение |
 | OCSP stapling (`ACME_OCSP_STAPLING`, `CUSTOM_OCSP_STAPLING`) | OCSP-респондеры CA | 6 |

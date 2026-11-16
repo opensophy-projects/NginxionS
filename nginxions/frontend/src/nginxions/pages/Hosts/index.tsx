@@ -53,7 +53,6 @@ import {
 	enableMtlsHost,
 	fromApiRule,
 	getPki,
-	hostKey,
 	type MtlsHostType,
 	setMtlsHost,
 	useMtlsHosts,
@@ -537,9 +536,9 @@ function HostsPage() {
 					certs: (row) =>
 						showHostCertsModal({
 							host: hostRef(row),
-							openHost: (h) => navigate(`/mtls?host=${hostKey(h)}`),
+							openHost: (h) => navigate(`/certificates?source=pki&q=${encodeURIComponent(h.name)}`),
 						}),
-					details: (row) => navigate(`/mtls?host=${mtlsType(row)}-${row.id}`),
+					details: (row) => navigate(`/certificates?source=pki&q=${encodeURIComponent(row.names[0] ?? "")}`),
 				}
 			: undefined,
 		duplicate: (row) => EDIT[row.type](row.id, true),

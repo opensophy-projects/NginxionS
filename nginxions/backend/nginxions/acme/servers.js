@@ -1,5 +1,5 @@
 // ACME servers (Settings → ACME; Certificates → ACME chooses one for each certificate). A preset (Let's Encrypt,
-// ZeroSSL, Google Trust Services, SSL.com, the TLS CA of the Russian Federation…) or a server of your own (step-ca,
+// ZeroSSL, Google Trust Services, SSL.com, the TLS CA of TCI…) or a server of your own (step-ca,
 // an internal CA, any RFC 8555 server). Each server says which ACME client NginxionS runs for it: certbot (the one of
 // NPMplus, its DNS plugins) or lego (an ES256 account key and the name in the CN of the CSR: some CAs refuse the RSA
 // account of certbot or a CSR without a subject). Before: one server for all, in env settings (ACME_SERVER…): those
@@ -51,10 +51,10 @@ export const PRESETS = [
 		eab: "required",
 	},
 	{
-		// the TLS CA of the Russian Federation, public test stage (a non-production chain): it accepts only ES256
-		// account keys and needs the name in the CN of the CSR, which certbot does not do
+		// the TLS CA of TCI (Технический центр Интернет, tlscc.ru), public test stage (a non-production chain): it
+		// accepts only ES256 account keys and needs the name in the CN of the CSR, which certbot does not do
 		id: "tlscc-stage",
-		name: "ТЦИ / НУЦ Минцифры (stage)",
+		name: "ТЦИ, tlscc.ru (stage)",
 		directory: "https://acme.stage.tlscc.ru/directory",
 		client: "lego",
 		eab: "",
@@ -158,8 +158,11 @@ const usage = async (defaultId) => {
  * @param {object} [current]  the stored server (internal form) when it is changed
  */
 export const normalize = (body, current) => {
-	const preset = presetOf(body.preset ?? current?.preset ?? "custom");
-	const directory = String(preset ? preset.directory : (body.directory ?? current?.directory ?? "")).trim();
+	const presetId = body.preset ?? current?.preset ?? "custom";
+	const preset = presetOf(presetId);
+	// the address of a preset is only its default: a CA that moves its directory is followed without a new version
+	const kept = current && current.preset === presetId ? current.directory : preset?.directory;
+	const directory = String(body.directory || kept || "").trim();
 	if (!URL_FORM.test(directory))
 		throw new errs.ValidationError("The directory URL of the ACME server must start with https:// or http://");
 	const client = String(body.client ?? current?.client ?? preset?.client ?? "certbot");
