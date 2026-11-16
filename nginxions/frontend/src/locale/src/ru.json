@@ -8259,16 +8259,16 @@
 		"defaultMessage": "{object} #{id}"
 	},
 	"object.add": {
-		"defaultMessage": "Добавить {object}"
+		"defaultMessage": "Добавить {object, select, Пользователь {пользователя} other {{object}}}"
 	},
 	"object.delete": {
-		"defaultMessage": "Удалить {object}"
+		"defaultMessage": "Удалить {object, select, Пользователь {пользователя} other {{object}}}"
 	},
 	"object.delete.content": {
 		"defaultMessage": "Вы уверены, что хотите удалить {object}?"
 	},
 	"object.edit": {
-		"defaultMessage": "Изменить {object}"
+		"defaultMessage": "Изменить {object, select, Пользователь {пользователя} other {{object}}}"
 	},
 	"object.empty": {
 		"defaultMessage": "{objects} отсутствуют"
