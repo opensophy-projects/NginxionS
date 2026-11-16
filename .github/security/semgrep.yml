@@ -195,8 +195,8 @@ rules:
 
   - id: nginxions-compose-docker-socket
     message: >-
-      The socket of Docker in a service: whoever reaches the container gets root on the host. Only openappsec, for
-      nginxions-control with its whitelist of operations (CLAUDE.md, "Безопасность"), has it.
+      The socket of Docker in a service: whoever reaches the container gets root on the host. Only the control
+      service (nginxions-control with its whitelist of operations, CLAUDE.md "Безопасность") has it.
     severity: ERROR
     languages: [yaml]
     paths:
@@ -204,7 +204,7 @@ rules:
     patterns:
       - pattern-regex: '/var/run/docker\.sock\s*:'
       - pattern-not-inside: |
-          openappsec:
+          control:
             ...
     metadata:
       category: security

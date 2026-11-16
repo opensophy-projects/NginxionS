@@ -195,7 +195,7 @@ export function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => vo
 				</div>
 			) : (
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className="table table-vcenter card-table nx-stack">
 						<thead>
 							<tr>
 								<th>
@@ -245,13 +245,18 @@ export function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => vo
 											{ca.subjectDn}
 										</div>
 									</td>
-									<td className="text-nowrap">{formatShort(ca.notAfter, locale)}</td>
-									<td className={styles.wrap}>
+									<td className="text-nowrap" data-label={t("nginxions.pki.expires")}>
+										{formatShort(ca.notAfter, locale)}
+									</td>
+									<td className={styles.wrap} data-label={t("nginxions.pki.ca.certificates")}>
 										{ca.kind === "intermediate"
 											? t("nginxions.pki.ca.counts", { active: ca.active, revoked: ca.revoked })
 											: "—"}
 									</td>
-									<td className={cn(styles.wrap, "nx-optional")}>
+									<td
+										className={cn(styles.wrap, "nx-optional")}
+										data-label={t("nginxions.pki.ca.crl")}
+									>
 										{ca.crlNextUpdate ? (
 											<span title={t("nginxions.pki.ca.crl.number", { number: ca.crlNumber })}>
 												<T
@@ -265,7 +270,7 @@ export function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => vo
 											</span>
 										)}
 									</td>
-									<td className={cn(styles.used, "nx-optional")}>
+									<td className={cn(styles.used, "nx-optional")} data-label={t("nginxions.pki.used")}>
 										{ca.hosts.length ? (
 											<span title={ca.hosts.join(", ")}>
 												{ca.hosts.slice(0, 2).join(", ")}
@@ -275,7 +280,7 @@ export function CasTab({ data, refresh }: { data: PkiOverview; refresh: () => vo
 											<span className="text-secondary">—</span>
 										)}
 									</td>
-									<td>
+									<td className="nx-actions">
 										<Dropdown
 											floating
 											inline
