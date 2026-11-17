@@ -463,6 +463,14 @@
 		},
 		{
 			"kind": "false-positive",
+			"tool": "trivy-nginxions",
+			"id": "private-key",
+			"where": "upload/post.json",
+			"reason": "not a key: the example of the upload API (OpenAPI schema of NPMplus) puts \"...\" between the BEGIN and END PRIVATE KEY lines",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
 			"tool": "codeql-cpp",
 			"id": "cpp/path-injection",
 			"where": "cpnano_debug.cc",
