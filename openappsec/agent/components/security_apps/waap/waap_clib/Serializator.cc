@@ -961,7 +961,11 @@ void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::syncWorker()
             SyncLearningObject syncObj(m_assetId, m_type, getWindowId());
 
             MessageMetadata req_md(getLearningHost(), 80);
-            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            // NginxionS: no tenant without the cloud; an empty X-Tenant-Id is refused (issue 149), "local" as in i_serialize.h
+            req_md.insertHeader(
+                "X-Tenant-Id",
+                agentDetails->getTenantId().empty() ? std::string("local") : agentDetails->getTenantId()
+            );
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             bool ok = messaging->sendSyncMessageWithoutResponse(
