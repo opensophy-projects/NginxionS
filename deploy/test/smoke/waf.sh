@@ -616,6 +616,12 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
 
   step "WAF -> Events: the detected attack is an important event (Detect)"
   event Detect
+
+  # scripts/test-airgap.sh checks the first attack on new nginx workers after smoke (issue 149): a blocking host
+  step "WAF: the host blocks again (prevent-learn) for the checks after smoke"
+  $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/hosts/1" \
+    -d '{"enabled": true, "mode": "prevent-learn", "minimum_confidence": "high"}' > /dev/null
+  wait_status_stable "$SQLI" 403 "SQLi is not blocked again in prevent-learn"
 else
   echo "    (agent not running, WAF scenarios skipped)"
 fi
