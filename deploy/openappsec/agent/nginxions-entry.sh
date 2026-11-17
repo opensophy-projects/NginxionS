@@ -39,10 +39,16 @@ fi
 # orchestration.configTimeoutSeconds: the orchestration waits for the services to confirm a new policy up to 600 s by
 # default and checks no update meanwhile; a confirmation lost while the services restart (an agent restart from the
 # GUI) held every policy change of the GUI for 10 minutes. 60 s, then the policy is applied again.
+# agent.registrationThreadTimeout.nginxModule (issue 149): after a restart of the agent each nginx worker registers again
+# on the first request it gets, and its fail-open verdict was given when that took more than 100 ms: the first attack
+# after "Save and restart" passed unchecked (fail-open) or the first request was refused (fail-close). 3 s: the request
+# that registers waits for it; the attachment retries a failed registration with a growing pause, so an agent that is
+# down holds one request per pause, not every request.
 mkdir -p /etc/cp/conf
-printf '{"agentSettings": [%s, %s, %s]}\n' \
+printf '{"agentSettings": [%s, %s, %s, %s]}\n' \
     "{\"key\": \"agent.failOpenState.nginxModule\", \"value\": \"$NGINXIONS_FAIL_OPEN\"}" \
     "{\"key\": \"agent.failOpenTimeout.nginxModule\", \"value\": \"$NGINXIONS_FAIL_OPEN_TIMEOUT_MS\"}" \
+    '{"key": "agent.registrationThreadTimeout.nginxModule", "value": "3000"}' \
     '{"key": "orchestration.configTimeoutSeconds", "value": "60"}' \
     > /etc/cp/conf/settings.json
 
