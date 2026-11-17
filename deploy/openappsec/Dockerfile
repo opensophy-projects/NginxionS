@@ -69,7 +69,7 @@ RUN chmod +x /entry.sh /nano-service-installers/* && ln -s entry.sh cp-nano-agen
 
 # ---------------------------------------------------------------- shared storage and tuning (Go)
 # the same binaries and configs as their upstream images; modules are vendored under dependencies/
-FROM docker.io/library/golang:1.27-alpine@sha256:eb61c3873c97416fff0116553fff65d67a3549f72e11d9758849a689cdd8b523 AS go-build
+FROM docker.io/library/golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS go-build
 # their libraries are raised in their go.mod over the ones of upstream (known vulnerabilities, docs/DEVSECOPS.md)
 ENV GOMODCACHE=/vendor CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local
 
