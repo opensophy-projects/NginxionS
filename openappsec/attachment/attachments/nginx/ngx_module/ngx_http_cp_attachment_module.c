@@ -486,6 +486,13 @@ ngx_cp_attachment_init_worker(ngx_cycle_t *cycle)
 
     write_dbg(DBG_LEVEL_INFO, "entering init worker. ngx_exiting=%d", ngx_exiting);
 
+    // NginxionS: the configuration of the attachment (fail-open or fail-close, the timeouts) is read when the worker
+    // starts, not on its first request: a new worker answered that request with the defaults (fail-open, 100 ms to
+    // register), so after a restart of the agent a fail-close stack let it through and the registration timeout of the
+    // agent's settings did not apply to it (issue 149). Best effort: without the file the defaults stay until the
+    // registration reads it.
+    init_general_config(SHARED_ATTACHMENT_CONF_PATH);
+
     attachment_conf = (ngx_cp_attachment_conf_t *)ngx_get_conf(cycle->conf_ctx, ngx_http_cp_attachment_module);
     if (attachment_conf && attachment_conf->num_of_workers) workers_amount_to_send = attachment_conf->num_of_workers;
     if (!workers_amount_to_send) {

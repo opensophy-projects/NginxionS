@@ -166,6 +166,36 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   t=$($CURL -o /dev/null -w '%{time_total}' "$ADMIN/api/")
   awk -v t="$t" 'BEGIN {exit !(t > 0.5)}' && fail "the interface took $t s: it must not wait for the agent"
 
+  # issue 149: the steps above retry until 403, which hid that the first request after a restart of the agent met
+  # nginx workers not registered with it yet: fail-open let that attack through, fail-close closed a normal request
+  # with no answer. Here the agent restarts with no traffic at all, then one request of each kind is sent, once.
+  first_after_restart() {
+    step "WAF -> Agent: fail-open $1, the first requests after the agent's restart: the attack 403, a normal one 200"
+    nginxions_before=$(started nginxions)
+    $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/agent" \
+      -d "{\"fail_open\": {\"enabled\": $1, \"timeout_ms\": 50}}" | grep -q '"restarting": *true' \
+      || fail "saving agent settings did not restart the agent"
+    for i in $(seq 1 90); do
+      now=$(started nginxions || true)
+      [ -n "$now" ] && [ "$now" != "$nginxions_before" ] \
+        && $CURL "$ADMIN/api/nginxions/waf/agent" 2>/dev/null | grep -q '"restartRequired": *false' \
+        && $CURL "$ADMIN/api/nginxions/waf" 2>/dev/null | grep -q '"reachable": *true' && break
+      [ "$i" = 90 ] && fail "the agent and nginxions did not come back after the restart"
+      sleep 2
+    done
+    # as in the issue: a pause with no traffic after the policy is applied
+    sleep 10
+    first=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'Host: test.local' "$HTTP/first-$1$XSS")
+    normal=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 15 -H 'Host: test.local' "$HTTP/?q=hello")
+    [ "$first" = 403 ] || fail "the first attack after the agent's restart got $first (fail-open $1)"
+    case "$normal" in
+      "200 "*) ;;
+      *) fail "a normal request after the agent's restart got \"$normal\" (status, bytes; fail-open $1)" ;;
+    esac
+  }
+  first_after_restart false
+  first_after_restart true
+
   step "WAF -> Agent: the metrics of the agent (its prometheus service) are read"
   metrics=""
   for i in $(seq 1 30); do

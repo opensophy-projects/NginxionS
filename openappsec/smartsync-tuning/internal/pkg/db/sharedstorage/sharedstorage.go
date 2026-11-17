@@ -105,11 +105,7 @@ func (a *Adapter) ReportAsset(
 	if err != nil {
 		return err
 	}
-	if tenant == "" {
-		log.Warn("missing tenant id using fake")
-		tenant = "tenant"
-	}
-	req.Header.Add("X-Tenant-Id", tenant)
+	setTenantIDHeader(req, tenant)
 	_, err = a.client.Do(req)
 
 	log.WithContext(ctx).Debugf("request return err: %v", err)
@@ -281,11 +277,7 @@ func (a *Adapter) getFile(tenantID string, filepath string) (models.Attributes, 
 	if err != nil {
 		return models.Attributes{}, errors.Wrap(err, "failed to create new request")
 	}
-	if tenantID == "" {
-		log.Warn("missing tenant id using fake")
-		tenantID = "tenant"
-	}
-	req.Header.Add("X-Tenant-Id", tenantID)
+	setTenantIDHeader(req, tenantID)
 	res, err := a.client.Do(req)
 	if err != nil {
 		return models.Attributes{}, errors.Wrapf(err, "failed to send request")
@@ -378,7 +370,7 @@ func (a *Adapter) GetAllAssetsData(ctx context.Context, tenantID string) ([]mode
 	if err != nil {
 		return []models.Attributes{}, errors.Wrap(err, "failed to create new request")
 	}
-	req.Header.Add("X-Tenant-Id", tenantID)
+	setTenantIDHeader(req, tenantID)
 	res, err := a.client.Do(req)
 	if err != nil {
 		return []models.Attributes{}, errors.Wrapf(err, "failed to send request")
@@ -452,7 +444,7 @@ func (a *Adapter) deleteFile(ctx context.Context, tenantID string, filepath stri
 	if err != nil {
 		return errors.Wrap(err, "failed to create new request")
 	}
-	req.Header.Add("X-Tenant-Id", tenantID)
+	setTenantIDHeader(req, tenantID)
 	res, err := a.client.Do(req)
 	if err != nil {
 		return errors.Wrapf(err, "failed to send request")
@@ -462,4 +454,15 @@ func (a *Adapter) deleteFile(ctx context.Context, tenantID string, filepath stri
 		return errors.Errorf("file: %v not found").SetClass(errors.ClassNotFound)
 	}
 	return nil
+}
+
+// NginxionS: an agent with no cloud keeps its data under an empty tenant, and the shared storage refuses a request
+// whose X-Tenant-Id is empty ("Please add header X-Tenant-Id to your request", 400): the list of the assets and the
+// deletion of their files sent it empty (issue 149), the other requests already put the fake tenant of upstream; the
+// paths of the files do not depend on it.
+func setTenantIDHeader(req *http.Request, tenantID string) {
+	if tenantID == "" {
+		tenantID = "tenant"
+	}
+	req.Header.Add("X-Tenant-Id", tenantID)
 }
