@@ -628,6 +628,13 @@ ngx_http_cp_req_header_handler_sync(ngx_http_request_t *request)
             ctx.res
         );
         if (ctx.should_return) {
+            // NginxionS: the nano service is not ready, the request is not inspected: fail-close refuses it as for a
+            // timeout instead of letting it through unchecked (issue 149)
+            if (fail_mode_verdict != NGX_OK) {
+                session_data_p->verdict = TRAFFIC_VERDICT_DROP;
+                updateMetricField(REG_THREAD_TIMEOUT, 1);
+                return fail_mode_verdict;
+            }
             session_data_p->verdict = TRAFFIC_VERDICT_ACCEPT;
             return ctx.res == NGX_OK ? NGX_DECLINED : ctx.res;
         }
@@ -1000,6 +1007,20 @@ remove_server_header(ngx_http_request_t *r)
     return NGX_OK;
 }
 
+///
+/// @brief NginxionS: whether the response is the refusal of the request itself (issue 149).
+/// @details In fail-close the request phase refuses a request it could not inspect with a 403 nginx renders; the
+/// response filters, also unable to inspect it, returned NGX_ERROR on that very page, so nginx logged the 403 and
+/// closed the connection with no answer ("Empty reply from server"). The page of the refusal goes out as it is.
+///
+static ngx_int_t
+is_own_refusal(ngx_http_request_t *request, ngx_http_cp_session_data *session_data_p)
+{
+    return session_data_p->verdict == TRAFFIC_VERDICT_DROP &&
+        request->upstream == NULL &&
+        request->headers_out.status == NGX_HTTP_FORBIDDEN;
+}
+
 ngx_int_t
 ngx_http_cp_res_header_filter_core(ngx_http_request_t *request, int filter_mode)
 {
@@ -1019,6 +1040,12 @@ ngx_http_cp_res_header_filter_core(ngx_http_request_t *request, int filter_mode)
     set_current_session_id(session_data_p->session_id);
 
     write_dbg(DBG_LEVEL_DEBUG, "Response header filter [%s] handling session ID: %d", filter_mode == ASYNC_FILTER ? "ASYNC" : "SYNC", session_data_p->session_id);
+
+    // NginxionS: the 403 page of a request refused in fail-close is sent, not dropped (issue 149)
+    if (is_own_refusal(request, session_data_p)) {
+        write_dbg(DBG_LEVEL_DEBUG, "Sending the refusal of session ID: %d", session_data_p->session_id);
+        return ngx_http_next_response_header_filter(request);
+    }
 
     if (filter_mode == ASYNC_FILTER) {
         if (!session_data_p->initial_async_mode || (session_data_p->initial_async_mode && !is_async_mode_enabled)) {
@@ -1173,7 +1200,12 @@ ngx_http_cp_res_body_filter_core(ngx_http_request_t *request, ngx_chain_t *body_
 
     set_current_session_id(session_data_p->session_id);
     write_dbg(DBG_LEVEL_DEBUG, "Response body filter [%s] handling response ID: %d", filter_mode == ASYNC_FILTER ? "ASYNC" : "SYNC", session_data_p->session_id);
-    
+
+    // NginxionS: the 403 page of a request refused in fail-close is sent, not dropped (issue 149)
+    if (is_own_refusal(request, session_data_p)) {
+        return ngx_http_next_response_body_filter(request, body_chain);
+    }
+
     print_buffer_chain(body_chain, "incoming", 32, DBG_LEVEL_TRACE);
 
     if (filter_mode == ASYNC_FILTER) {
