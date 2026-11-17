@@ -273,6 +273,27 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
+if smoke_has waf; then
+  echo "==> the first attack on new nginx workers is blocked while the agent answers late (issue 149)"
+  # new workers register with the agent on their first request; the attachment gave its fail-open verdict when that
+  # took more than 100 ms, so the first attack after a restart of the agent passed on a slow machine. Here the workers
+  # are new (reload) and the agent answers 1.5 s late (SIGSTOP); smoke leaves fail-open on.
+  xss='http://127.0.0.1/first-after-reload?q=%3Cscript%3Ealert(document.cookie)%3C/script%3E'
+  waf_code() { "${compose[@]}" exec -T nginxions curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: test.local' "$1" || true; }
+  for i in $(seq 1 30); do
+    [ "$(waf_code "$xss")" = 403 ] && [ "$(waf_code "$xss")" = 403 ] && break
+    [ "$i" = 30 ] && { echo "FAIL: the attack is not blocked before the test"; exit 1; }
+    sleep 2
+  done
+  "${compose[@]}" exec -T nginxions nginx -s reload
+  sleep 3
+  "${compose[@]}" exec -T openappsec sh -c 'pkill -STOP -f cp-nano-http-transaction-handler'
+  (sleep 1.5; "${compose[@]}" exec -T openappsec sh -c 'pkill -CONT -f cp-nano-http-transaction-handler') &
+  first=$(waf_code "$xss")
+  wait
+  [ "$first" = 403 ] || { echo "FAIL: the first attack on new workers got $first while the agent answered late"; exit 1; }
+fi
+
 echo "==> no nginx worker crashed (signal, failed allocation)"
 if "${compose[@]}" logs --no-color nginxions 2>&1 | grep -E "worker process [0-9]+ exited on signal|malloc\([0-9]+\) failed"; then
   echo "FAIL: an nginx worker crashed"

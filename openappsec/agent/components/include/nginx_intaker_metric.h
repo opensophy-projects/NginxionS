@@ -74,6 +74,16 @@ private:
     uint64_t min_req_body_size_upon_timeout = 0;
     uint64_t res_header_thread_timeout = 0;
     uint64_t res_body_thread_timeout = 0;
+    // NginxionS: metrics of the attachment the agent did not count (issue 149)
+    uint64_t hold_verdict_counter = 0;
+    uint64_t req_metadata_thread_timeout = 0;
+    uint64_t req_end_thread_timeout = 0;
+    uint64_t res_end_thread_timeout = 0;
+    uint64_t hold_thread_timeout = 0;
+    uint64_t average_vm_memory_usage = 0;
+    uint64_t average_rss_memory_usage = 0;
+    uint64_t max_vm_memory_usage = 0;
+    uint64_t max_rss_memory_usage = 0;
     uint64_t average_res_body_size_upon_timeout = 0;
     uint64_t max_res_body_size_upon_timeout = 0;
     uint64_t min_res_body_size_upon_timeout = 0;
@@ -136,6 +146,16 @@ private:
     LastValue min_req_body_size_upon_timeout{this, "requestBodySizeUponTimeoutMinSample"};
     Counter res_header_thread_timeout{this, "respondHeaderThreadReachedTimeoutSum"};
     Counter res_body_thread_timeout{this, "respondBodyThreadReachedTimeoutSum"};
+    // NginxionS: metrics of the attachment the agent did not count (issue 149)
+    Counter hold_verdict_counter{this, "reachHoldVerdictSum"};
+    Counter req_metadata_thread_timeout{this, "requestMetadataThreadReachedTimeoutSum"};
+    Counter req_end_thread_timeout{this, "requestEndThreadReachedTimeoutSum"};
+    Counter res_end_thread_timeout{this, "respondEndThreadReachedTimeoutSum"};
+    Counter hold_thread_timeout{this, "holdThreadReachedTimeoutSum"};
+    LastValue average_vm_memory_usage{this, "attachmentVmMemoryUsageAvgSample"};
+    LastValue average_rss_memory_usage{this, "attachmentRssMemoryUsageAvgSample"};
+    LastValue max_vm_memory_usage{this, "attachmentVmMemoryUsageMaxSample"};
+    LastValue max_rss_memory_usage{this, "attachmentRssMemoryUsageMaxSample"};
     LastValue average_res_body_size_upon_timeout{this, "responseBodySizeUponTimeoutAvgSample"};
     LastValue max_res_body_size_upon_timeout{this, "responseBodySizeUponTimeoutMaxSample"};
     LastValue min_res_body_size_upon_timeout{this, "responseBodySizeUponTimeoutMinSample"};

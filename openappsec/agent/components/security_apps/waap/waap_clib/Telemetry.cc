@@ -48,10 +48,10 @@ WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
     auto svc_host = getConfigurationWithDefault(host, "Logging", "Container Log host");
     string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
     MessageMetadata req_md(svc_host, 80);
-    req_md.insertHeader(
-        "X-Tenant-Id",
-        Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId()
-    );
+    // NginxionS: an agent with no cloud has no tenant, and the local services refuse an empty X-Tenant-Id (issue 149);
+    // "local" as in i_serialize.h
+    string tenant_id = Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId();
+    req_md.insertHeader("X-Tenant-Id", tenant_id.empty() ? string("local") : tenant_id);
     req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
