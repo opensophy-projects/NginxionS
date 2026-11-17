@@ -233,6 +233,11 @@ expect "$(curl -sS -k -b "$JAR" -o /dev/null -w '%{http_code}' -H 'Content-Type:
   --data-binary @/tmp/certs-cut "$ADMIN/api/nginx/certificates/validate")" 400 "a multipart body without its end"
 expect "$(code_of -H 'Content-Type: application/json' "$ADMIN/api/nginx/dead-hosts" \
   -d '{"domain_names": ["http://www.example.com/"]}')" 400 "a URL as the name of a host"
+# DAST: a name nginx refuses ("*" inside, brackets) was saved and every later reload of the configuration failed (500)
+expect "$(code_of -H 'Content-Type: application/json' "$ADMIN/api/nginx/dead-hosts" \
+  -d '{"domain_names": ["response.write(1,2*3)"]}')" 400 "a name nginx refuses as the name of a host"
+expect "$(code_of -H 'Content-Type: application/json' "$ADMIN/api/nginx/dead-hosts" \
+  -d '{"domain_names": ["a*b.example.com"]}')" 400 "a wildcard inside the name of a host"
 
 step "Certificates: a certificate of your own is deleted with its host gone, nginx stays up"
 expect "$(code_of -X DELETE "$ADMIN/api/nginx/proxy-hosts/$own_host")" 200 "delete the host"
