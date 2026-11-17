@@ -87,8 +87,8 @@
 				"type": "string",
 				"minLength": 1,
 				"maxLength": 253,
-				"pattern": "^(?:~[^\\s;{}'\"`$\\\\#]+|\\[[^\\s;{}'\"`$\\\\#/]+|[^\\s;{}'\"`$\\\\#/:]+)$",
-				"description": "NginxionS: a name of nginx server_name: no spaces or characters of nginx syntax (; { } quotes $ \\ #); no URL (\"/\", or \":\" outside an IPv6 address in brackets) unless a regular expression (~), which nginx would only warn about and DAST sent"
+				"pattern": "^(?:~[^\\s;{}'\"`$\\\\#]+|\\[[0-9A-Fa-f:.]+\\]|(?:\\*\\.|\\.)?[\\p{L}\\p{N}_-]+(?:\\.[\\p{L}\\p{N}_-]+)*(?:\\.\\*)?)$",
+				"description": "NginxionS: a name nginx takes in server_name: labels of letters, digits, \"-\" and \"_\" joined by dots, a wildcard at the start (*.example.com, .example.com) or the end (example.*), an IPv6 address in brackets or a regular expression (~ without spaces or characters of nginx syntax). Anything else (a URL, a \"*\" inside the name, brackets) made nginx refuse the configuration of every host on the next reload (DAST)"
 			},
 			"example": [
 				"example.com",

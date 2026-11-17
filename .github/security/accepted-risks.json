@@ -463,6 +463,14 @@
 		},
 		{
 			"kind": "false-positive",
+			"tool": "trivy-nginxions",
+			"id": "private-key",
+			"where": "upload/post.json",
+			"reason": "not a key: the example of the upload API (OpenAPI schema of NPMplus) puts \"...\" between the BEGIN and END PRIVATE KEY lines",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
 			"tool": "codeql-cpp",
 			"id": "cpp/path-injection",
 			"where": "cpnano_debug.cc",
@@ -767,6 +775,69 @@
 			"reason": "an overlay of compose.yaml: the services it shares with compose.yaml (nginxions, nginxions-init, openappsec) get cap_drop from there (docker compose config merges them); compose refuses the same item repeated in the overlay. The services of the overlay itself have it",
 			"until": "2027-05-01",
 			"kind": "false-positive"
+		},
+		{
+			"tool": "runtime",
+			"id": "port-all-addresses",
+			"where": "контейнер openappsec",
+			"reason": "the ports of the proxy (80, 443) take the traffic of the internet: that is what NginxionS is for; the interface :81 is published on 127.0.0.1 only (NGINXIONS_ADMIN_BIND_IP)",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "docker-socket",
+			"where": "контейнер control",
+			"reason": "nginxions-control is the only service with the Docker socket: its own container without capabilities, read-only, on the internal network control, with a whitelist of operations on the containers of the stack and a token (CLAUDE.md, \"Безопасность\")",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "root-user",
+			"where": "контейнер control",
+			"reason": "the Docker socket belongs to root:docker with a group id that differs from host to host; the container has no capabilities, a read-only root and no network but control",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "root-user",
+			"where": "контейнер nginxions",
+			"reason": "NPMplus runs nginx and the backend as root by default (PUID/PGID 0): they write the configuration and certificates and reload nginx; the container has no capability but SETGID and no-new-privileges. Running under PUID/PGID needs SETUID/CHOWN and a test of every path (certbot, lego, bouncer), not done yet",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "root-user",
+			"where": "контейнер openappsec",
+			"reason": "the agent of open-appsec (upstream image layout) runs its services as root inside its container; all capabilities dropped, no-new-privileges, its local services listen on 127.0.0.1",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "root-user",
+			"where": "контейнер crowdsec",
+			"reason": "the official image of CrowdSec runs as root; read-only root filesystem, all capabilities dropped, internal network only",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "writable-rootfs",
+			"where": "контейнер nginxions",
+			"reason": "nginx, certbot/lego and the backend write configuration, certificates and caches across the image (paths of NPMplus); the data lives in volumes, the container is rebuilt on every update",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "writable-rootfs",
+			"where": "контейнер openappsec",
+			"reason": "the agent writes its configuration, policy and logs under /etc/cp and /var/log of the image (upstream layout); data in volumes, rebuilt on every update",
+			"until": "2027-05-01"
+		},
+		{
+			"tool": "runtime",
+			"id": "cap-add",
+			"where": "контейнер nginxions",
+			"reason": "SETGID: nginx (root) sets the groups of its workers at start; every other capability is dropped",
+			"until": "2027-05-01"
 		}
 	]
 }
