@@ -404,9 +404,19 @@ bool BufferedCompressedInputStream::DecompressedBuffer::processNextChunk()
             break;
         }
 
+        // NginxionS: a stream without the gzip magic is plain data (issue 149)
+        if (m_plain < 0) {
+            m_plain = !(decrypted_chunk.size() >= 2 &&
+                static_cast<unsigned char>(decrypted_chunk[0]) == 0x1f &&
+                static_cast<unsigned char>(decrypted_chunk[1]) == 0x8b);
+            if (m_plain) dbgTrace(D_WAAP_SERIALIZE) << "Input is not compressed, reading it as it is";
+        }
+
         // Decompress the chunk
         std::vector<char> decompressed_chunk;
-        if (!decompressChunk(decrypted_chunk, decompressed_chunk)) {
+        if (m_plain) {
+            decompressed_chunk.swap(decrypted_chunk);
+        } else if (!decompressChunk(decrypted_chunk, decompressed_chunk)) {
             dbgWarning(D_WAAP_SERIALIZE) << "Failed to decompress chunk";
             break;
         }

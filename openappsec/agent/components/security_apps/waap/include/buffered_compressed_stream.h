@@ -121,6 +121,10 @@ private:
         CompressionStream* m_compression_stream;
         bool m_eof_reached;
         bool m_stream_finished; // Whether we've finished processing the entire stream
+        // NginxionS: -1 until the first chunk is read, then 1 when the stream is not gzip (no 1f 8b magic) and is
+        // passed through as it is: waap.data and the other plain JSON files of the agent failed here on every load
+        // ("Failed to decompress chunk", issue 149) and were read a second time by the legacy path
+        int m_plain = -1;
     };
 
     std::unique_ptr<DecompressedBuffer> m_buffer;

@@ -45,6 +45,16 @@ nginxIntakerEvent::resetAllCounters()
     req_body_thread_timeout = 0;
     res_header_thread_timeout = 0;
     res_body_thread_timeout = 0;
+    // NginxionS: the metrics the attachment sends that the agent did not count (issue 149)
+    hold_verdict_counter = 0;
+    req_metadata_thread_timeout = 0;
+    req_end_thread_timeout = 0;
+    res_end_thread_timeout = 0;
+    hold_thread_timeout = 0;
+    average_vm_memory_usage = 0;
+    average_rss_memory_usage = 0;
+    max_vm_memory_usage = 0;
+    max_rss_memory_usage = 0;
     thread_failure = 0;
     req_proccessing_timeout = 0;
     res_proccessing_timeout = 0;
@@ -219,6 +229,44 @@ nginxIntakerEvent::addPluginMetricCounter(const NanoHttpMetricData *recieved_met
                 res_body_thread_timeout += amount;
                 break;
             }
+            // NginxionS: metrics the attachment sends that the agent warned about as unsupported on every report and
+            // dropped, the timeouts of the threads among them (issue 149)
+            case AttachmentMetricType::HOLD_VERDICTS_COUNT: {
+                hold_verdict_counter += amount;
+                break;
+            }
+            case AttachmentMetricType::REQ_METADATA_THREAD_TIMEOUT: {
+                req_metadata_thread_timeout += amount;
+                break;
+            }
+            case AttachmentMetricType::REQ_END_THREAD_TIMEOUT: {
+                req_end_thread_timeout += amount;
+                break;
+            }
+            case AttachmentMetricType::RES_END_THREAD_TIMEOUT: {
+                res_end_thread_timeout += amount;
+                break;
+            }
+            case AttachmentMetricType::HOLD_THREAD_TIMEOUT: {
+                hold_thread_timeout += amount;
+                break;
+            }
+            case AttachmentMetricType::AVERAGE_VM_MEMORY_USAGE: {
+                if (amount > 0) average_vm_memory_usage = amount;
+                break;
+            }
+            case AttachmentMetricType::AVERAGE_RSS_MEMORY_USAGE: {
+                if (amount > 0) average_rss_memory_usage = amount;
+                break;
+            }
+            case AttachmentMetricType::MAX_VM_MEMORY_USAGE: {
+                if (amount > max_vm_memory_usage) max_vm_memory_usage = amount;
+                break;
+            }
+            case AttachmentMetricType::MAX_RSS_MEMORY_USAGE: {
+                if (amount > max_rss_memory_usage) max_rss_memory_usage = amount;
+                break;
+            }
             case AttachmentMetricType::AVERAGE_RES_BODY_SIZE_UPON_TIMEOUT: {
                 if (amount > 0) average_res_body_size_upon_timeout = amount;
                 break;
@@ -351,6 +399,25 @@ nginxIntakerEvent::getPluginMetricCounter(AttachmentMetricType metric_type) cons
             return res_header_thread_timeout;
         case AttachmentMetricType::RES_BODY_THREAD_TIMEOUT:
             return res_body_thread_timeout;
+        // NginxionS: see addPluginMetricCounter (issue 149)
+        case AttachmentMetricType::HOLD_VERDICTS_COUNT:
+            return hold_verdict_counter;
+        case AttachmentMetricType::REQ_METADATA_THREAD_TIMEOUT:
+            return req_metadata_thread_timeout;
+        case AttachmentMetricType::REQ_END_THREAD_TIMEOUT:
+            return req_end_thread_timeout;
+        case AttachmentMetricType::RES_END_THREAD_TIMEOUT:
+            return res_end_thread_timeout;
+        case AttachmentMetricType::HOLD_THREAD_TIMEOUT:
+            return hold_thread_timeout;
+        case AttachmentMetricType::AVERAGE_VM_MEMORY_USAGE:
+            return average_vm_memory_usage;
+        case AttachmentMetricType::AVERAGE_RSS_MEMORY_USAGE:
+            return average_rss_memory_usage;
+        case AttachmentMetricType::MAX_VM_MEMORY_USAGE:
+            return max_vm_memory_usage;
+        case AttachmentMetricType::MAX_RSS_MEMORY_USAGE:
+            return max_rss_memory_usage;
         case AttachmentMetricType::AVERAGE_RES_BODY_SIZE_UPON_TIMEOUT:
             return average_res_body_size_upon_timeout;
         case AttachmentMetricType::MAX_RES_BODY_SIZE_UPON_TIMEOUT:
@@ -495,6 +562,18 @@ nginxIntakerMetric::upon(const nginxIntakerEvent &event)
     res_body_thread_timeout.report(
         event.getPluginMetricCounter(AttachmentMetricType::RES_BODY_THREAD_TIMEOUT)
     );
+    // NginxionS: see addPluginMetricCounter (issue 149)
+    hold_verdict_counter.report(event.getPluginMetricCounter(AttachmentMetricType::HOLD_VERDICTS_COUNT));
+    req_metadata_thread_timeout.report(
+        event.getPluginMetricCounter(AttachmentMetricType::REQ_METADATA_THREAD_TIMEOUT)
+    );
+    req_end_thread_timeout.report(event.getPluginMetricCounter(AttachmentMetricType::REQ_END_THREAD_TIMEOUT));
+    res_end_thread_timeout.report(event.getPluginMetricCounter(AttachmentMetricType::RES_END_THREAD_TIMEOUT));
+    hold_thread_timeout.report(event.getPluginMetricCounter(AttachmentMetricType::HOLD_THREAD_TIMEOUT));
+    average_vm_memory_usage.report(event.getPluginMetricCounter(AttachmentMetricType::AVERAGE_VM_MEMORY_USAGE));
+    average_rss_memory_usage.report(event.getPluginMetricCounter(AttachmentMetricType::AVERAGE_RSS_MEMORY_USAGE));
+    max_vm_memory_usage.report(event.getPluginMetricCounter(AttachmentMetricType::MAX_VM_MEMORY_USAGE));
+    max_rss_memory_usage.report(event.getPluginMetricCounter(AttachmentMetricType::MAX_RSS_MEMORY_USAGE));
     average_res_body_size_upon_timeout.report(
         event.getPluginMetricCounter(AttachmentMetricType::AVERAGE_RES_BODY_SIZE_UPON_TIMEOUT)
     );
