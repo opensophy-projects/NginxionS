@@ -257,10 +257,13 @@ jobs:
               --source-version "$GITHUB_SHA" -q \
               -o "cyclonedx-json=/src/out/sbom-source-$part.cdx.json" -o "spdx-json=/src/out/sbom-source-$part.spdx.json"
           done
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - name: leave out accepted risks
         if: always() && hashFiles('out/osv.sarif') != ''
+        run: mkdir -p upload && node scripts/sarif-accepted.mjs osv out/osv.sarif upload/osv.sarif
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('upload/osv.sarif') != ''
         with:
-          sarif_file: out/osv.sarif
+          sarif_file: upload/osv.sarif
           category: osv-scanner
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -352,6 +355,18 @@ jobs:
   quality:
     name: Code quality (duplication, test coverage)
     runs-on: ubuntu-latest
+    # PostgreSQL for the tests of the SQL of NginxionS (nginxions/test/postgres.js); its tag is POSTGRES_VERSION of
+    # deploy/.env (checked in "version consistency")
+    services:
+      postgres:
+        image: docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+        env:
+          POSTGRES_USER: nginxions
+          POSTGRES_PASSWORD: nginxions-tests
+          POSTGRES_DB: nginxions
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U nginxions" --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -372,10 +387,17 @@ jobs:
             nginxions/backend/nginxions nginxions/frontend/src/nginxions scripts
       - name: coverage of the backend (node --test)
         working-directory: nginxions/backend
+        env:
+          DB_POSTGRES_HOST: 127.0.0.1
+          DB_POSTGRES_PORT: "5432"
+          DB_POSTGRES_USER: nginxions
+          DB_POSTGRES_PASSWORD: nginxions-tests
+          DB_POSTGRES_NAME: nginxions
+          NGINXIONS_TEST_POSTGRES: "1"
         run: |
           pnpm install --frozen-lockfile
           node --test --experimental-test-coverage --test-coverage-include='nginxions/**' \
-            --test-coverage-exclude='**/*.test.js' --test-reporter=dot --test-reporter-destination=stdout \
+            --test-coverage-exclude='**/*.test.js' --test-coverage-exclude='nginxions/test/**' --test-reporter=dot --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=../../out/lcov-backend.info 'nginxions/**/*.test.js'
       - name: coverage of the Go services of the agent (go test)
         run: COVERAGE_DIR=out scripts/test-go.sh
@@ -384,7 +406,8 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm vitest run --coverage.enabled --coverage.provider=v8 --coverage.reporter=json-summary \
-            --coverage.include='src/nginxions/**' --coverage.reportsDirectory=../../out/coverage-frontend
+            --coverage.include='src/nginxions/**' --coverage.exclude='src/nginxions/test/**' \
+            --coverage.reportsDirectory=../../out/coverage-frontend
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
