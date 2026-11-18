@@ -107,6 +107,26 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   # Agent settings from the GUI: saving restarts the agent, its entrypoint applies them.
   # $1: JSON body, $2: what is checked
   started() { $CURL "$ADMIN/api/nginxions/services/$1" 2>/dev/null | grep -o '"startedAt": *"[^"]*"'; }
+  # after a restart of the agent: nginxions restarted since $1, the agent applied its settings and answers, and the
+  # same start of nginxions twice in a row 2 s apart. A restart of the agent restarts nginxions (it lives in the network
+  # of openappsec), and nginxions-control may restart it once more: the first new start alone was taken for the end,
+  # the next request then met nginx without its backend (502). $2: what is waited for
+  back_after_restart() {
+    seen=""
+    for i in $(seq 1 90); do
+      now=$(started nginxions || true)
+      if [ -n "$now" ] && [ "$now" != "$1" ] \
+        && $CURL "$ADMIN/api/nginxions/waf/agent" 2>/dev/null | grep -q '"restartRequired": *false' \
+        && $CURL "$ADMIN/api/nginxions/waf" 2>/dev/null | grep -q '"reachable": *true'; then
+        [ "$now" = "$seen" ] && return 0
+        seen=$now
+      else
+        seen=""
+      fi
+      sleep 2
+    done
+    fail "the agent and nginxions did not come back after $2"
+  }
   agent_settings() {
     step "WAF -> Agent: $2"
     nginxions_before=$(started nginxions)
@@ -175,14 +195,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
     $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/agent" \
       -d "{\"fail_open\": {\"enabled\": $1, \"timeout_ms\": 50}}" | grep -q '"restarting": *true' \
       || fail "saving agent settings did not restart the agent"
-    for i in $(seq 1 90); do
-      now=$(started nginxions || true)
-      [ -n "$now" ] && [ "$now" != "$nginxions_before" ] \
-        && $CURL "$ADMIN/api/nginxions/waf/agent" 2>/dev/null | grep -q '"restartRequired": *false' \
-        && $CURL "$ADMIN/api/nginxions/waf" 2>/dev/null | grep -q '"reachable": *true' && break
-      [ "$i" = 90 ] && fail "the agent and nginxions did not come back after the restart"
-      sleep 2
-    done
+    back_after_restart "$nginxions_before" "the restart"
     # as in the issue: a pause with no traffic after the policy is applied
     sleep 10
     first=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'Host: test.local' "$HTTP/first-$1$XSS")
@@ -193,8 +206,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
       *) fail "a normal request after the agent's restart got \"$normal\" (status, bytes; fail-open $1)" ;;
     esac
   }
-  first_after_restart false
-  first_after_restart true
+  # called at the end of the group (fail-open, then fail-close, which test-airgap.sh uses after smoke)
 
   step "WAF -> Agent: the metrics of the agent (its prometheus service) are read"
   metrics=""
@@ -592,17 +604,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   $CURL -X POST "$ADMIN/api/nginxions/learning/snapshots/$uploaded_id/restore" | grep -q '"restarting": *true' \
     || fail "the snapshot was not restored"
   # the agent restarts with the snapshot in place, then nginxions: the API is away for a while
-  for i in $(seq 1 90); do
-    now=$(started nginxions 2>/dev/null || true)
-    [ -n "$now" ] && [ "$now" != "$nginxions_before" ] && break
-    [ "$i" = 90 ] && fail "nginxions was not restarted after the restore of the snapshot"
-    sleep 2
-  done
-  for i in $(seq 1 60); do
-    $CURL "$ADMIN/api/nginxions/waf" 2>/dev/null | grep -q '"reachable": *true' && break
-    [ "$i" = 60 ] && fail "the agent did not come back after the restore: $($CURL "$ADMIN/api/nginxions/waf")"
-    sleep 2
-  done
+  back_after_restart "$nginxions_before" "the restore of the snapshot"
   wait_status "$SQLI" 403 "SQLi is not blocked after the restore of a snapshot of learning"
   snapshots=$($CURL "$ADMIN/api/nginxions/learning/snapshots" | tr -d ' \n')
   echo "$snapshots" | grep -q '"reason":"before-restore"' || fail "the state before the restore was not kept: $(echo "$snapshots" | head -c 600)"
@@ -616,6 +618,16 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
 
   step "WAF -> Events: the detected attack is an important event (Detect)"
   event Detect
+
+  # the first requests after a restart of the agent (issue 149), at the end of the group: the host blocks again, and
+  # fail-close stays on for scripts/test-airgap.sh, which checks after smoke that a request the agent does not answer in
+  # fail-close gets the 403 page, not a closed connection
+  step "WAF: the host blocks again (prevent-learn)"
+  $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/hosts/1" \
+    -d '{"enabled": true, "mode": "prevent-learn", "minimum_confidence": "high"}' > /dev/null
+  wait_status_stable "$SQLI" 403 "SQLi is not blocked again in prevent-learn"
+  first_after_restart true
+  first_after_restart false
 else
   echo "    (agent not running, WAF scenarios skipped)"
 fi
