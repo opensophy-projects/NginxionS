@@ -14,6 +14,7 @@ describe("WAF policy objects on PostgreSQL", { skip: !postgres && "no test datab
 	before(async () => {
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "nginxions-policy-"));
 		process.env.NGINXIONS_APPSEC_POLICY_FILE = path.join(dir, "local_policy.yaml");
+		process.env.NGINXIONS_WAF_POLICY_BACKUP_DIR = path.join(dir, "backups");
 		// no agent in the test: its answer is a closed port
 		process.env.NGINXIONS_APPSEC_ORCHESTRATION_URL = "http://127.0.0.1:9";
 		knex = await freshDatabase("waf");
