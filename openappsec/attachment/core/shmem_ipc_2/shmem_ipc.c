@@ -303,7 +303,8 @@ initIpc(
 
     writeDebug(&(ipc->logging_data), TraceLevel, "Successfully allocated IPC");
 
-    strncpy(ipc->shm_name, queue_name, sizeof(ipc->shm_name));
+    // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+    snprintf(ipc->shm_name, sizeof(ipc->shm_name), "%s", queue_name);
     return ipc;
 }
 

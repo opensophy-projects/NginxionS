@@ -2,6 +2,38 @@
 	"$comment": "Findings that do not fail the run (scripts/security-report.mjs). Each entry names the tool, the id of the finding (a CVE, a rule), optionally a part of its location (where), why and until when (YYYY-MM-DD): after that date it fails the run again and must be looked at once more. \"kind\": \"false-positive\": not a vulnerability of this code (the tool is wrong, or the flagged flow is intended and safe: the reason says why); without kind: an accepted risk, a real weakness kept for the reason given. The report counts both apart from the open findings.",
 	"risks": [
 		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "generic.nginx.security.request-host-used.request-host-used",
+			"where": "nginxions/backend/templates/",
+			"reason": "$host is the Host header nginx has already checked (a name with a character nginx does not allow is refused with 400; without the header it is the server_name): a request reaches a server block of a host only by its server_name, so the proxy headers (Host, X-Forwarded-Host, X-Original-URL), proxy_ssl_name and the map of CrowdSec see a name of that host. The redirects to https (and the 497 page) send a client to the very host it asked for, a value it chose itself; the log formats escape it (escape=json) or hold a name without spaces or line breaks",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "generic.nginx.security.request-host-used.request-host-used",
+			"where": "nginxions/rootfs/usr/local/nginx/conf/",
+			"reason": "$host is the Host header nginx has already checked (a name with a character nginx does not allow is refused with 400; without the header it is the server_name): a request reaches a server block of a host only by its server_name, so the proxy headers (Host, X-Forwarded-Host, X-Original-URL), proxy_ssl_name and the map of CrowdSec see a name of that host. The redirects to https (and the 497 page) send a client to the very host it asked for, a value it chose itself; the log formats escape it (escape=json) or hold a name without spaces or line breaks",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "python.lang.security.insecure-hash-algorithms-md5.insecure-hash-algorithm-md5",
+			"where": "snort3_to_ips/utils/utils.py",
+			"reason": "the Snort converter of upstream, kept only as the reference of the test of its JavaScript port (snort_to_ips_local.test.mjs) and not installed in the image; the hash names the version of a signature file, no secret or integrity check depends on it",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1",
+			"where": "snort3_to_ips/utils/utils.py",
+			"reason": "the Snort converter of upstream, kept only as the reference of the test of its JavaScript port (snort_to_ips_local.test.mjs) and not installed in the image; the hash names the version of a signature file, no secret or integrity check depends on it",
+			"until": "2027-05-01"
+		},
+		{
 			"tool": "osv",
 			"id": "CVE-2026-112366",
 			"where": "nginxions/frontend/pnpm-lock.yaml",

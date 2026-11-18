@@ -1596,6 +1596,7 @@ router
 			const content = await internalWafSchemas.download(res.locals.access, name);
 			res.set("Content-Type", name.endsWith(".json") ? "application/json" : "application/yaml");
 			res.set("Content-Disposition", `attachment; filename="${name}"`);
+			// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- a download (attachment) of a stored OpenAPI file as JSON or YAML, never HTML; the name passed checkName (no quote, slash or "..")
 			res.send(content);
 		} catch (err) {
 			next(err);
