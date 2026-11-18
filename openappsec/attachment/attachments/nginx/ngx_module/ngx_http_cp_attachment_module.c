@@ -404,7 +404,8 @@ ngx_send_keep_alive(ngx_event_t *event)
         goto keep_alive_handler_out;
     }
     attachment_server.sun_family = AF_UNIX;
-    strncpy(attachment_server.sun_path, SHARED_KEEP_ALIVE_PATH, sizeof(attachment_server.sun_path) - 1);
+    // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+    snprintf(attachment_server.sun_path, sizeof(attachment_server.sun_path), "%s", SHARED_KEEP_ALIVE_PATH);
 
     // Attempting to connect to the nano service.
     connected = connect(keep_alive_socket, (struct sockaddr *)&attachment_server, sizeof(struct sockaddr_un));

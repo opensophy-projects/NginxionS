@@ -364,7 +364,8 @@ init_signaling_socket()
     }
 
     server.sun_family = AF_UNIX;
-    strncpy(server.sun_path, shared_verdict_signal_path, sizeof(server.sun_path) - 1);
+    // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+    snprintf(server.sun_path, sizeof(server.sun_path), "%s", shared_verdict_signal_path);
 
     if (connect(comm_socket, (struct sockaddr *)&server, sizeof(struct sockaddr_un)) == -1) {
         close(comm_socket);
@@ -431,8 +432,8 @@ init_signaling_socket()
     if (paired_affinity_enabled) {
         // Use hash of the container ID part only (before underscore) as offset to distribute containers across CPU cores
         char container_id[256];
-        strncpy(container_id, unique_id, sizeof(container_id) - 1);
-        container_id[sizeof(container_id) - 1] = '\0';
+        // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+        snprintf(container_id, sizeof(container_id), "%s", unique_id);
 
         char *underscore_pos = strrchr(container_id, '_');
         if (underscore_pos != NULL) {
@@ -491,8 +492,8 @@ init_signaling_socket()
     }
 
     secondary_server.sun_family = AF_UNIX;
-    strncpy(secondary_server.sun_path, shared_verdict_signal_path, sizeof(secondary_server.sun_path) - 1);
-    strncat(secondary_server.sun_path, "_secondary", sizeof(secondary_server.sun_path) - strlen(secondary_server.sun_path) - 1);
+    // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+    snprintf(secondary_server.sun_path, sizeof(secondary_server.sun_path), "%s_secondary", shared_verdict_signal_path);
 
     if (connect(secondary_comm_socket, (struct sockaddr *)&secondary_server, sizeof(struct sockaddr_un)) == -1) {
         close(secondary_comm_socket);
@@ -599,7 +600,8 @@ register_to_attachments_manager(ngx_int_t num_of_workers)
     }
 
     server.sun_family = AF_UNIX;
-    strncpy(server.sun_path, SHARED_REGISTRATION_SIGNAL_PATH, sizeof(server.sun_path) - 1);
+    // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+    snprintf(server.sun_path, sizeof(server.sun_path), "%s", SHARED_REGISTRATION_SIGNAL_PATH);
 
     if (connect(registration_socket, (struct sockaddr *)&server, sizeof(struct sockaddr_un)) == -1) {
         cur_errno = errno;
@@ -613,7 +615,8 @@ register_to_attachments_manager(ngx_int_t num_of_workers)
             cur_errno
         );
         if (cur_errno == ENOENT) {
-            strncpy(shared_verdict_signal_path, SHARED_VERDICT_SIGNAL_PATH, 128);
+            // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+            snprintf(shared_verdict_signal_path, sizeof(shared_verdict_signal_path), "%s", SHARED_VERDICT_SIGNAL_PATH);
             return NGX_OK;
         }
         return NGX_ERROR;
@@ -949,8 +952,8 @@ ngx_cp_attachment_init_process(ngx_http_request_t *request)
         // Use hash of the container ID part only (before underscore) as offset to distribute containers across CPU cores
         // This ensures workers within same container are distributed evenly, but different containers get different offsets
         char container_id[256];
-        strncpy(container_id, unique_id, sizeof(container_id) - 1);
-        container_id[sizeof(container_id) - 1] = '\0';
+        // NginxionS: snprintf, not strncpy/strncat: the copy always ends with NUL and stays in the buffer (Semgrep insecure-use-string-copy-fn)
+        snprintf(container_id, sizeof(container_id), "%s", unique_id);
 
         char *underscore_pos = strrchr(container_id, '_');
         if (underscore_pos != NULL) {
