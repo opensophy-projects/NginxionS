@@ -1,7 +1,7 @@
 // WAF → Events: security events of the open-appsec agent stored by NginxionS (docs/ROADMAP.md, phase 4):
 // period, search, filters (host, IP, action, severity, attack type, score) kept in the URL, pages
 // from the server, the event card, export CSV/JSON.
-import { IconChevronLeft, IconChevronRight, IconDownload, IconFilter, IconX } from "@tabler/icons-react";
+import { IconFilter, IconX } from "@tabler/icons-react";
 import cn from "classnames";
 import { useEffect, useMemo, useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -15,7 +15,6 @@ import { useEvents } from "../../hooks";
 import { hostLabel, showRequestModal, statusTone } from "../../modals/RequestModal";
 import { showWafEventModal } from "../../modals/WafEventModal";
 import { useCan } from "../../rbac/hooks";
-import { Dropdown } from "../../ui/Dropdown";
 import { Label } from "../../ui/InfoTip";
 import { Popover } from "../../ui/Popover";
 import hostStyles from "../Hosts/Hosts.module.css";
@@ -50,7 +49,7 @@ import {
 } from "./filters";
 import { RetentionPopover } from "./Retention";
 import { SearchField } from "../../ui/SearchField";
-import { DateTimePicker } from "../../ui/DateTimePicker";
+import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 50;
@@ -689,48 +688,17 @@ function WafEventsPage() {
 				<SearchField value={search} onChange={setSearch} placeholder={t("nginxions.waf.events.search")} />
 				<Periods filters={filters} onChange={setFilters} />
 				<FilterPanel filters={filters} onChange={setFilters} types={types} hosts={hosts} />
-				<Dropdown
-					floating
-					inline
-					ariaLabel={t("nginxions.events.export")}
-					title={t("nginxions.events.export")}
-					triggerClassName={hostStyles.tool}
-					trigger={
-						<>
-							<IconDownload size={16} />
-							<span className={hostStyles.toolText}>
-								<T id="nginxions.events.export" />
-							</span>
-						</>
-					}
-					items={[
-						{ key: "csv", label: "CSV", onSelect: () => exportAs("csv") },
-						{ key: "json", label: "JSON", onSelect: () => exportAs("json") },
-					]}
-				/>
+				<ExportMenu onExport={exportAs} />
 				{can("settings") && <RetentionPopover canManage={can("settings", "manage")} />}
 			</div>
 
 			{filters.period === "custom" && (
-				<div className={styles.custom}>
-					<T id="nginxions.events.from" />
-					{/* the start is never after the end (or now), the end never before the start */}
-					<DateTimePicker
-						label={t("nginxions.events.from")}
-						value={filters.from}
-						max={filters.to || new Date().toISOString()}
-						onChange={(iso) => iso && setFilters({ ...filters, from: iso })}
-					/>
-					<T id="nginxions.events.to" />
-					<DateTimePicker
-						label={t("nginxions.events.to")}
-						value={filters.to}
-						min={filters.from || undefined}
-						placeholder={t("nginxions.date.now-placeholder")}
-						clearable
-						onChange={(iso) => setFilters({ ...filters, to: iso })}
-					/>
-				</div>
+				<CustomPeriod
+					from={filters.from}
+					to={filters.to || null}
+					onFrom={(iso) => setFilters({ ...filters, from: iso })}
+					onTo={(iso) => setFilters({ ...filters, to: iso ?? "" })}
+				/>
 			)}
 
 			<ActiveFilters filters={filters} onChange={setFilters} />
@@ -826,34 +794,16 @@ function WafEventsPage() {
 								</tbody>
 							</table>
 						</div>
-						<div className={styles.pager}>
-							<span>
+						<Pager
+							total={
 								<T
 									id={data.totalCapped ? "nginxions.events.total-capped" : "nginxions.events.total"}
 									data={{ total: data.total }}
 								/>
-							</span>
-							<div className={styles.pagerButtons}>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={page === 0}
-									onClick={() => setCursors(cursors.slice(0, -1))}
-								>
-									<IconChevronLeft size={16} />
-									<T id="nginxions.events.newer" />
-								</button>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={!data.next}
-									onClick={() => data.next && setCursors([...cursors, data.next])}
-								>
-									<T id="nginxions.events.older" />
-									<IconChevronRight size={16} />
-								</button>
-							</div>
-						</div>
+							}
+							newer={page === 0 ? null : () => setCursors(cursors.slice(0, -1))}
+							older={data.next ? () => setCursors([...cursors, data.next as string]) : null}
+						/>
 					</>
 				)}
 			</div>
