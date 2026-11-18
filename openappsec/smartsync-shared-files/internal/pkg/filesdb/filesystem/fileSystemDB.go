@@ -130,6 +130,14 @@ func (a *Adapter) GetFilesList(ctx context.Context, pathPrefix string) ([]models
 		err = filepath.WalkDir(
 			match,
 			func(path string, d fs.DirEntry, err error) error {
+				// NginxionS: the error first: a file removed between Glob and the walk (a temporary file whose ttl
+				// ended) came with a nil entry, and d.IsDir() stopped the service with a nil dereference
+				if err != nil {
+					if os.IsNotExist(err) {
+						return nil
+					}
+					return err
+				}
 				if d.IsDir() {
 					return nil
 				}
