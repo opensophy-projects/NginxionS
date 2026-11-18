@@ -432,6 +432,7 @@ flowchart LR
   - **`src/nginxions/`** — интерфейс NginxionS
     - `api.ts` — клиент `/api/nginxions/*`
     - `apiErrors.ts` — понятная ошибка, если вместо API ответил не backend NginxionS
+    - **`test/`** — каркас тестов интерфейса: `harness.tsx` (провайдеры App.tsx и API, отвечающий из фикстур), `fixtures.ts` (по одному правдоподобному объекту каждого ответа API); `render.test.tsx` рядом рендерит каждый компонент на двух языках, открывает каждое окно и нажимает вкладки и кнопки каждой страницы
     - `hooks.ts` — общие хуки данных (react-query)
     - **`ui/`** — оболочка и общие компоненты
       - `Shell.tsx`, `Sidebar.tsx`, `menu.ts`, `SectionTabs.tsx` — каркас: боковое меню, разделы, вкладки
