@@ -49,6 +49,10 @@ type tree struct {
 }
 
 func splitURI(uri string) []string {
+	// NginxionS: an empty URI or parameter (a request logged without one) indexed uri[-1] and stopped the service
+	if uri == "" {
+		return []string{}
+	}
 	if uri[len(uri)-1] == '/' {
 		uri = uri[:len(uri)-1]
 	}
