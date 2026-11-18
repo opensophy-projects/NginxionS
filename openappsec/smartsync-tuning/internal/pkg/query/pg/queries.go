@@ -49,12 +49,12 @@ type schemaFile struct {
 	Schema schema `json:"schema"`
 }
 
-//NewPQDriver create a postgres driver
+// NewPQDriver create a postgres driver
 func NewPQDriver() *pq.Driver {
 	return &pq.Driver{}
 }
 
-//QueriesGen generates postgres queries and statement
+// QueriesGen generates postgres queries and statement
 type QueriesGen struct {
 	schema    schemaFile
 	fieldsSet map[string]bool
@@ -90,7 +90,7 @@ func NewQueriesGen(configuration Configuration) (*QueriesGen, error) {
 	return qg, nil
 }
 
-//GetTotalRequests query for total requests
+// GetTotalRequests query for total requests
 func (qg *QueriesGen) GetTotalRequests(tenantID string) string {
 	table := qg.genTableName(tenantID)
 
@@ -185,7 +185,7 @@ func count(fieldName, modelFieldName string) string {
 	return fmt.Sprintf("count(%v) as %v", count, modelFieldName)
 }
 
-//GetTuneParameterQuery gen query for tuning events
+// GetTuneParameterQuery gen query for tuning events
 func (qg *QueriesGen) GetTuneParameterQuery(parameter string, minCount int, tenantID string) string {
 	table := qg.genTableName(tenantID)
 
@@ -300,12 +300,11 @@ func (qg *QueriesGen) GetTuneURLQueryFormat(minCount int, tenantID string) strin
 	)
 }
 
-//GetExceptionsQuery query for exceptions
+// GetExceptionsQuery query for exceptions
 func (qg *QueriesGen) GetExceptionsQuery(tenantID string) string {
 	table := qg.genTableName(tenantID)
 	// NginxionS: no Sprintf without arguments (go vet: non-constant format string)
-	return (
-		`SELECT
+	return (`SELECT
 			'' as tenant_id,
 			exceptionId,
 			assetid,
@@ -325,7 +324,7 @@ func (qg *QueriesGen) GetExceptionsQuery(tenantID string) string {
 		ORDER BY exceptionId`)
 }
 
-//GetParamsForCollapsingFormat get params for tokenizer
+// GetParamsForCollapsingFormat get params for tokenizer
 func (qg *QueriesGen) GetParamsForCollapsingFormat(tenantID string) string {
 	table := qg.genTableName(tenantID)
 	return fmt.Sprintf("SELECT '' as tenant_id, assetid, ARRAY_AGG(DISTINCT matchedparameter) as %v"+
@@ -335,7 +334,7 @@ func (qg *QueriesGen) GetParamsForCollapsingFormat(tenantID string) string {
 		" GROUP BY assetid", models.FieldNameParams, table)
 }
 
-//GetUrlsForCollapsingFormat get urls for tokenizer
+// GetUrlsForCollapsingFormat get urls for tokenizer
 func (qg *QueriesGen) GetUrlsForCollapsingFormat(tenantID string) string {
 	table := qg.genTableName(tenantID)
 	return fmt.Sprintf("SELECT '' as tenant_id, assetid, ARRAY_AGG(DISTINCT httpuripath) as %v"+
@@ -346,7 +345,7 @@ func (qg *QueriesGen) GetUrlsForCollapsingFormat(tenantID string) string {
 		" GROUP BY assetid", models.FieldNameURIs, table)
 }
 
-//GetNumOfRequests query for total requests
+// GetNumOfRequests query for total requests
 func (qg *QueriesGen) GetNumOfRequests(tenantID string) string {
 	table := qg.genTableName(tenantID)
 
@@ -429,7 +428,7 @@ func (qg *QueriesGen) extractColNameAndValue(value reflect.Value) ([]string, []d
 	return columns, vals
 }
 
-//GenerateLogQuery created a log query for psql
+// GenerateLogQuery created a log query for psql
 func (qg *QueriesGen) GenerateLogQuery(data models.TuneEvent, assetName string) string {
 	queryFieldsMap := map[string]string{
 		models.EventTypeSource:                     fieldNameSource,
@@ -499,7 +498,7 @@ func sqlLiteral(v string) string {
 	return "'" + strings.ReplaceAll(strings.ReplaceAll(v, "\x00", ""), "'", "''") + "'"
 }
 
-//Insert prepares statement and args for sql driver
+// Insert prepares statement and args for sql driver
 func (qg *QueriesGen) Insert(message *models.AgentMessage) (string, []driver.Value, error) {
 	stmt := "INSERT INTO " + qg.genTableName(message.TenantID)
 
@@ -552,7 +551,7 @@ func (qg *QueriesGen) genTableName(_ string) string {
 	return "appsec"
 }
 
-//CreateTablePartition generate create partition statement
+// CreateTablePartition generate create partition statement
 // NginxionS: named by the day it holds, zero-padded, under a prefix of its own ("appsec_p_2026_09_16"): it was named
 // by the day after ("appsec_2026_9_17" held the 16th), the new names cannot meet the old ones. IF NOT EXISTS: several
 // writers create the partition of a new day at the same time. The day of eventTime is the day of UTC.
