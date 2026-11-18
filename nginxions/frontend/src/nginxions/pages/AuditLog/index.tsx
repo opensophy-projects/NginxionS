@@ -1,6 +1,6 @@
 // Analytics → Audit log: pages from the server like the events (the upstream page showed the last 100 entries),
 // search over the whole log, period, filters by action, object and user kept in the URL, export CSV/JSON.
-import { IconChevronLeft, IconChevronRight, IconDownload, IconFilter, IconX } from "@tabler/icons-react";
+import { IconFilter, IconX } from "@tabler/icons-react";
 import cn from "classnames";
 import { useEffect, useMemo, useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -12,11 +12,11 @@ import { ADMIN, VIEW } from "src/modules/Permissions";
 import { showError } from "src/notifications";
 import { downloadAudit, type EventQuery } from "../../api";
 import { useAudit } from "../../hooks";
-import { Dropdown } from "../../ui/Dropdown";
 import { Popover } from "../../ui/Popover";
 import styles from "../WafEvents/Events.module.css";
 import hostStyles from "../Hosts/Hosts.module.css";
 import { SearchField } from "../../ui/SearchField";
+import { ExportMenu, Pager } from "../../ui/Lists";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 50;
@@ -190,25 +190,7 @@ function AuditLogPage() {
 						</div>
 					)}
 				</Popover>
-				<Dropdown
-					floating
-					inline
-					ariaLabel={t("nginxions.events.export")}
-					title={t("nginxions.events.export")}
-					triggerClassName={hostStyles.tool}
-					trigger={
-						<>
-							<IconDownload size={16} />
-							<span className={hostStyles.toolText}>
-								<T id="nginxions.events.export" />
-							</span>
-						</>
-					}
-					items={[
-						{ key: "csv", label: "CSV", onSelect: () => exportAs("csv") },
-						{ key: "json", label: "JSON", onSelect: () => exportAs("json") },
-					]}
-				/>
+				<ExportMenu onExport={exportAs} />
 			</div>
 
 			{count > 0 && (
@@ -286,35 +268,23 @@ function AuditLogPage() {
 								</tbody>
 							</table>
 						</div>
-						<div className={styles.pager}>
-							<span>
-								<T id="nginxions.audit.total" data={{ total: data.total }} />
-							</span>
-							{isFetching && <span className="spinner-border spinner-border-sm text-secondary" />}
-							<div className={styles.pagerButtons}>
+						<Pager
+							total={
+								<>
+									<T id="nginxions.audit.total" data={{ total: data.total }} />
+									{isFetching && (
+										<span className="spinner-border spinner-border-sm text-secondary ms-2" />
+									)}
+								</>
+							}
+							extra={
 								<span>
 									<T id="nginxions.audit.page" data={{ page: page + 1, pages }} />
 								</span>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={page === 0}
-									onClick={() => update({ page: page > 1 ? String(page - 1) : "" })}
-								>
-									<IconChevronLeft size={16} />
-									<T id="nginxions.events.newer" />
-								</button>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={page + 1 >= pages}
-									onClick={() => update({ page: String(page + 1) })}
-								>
-									<T id="nginxions.events.older" />
-									<IconChevronRight size={16} />
-								</button>
-							</div>
-						</div>
+							}
+							newer={page === 0 ? null : () => update({ page: page > 1 ? String(page - 1) : "" })}
+							older={page + 1 >= pages ? null : () => update({ page: String(page + 1) })}
+						/>
 					</>
 				)}
 			</div>

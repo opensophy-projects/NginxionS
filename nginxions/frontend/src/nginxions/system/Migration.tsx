@@ -1,12 +1,13 @@
 // System → Settings → Migration: an installation of NPM, NPMplus or open-appsec-npm moves into
 // NginxionS (backend: nginxions/migration). Source → analysis → import → result.
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import * as api from "src/api/backend/base";
 import { T } from "src/locale";
 import { showError } from "src/notifications";
 import { isNotJson, notJsonError } from "../apiErrors";
+import { FileButton } from "../ui/FileButton";
 
 type Stage = "idle" | "ready" | "importing" | "done" | "failed";
 
@@ -88,7 +89,6 @@ function WarningText({ w }: { w: Warning }) {
 }
 
 function Source({ busy, run }: { busy: boolean; run: (fn: () => Promise<unknown>) => void }) {
-	const input = useRef<HTMLInputElement>(null);
 	const [db, setDb] = useState({ engine: "mariadb", host: "", port: "", user: "", password: "", database: "" });
 	const field = (name: keyof typeof db, label: string, type = "text") => (
 		<div className="col-sm-6 mb-2">
@@ -123,26 +123,9 @@ function Source({ busy, run }: { busy: boolean; run: (fn: () => Promise<unknown>
 						<T id="nginxions.migration.archive.npmplus" />
 					</div>
 					<pre className="small">{ARCHIVE_NPMPLUS}</pre>
-					<input
-						ref={input}
-						type="file"
-						accept=".tgz,.gz,.tar,.sqlite"
-						className="d-none"
-						onChange={(e) => {
-							const f = e.target.files?.[0];
-							e.target.value = "";
-							if (f) run(() => upload(f));
-						}}
-					/>
-					<button
-						type="button"
-						className="btn btn-primary"
-						disabled={busy}
-						onClick={() => input.current?.click()}
-					>
-						{busy && <span className="spinner-border spinner-border-sm me-2" />}
+					<FileButton accept=".tgz,.gz,.tar,.sqlite" busy={busy} onFile={(f) => run(() => upload(f))}>
 						<T id="nginxions.migration.upload" />
-					</button>
+					</FileButton>
 				</div>
 			</div>
 			<div className="card">
@@ -217,7 +200,6 @@ function Review({
 	const a = state.analysis as Analysis;
 	const [history, setHistory] = useState(true);
 	const [customNginx, setCustomNginx] = useState(true);
-	const input = useRef<HTMLInputElement>(null);
 	return (
 		<>
 			<Alert variant="info">
@@ -243,25 +225,14 @@ function Review({
 			{state.origin?.type === "database" && !state.origin.files && (
 				<Alert variant="secondary">
 					<T id="nginxions.migration.files-hint" />
-					<input
-						ref={input}
-						type="file"
+					<FileButton
 						accept=".tgz,.gz,.tar"
-						className="d-none"
-						onChange={(e) => {
-							const f = e.target.files?.[0];
-							e.target.value = "";
-							if (f) run(() => upload(f));
-						}}
-					/>
-					<button
-						type="button"
+						busy={busy}
+						onFile={(f) => run(() => upload(f))}
 						className="btn btn-sm btn-outline-secondary ms-2"
-						disabled={busy}
-						onClick={() => input.current?.click()}
 					>
 						<T id="nginxions.migration.upload-files" />
-					</button>
+					</FileButton>
 				</Alert>
 			)}
 			<div className="row">
