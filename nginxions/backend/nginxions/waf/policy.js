@@ -26,7 +26,8 @@ import { listSchemas } from "./schemas.js";
 import { applyRelays, withRelays } from "./syslog.js";
 
 const POLICY_FILE = process.env.NGINXIONS_APPSEC_POLICY_FILE || "/ext/appsec/local_policy.yaml";
-const BACKUP_DIR = "/data/nginxions/waf/policy-backups";
+// the last policies written (the tests on PostgreSQL point it at a temporary directory)
+const BACKUP_DIR = process.env.NGINXIONS_WAF_POLICY_BACKUP_DIR || "/data/nginxions/waf/policy-backups";
 const BACKUPS_KEPT = 20;
 const AGENT_URL = process.env.NGINXIONS_APPSEC_ORCHESTRATION_URL || "http://127.0.0.1:7777";
 const AGENT_POLICY_PATH = "/etc/cp/conf/local_policy.yaml";
