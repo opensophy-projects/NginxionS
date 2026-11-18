@@ -60,8 +60,12 @@ export function Popover({
 	useLayoutEffect(() => {
 		if (!open || !panel.current) return;
 		const rect = panel.current.getBoundingClientRect();
-		if (rect.left < 16) setStyle((s) => ({ ...s, left: 16, right: "auto" }));
-		else if (rect.right > window.innerWidth - 16) setStyle((s) => ({ ...s, left: "auto", right: 16 }));
+		// the same style when it is already there: a panel that cannot move (narrower window, no layout) must not
+		// set a new object each time and measure itself again without end
+		if (rect.left < 16)
+			setStyle((s) => (s.left === 16 && s.right === "auto" ? s : { ...s, left: 16, right: "auto" }));
+		else if (rect.right > window.innerWidth - 16)
+			setStyle((s) => (s.left === "auto" && s.right === 16 ? s : { ...s, left: "auto", right: 16 }));
 	}, [open, style]);
 
 	useEffect(() => {
