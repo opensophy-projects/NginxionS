@@ -33,6 +33,13 @@ export const freshDatabase = async (name) => {
 		await admin.destroy();
 	}
 	process.env.DB_POSTGRES_NAME = database;
+	// the JWT key pair of the backend is written at its first start: a temporary file, not /data of a real one
+	if (!process.env.NGINXIONS_JWT_KEYS_FILE) {
+		const { mkdtempSync } = await import("node:fs");
+		const { tmpdir } = await import("node:os");
+		const { join } = await import("node:path");
+		process.env.NGINXIONS_JWT_KEYS_FILE = join(mkdtempSync(join(tmpdir(), "nginxions-keys-")), "keys.json");
+	}
 	const { migrateUp } = await import("../../migrate.js");
 	await migrateUp();
 	return (await import("../../db.js")).default();

@@ -194,9 +194,9 @@ jobs:
           # the PostgreSQL of the tests is the one of the stack
           env_pg=$(sed -n 's/^POSTGRES_VERSION=//p' deploy/.env)
           for f in .github/workflows/ci.yml .github/workflows/security.yml; do
-            for tag in $(sed -n 's|.*image: docker.io/library/postgres:\([^@ ]*\)@sha256:.*|\1|p' "$f"); do
+            while read -r tag; do
               [ "$tag" = "$env_pg" ] || { echo "::error file=$f::postgres:$tag != deploy/.env $env_pg"; exit 1; }
-            done
+            done < <(sed -n 's|.*image: docker.io/library/postgres:\([^@ ]*\)@sha256:.*|\1|p' "$f")
           done
           env_cs=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)
           for f in nginxions/Dockerfile deploy/dev/Dockerfile; do
