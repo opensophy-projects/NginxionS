@@ -355,6 +355,18 @@ jobs:
   quality:
     name: Code quality (duplication, test coverage)
     runs-on: ubuntu-latest
+    # PostgreSQL for the tests of the SQL of NginxionS (nginxions/test/postgres.js); its tag is POSTGRES_VERSION of
+    # deploy/.env (checked in "version consistency")
+    services:
+      postgres:
+        image: docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+        env:
+          POSTGRES_USER: nginxions
+          POSTGRES_PASSWORD: nginxions-tests
+          POSTGRES_DB: nginxions
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U nginxions" --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -375,10 +387,17 @@ jobs:
             nginxions/backend/nginxions nginxions/frontend/src/nginxions scripts
       - name: coverage of the backend (node --test)
         working-directory: nginxions/backend
+        env:
+          DB_POSTGRES_HOST: 127.0.0.1
+          DB_POSTGRES_PORT: "5432"
+          DB_POSTGRES_USER: nginxions
+          DB_POSTGRES_PASSWORD: nginxions-tests
+          DB_POSTGRES_NAME: nginxions
+          NGINXIONS_TEST_POSTGRES: "1"
         run: |
           pnpm install --frozen-lockfile
           node --test --experimental-test-coverage --test-coverage-include='nginxions/**' \
-            --test-coverage-exclude='**/*.test.js' --test-reporter=dot --test-reporter-destination=stdout \
+            --test-coverage-exclude='**/*.test.js' --test-coverage-exclude='nginxions/test/**' --test-reporter=dot --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=../../out/lcov-backend.info 'nginxions/**/*.test.js'
       - name: coverage of the Go services of the agent (go test)
         run: COVERAGE_DIR=out scripts/test-go.sh
