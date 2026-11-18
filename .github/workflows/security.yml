@@ -257,10 +257,13 @@ jobs:
               --source-version "$GITHUB_SHA" -q \
               -o "cyclonedx-json=/src/out/sbom-source-$part.cdx.json" -o "spdx-json=/src/out/sbom-source-$part.spdx.json"
           done
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - name: leave out accepted risks
         if: always() && hashFiles('out/osv.sarif') != ''
+        run: mkdir -p upload && node scripts/sarif-accepted.mjs osv out/osv.sarif upload/osv.sarif
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('upload/osv.sarif') != ''
         with:
-          sarif_file: out/osv.sarif
+          sarif_file: upload/osv.sarif
           category: osv-scanner
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
