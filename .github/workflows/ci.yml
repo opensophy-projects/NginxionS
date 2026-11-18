@@ -103,6 +103,18 @@ jobs:
     needs: level
     if: needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
+    # PostgreSQL for the tests of the SQL of NginxionS (nginxions/test/postgres.js); its tag is POSTGRES_VERSION of
+    # deploy/.env (checked in "version consistency")
+    services:
+      postgres:
+        image: docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
+        env:
+          POSTGRES_USER: nginxions
+          POSTGRES_PASSWORD: nginxions-tests
+          POSTGRES_DB: nginxions
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U nginxions" --health-interval 2s --health-timeout 5s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -117,11 +129,18 @@ jobs:
           version: latest
       - name: backend
         working-directory: nginxions/backend
+        env:
+          DB_POSTGRES_HOST: 127.0.0.1
+          DB_POSTGRES_PORT: "5432"
+          DB_POSTGRES_USER: nginxions
+          DB_POSTGRES_PASSWORD: nginxions-tests
+          DB_POSTGRES_NAME: nginxions
+          NGINXIONS_TEST_POSTGRES: "1"
         run: |
           pnpm install --frozen-lockfile
           # import ordering (biome assist) is not enforced: upstream code does not follow it
           pnpm biome ci . --assist-enabled=false
-          # unit tests of NginxionS modules (upstream has none)
+          # unit tests of NginxionS modules (upstream has none); the SQL ones on the postgres service
           node --test 'nginxions/**/*.test.js'
       - name: frontend
         working-directory: nginxions/frontend
@@ -172,6 +191,13 @@ jobs:
           fi
       - name: version consistency
         run: |
+          # the PostgreSQL of the tests is the one of the stack
+          env_pg=$(sed -n 's/^POSTGRES_VERSION=//p' deploy/.env)
+          for f in .github/workflows/ci.yml .github/workflows/security.yml; do
+            for tag in $(sed -n 's|.*image: docker.io/library/postgres:\([^@ ]*\)@sha256:.*|\1|p' "$f"); do
+              [ "$tag" = "$env_pg" ] || { echo "::error file=$f::postgres:$tag != deploy/.env $env_pg"; exit 1; }
+            done
+          done
           env_cs=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)
           for f in nginxions/Dockerfile deploy/dev/Dockerfile; do
             # the image of the CrowdSec seed is pinned by tag and digest (OpenSSF Scorecard): its tag is deploy/.env's
