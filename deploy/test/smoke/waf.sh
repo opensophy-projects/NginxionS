@@ -193,8 +193,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
       *) fail "a normal request after the agent's restart got \"$normal\" (status, bytes; fail-open $1)" ;;
     esac
   }
-  first_after_restart false
-  first_after_restart true
+  # called at the end of the group (fail-open, then fail-close, which test-airgap.sh uses after smoke)
 
   step "WAF -> Agent: the metrics of the agent (its prometheus service) are read"
   metrics=""
@@ -617,11 +616,15 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   step "WAF -> Events: the detected attack is an important event (Detect)"
   event Detect
 
-  # scripts/test-airgap.sh checks the first attack on new nginx workers after smoke (issue 149): a blocking host
-  step "WAF: the host blocks again (prevent-learn) for the checks after smoke"
+  # the first requests after a restart of the agent (issue 149), at the end of the group: the host blocks again, and
+  # fail-close stays on for scripts/test-airgap.sh, which checks after smoke that a request the agent does not answer in
+  # fail-close gets the 403 page, not a closed connection
+  step "WAF: the host blocks again (prevent-learn)"
   $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/hosts/1" \
     -d '{"enabled": true, "mode": "prevent-learn", "minimum_confidence": "high"}' > /dev/null
   wait_status_stable "$SQLI" 403 "SQLi is not blocked again in prevent-learn"
+  first_after_restart true
+  first_after_restart false
 else
   echo "    (agent not running, WAF scenarios skipped)"
 fi
