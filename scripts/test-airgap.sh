@@ -278,6 +278,18 @@ if smoke_has waf; then
   # smoke leaves the host blocking and fail-close on. The response filters of the attachment returned an error on the 403
   # page of the request they had refused themselves: nginx logged 403 and closed the connection with nothing sent
   # ("Empty reply from server"). The agent is stopped (SIGSTOP) longer than the timeouts of the attachment.
+  # smoke switches fail-close on in its last step; a smoke failure before it leaves fail-open, where a request the agent
+  # does not answer passes by design: that is the failure of smoke (reported below), not a second one here
+  fail_open=$("${compose[@]}" exec -T openappsec sh -c 'cat /etc/cp/conf/settings.json' \
+    | grep -o '"agent.failOpenState.nginxModule", *"value": *"[a-z]*"' | grep -o '[a-z]*"$' | tr -d '"')
+  if [ "$fail_open" != false ]; then
+    if [ "$smoke_status" != 0 ]; then
+      echo "    skipped: smoke failed before it switched fail-close on (fail-open: ${fail_open:-unknown})"
+    else
+      echo "FAIL: smoke passed but left fail-open ${fail_open:-unknown}, not fail-close"
+      exit 1
+    fi
+  else
   xss='http://127.0.0.1/fail-close?q=%3Cscript%3Ealert(document.cookie)%3C/script%3E'
   waf_get() { "${compose[@]}" exec -T nginxions curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 10 -H 'Host: test.local' "$1" || true; }
   for i in $(seq 1 30); do
@@ -296,6 +308,7 @@ if smoke_has waf; then
     "403 "*) ;;
     *) echo "FAIL: fail-close let a request through while the agent did not answer: \"$normal\""; exit 1 ;;
   esac
+  fi
 fi
 
 echo "==> no nginx worker crashed (signal, failed allocation)"
