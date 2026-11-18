@@ -2,6 +2,13 @@
 	"$comment": "Findings that do not fail the run (scripts/security-report.mjs). Each entry names the tool, the id of the finding (a CVE, a rule), optionally a part of its location (where), why and until when (YYYY-MM-DD): after that date it fails the run again and must be looked at once more. \"kind\": \"false-positive\": not a vulnerability of this code (the tool is wrong, or the flagged flow is intended and safe: the reason says why); without kind: an accepted risk, a real weakness kept for the reason given. The report counts both apart from the open findings.",
 	"risks": [
 		{
+			"tool": "osv",
+			"id": "CVE-2026-112366",
+			"where": "nginxions/frontend/pnpm-lock.yaml",
+			"reason": "picomatch (ReDoS on single-branch repeated extglobs such as +(*)): no fixed release, 4.0.7 is the last one and affected (fix upstream in micromatch/picomatch PR 194). Only build tools of the frontend use it (vite, tinyglobby, fdir, @parcel/watcher of sass, vitest), with globs of our own config; nothing of it is in the images (the frontend ships as static files) and no input of a user reaches a glob. Update picomatch once a fixed version is out",
+			"until": "2027-01-15"
+		},
+		{
 			"tool": "dockle-nginxions",
 			"id": "CIS-DI-0001",
 			"reason": "the last user is root: see the findings Missing User Instruction (KICS) and DS-0002 (Trivy config) of the same image",
