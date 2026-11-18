@@ -1,7 +1,7 @@
 // System → Settings → GeoIP: the database that gives security events their countries. The one of
 // CrowdSec (GeoLite2-City) is used until an administrator uploads another .mmdb file.
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import * as api from "src/api/backend/base";
 import { T } from "src/locale";
@@ -9,6 +9,7 @@ import { showError, showSuccess } from "src/notifications";
 import { t } from "../crowdsec/labels";
 import { dateTime } from "../ui/time";
 import { isNotJson, notJsonError } from "../apiErrors";
+import { FileButton } from "../ui/FileButton";
 
 interface GeoipState {
 	database: { source: "uploaded" | "crowdsec"; type: string; built: string | null; size: number } | null;
@@ -32,7 +33,6 @@ const upload = async (file: File): Promise<GeoipState> => {
 
 export function GeoipForm({ canManage }: { canManage: boolean }) {
 	const query = useQuery({ queryKey: ["nginxions-geoip"], queryFn: getGeoip });
-	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
 	const db = query.data?.database;
 
@@ -79,26 +79,9 @@ export function GeoipForm({ canManage }: { canManage: boolean }) {
 			)}
 			{canManage && (
 				<div className="d-flex flex-wrap gap-2">
-					<input
-						ref={input}
-						type="file"
-						accept=".mmdb"
-						className="d-none"
-						onChange={(e) => {
-							const f = e.target.files?.[0];
-							e.target.value = "";
-							if (f) run(() => upload(f));
-						}}
-					/>
-					<button
-						type="button"
-						className="btn btn-primary"
-						disabled={busy}
-						onClick={() => input.current?.click()}
-					>
-						{busy && <span className="spinner-border spinner-border-sm me-2" />}
+					<FileButton accept=".mmdb" busy={busy} onFile={(f) => run(() => upload(f))}>
 						<T id="nginxions.geoip.upload" />
-					</button>
+					</FileButton>
 					{query.data?.uploaded && (
 						<button
 							type="button"
