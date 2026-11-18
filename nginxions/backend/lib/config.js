@@ -2,7 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import crypto from "node:crypto";
 import { global as logger } from "../logger.js";
 
-const keysFile = "/data/npmplus/keys.json";
+// NginxionS: NGINXIONS_JWT_KEYS_FILE for the tests on PostgreSQL (nginxions/test/postgres.js), which run without /data
+const keysFile = process.env.NGINXIONS_JWT_KEYS_FILE || "/data/npmplus/keys.json";
 const sqliteEngine = "better-sqlite3";
 const mysqlEngine = "mysql2";
 const postgresEngine = "pg";

@@ -2,7 +2,6 @@
 // of the other kinds of Events (search, period with a range of dates, filters, export, retention); the filters cover
 // every field of the log. Requests to names that are not hosts of NginxionS are marked: they are answered by the
 // default site and were invisible before (only security events were listed).
-import { IconChevronLeft, IconChevronRight, IconDownload } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import cn from "classnames";
 import { useEffect, useMemo, useState } from "react";
@@ -15,8 +14,6 @@ import { downloadRequests, getRequestLog, type TrafficFilters } from "../../api"
 import { hostLabel, showRequestModal, statusTone } from "../../modals/RequestModal";
 import { useCan } from "../../rbac/hooks";
 import { formatBytes, formatMs } from "../../ui/charts/format";
-import { DateTimePicker } from "../../ui/DateTimePicker";
-import { Dropdown } from "../../ui/Dropdown";
 import { Label } from "../../ui/InfoTip";
 import { SearchField } from "../../ui/SearchField";
 import { dateTime } from "../../ui/time";
@@ -29,6 +26,7 @@ import { PERIODS, type Period } from "../WafEvents/filters";
 import { RetentionPopover } from "../WafEvents/Retention";
 import { RequestFilters } from "./Filters";
 import logStyles from "./RequestLog.module.css";
+import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 
 const PERIOD_MS: Record<Exclude<Period, "custom">, number> = {
 	"1h": 3600e3,
@@ -143,47 +141,17 @@ export function RequestLogView({ kinds }: { kinds: React.ReactNode }) {
 					))}
 				</div>
 				<RequestFilters filters={filters} set={set} />
-				<Dropdown
-					floating
-					inline
-					ariaLabel={t("nginxions.events.export")}
-					title={t("nginxions.events.export")}
-					triggerClassName={hostStyles.tool}
-					trigger={
-						<>
-							<IconDownload size={16} />
-							<span className={hostStyles.toolText}>
-								<T id="nginxions.events.export" />
-							</span>
-						</>
-					}
-					items={[
-						{ key: "csv", label: "CSV", onSelect: () => exportAs("csv") },
-						{ key: "json", label: "JSON", onSelect: () => exportAs("json") },
-					]}
-				/>
+				<ExportMenu onExport={exportAs} />
 				{can("settings") && <RetentionPopover canManage={can("settings", "manage")} />}
 			</div>
 
 			{period === "custom" && (
-				<div className={eventStyles.custom}>
-					<T id="nginxions.events.from" />
-					<DateTimePicker
-						label={t("nginxions.events.from")}
-						value={from}
-						max={to || new Date().toISOString()}
-						onChange={(iso) => iso && set({ from: iso })}
-					/>
-					<T id="nginxions.events.to" />
-					<DateTimePicker
-						label={t("nginxions.events.to")}
-						value={to}
-						min={from || undefined}
-						placeholder={t("nginxions.date.now-placeholder")}
-						clearable
-						onChange={(iso) => set({ to: iso || null })}
-					/>
-				</div>
+				<CustomPeriod
+					from={from}
+					to={to || null}
+					onFrom={(iso) => set({ from: iso })}
+					onTo={(iso) => set({ to: iso })}
+				/>
 			)}
 
 			<FilterChips
@@ -330,8 +298,8 @@ export function RequestLogView({ kinds }: { kinds: React.ReactNode }) {
 								</tbody>
 							</table>
 						</div>
-						<div className={eventStyles.pager}>
-							<span>
+						<Pager
+							total={
 								<T
 									id={
 										data?.totalCapped
@@ -340,28 +308,10 @@ export function RequestLogView({ kinds }: { kinds: React.ReactNode }) {
 									}
 									data={{ total: data?.total ?? rows.length }}
 								/>
-							</span>
-							<div className={eventStyles.pagerButtons}>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={page === 0}
-									onClick={() => setCursors(cursors.slice(0, -1))}
-								>
-									<IconChevronLeft size={16} />
-									<T id="nginxions.events.newer" />
-								</button>
-								<button
-									type="button"
-									className={hostStyles.tool}
-									disabled={!data?.next}
-									onClick={() => data?.next && setCursors([...cursors, data.next])}
-								>
-									<T id="nginxions.events.older" />
-									<IconChevronRight size={16} />
-								</button>
-							</div>
-						</div>
+							}
+							newer={page === 0 ? null : () => setCursors(cursors.slice(0, -1))}
+							older={data?.next ? () => setCursors([...cursors, data.next as string]) : null}
+						/>
 					</>
 				)}
 			</div>

@@ -1,4 +1,6 @@
-minimumReleaseAge: 0
+# NginxionS: a release is taken a week after it is out (Semgrep pnpm-minimum-release-age: a malicious or broken
+# release is usually pulled within days); upstream sets 0. Renovate waits as long (renovate.json).
+minimumReleaseAge: 10080
 allowBuilds:
   '@scarf/scarf': false
   better-sqlite3: true

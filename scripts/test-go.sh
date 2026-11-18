@@ -29,7 +29,8 @@ for svc in smartsync-shared-files smartsync-tuning smartsync; do
       # composites: struct literals of upstream without field names, a matter of style
       go vet -composites=false ./...
       if [ -n "$COVER" ]; then
-        go test -coverprofile=/tmp/cover.out ./...
+        # -coverpkg: code run by the tests of another package (a handler test runs the service) counts too
+        go test -coverpkg=./... -coverprofile=/tmp/cover.out ./...
         go tool cover -func=/tmp/cover.out > "$COVER/coverage-go-$SVC.txt"
         tail -n 1 "$COVER/coverage-go-$SVC.txt"
       else

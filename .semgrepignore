@@ -7,3 +7,8 @@ deploy/test/fixtures/
 *.test.js
 *.test.ts
 *.test.tsx
+# third-party code of the agent that is neither built nor shipped: the HTML manual of rapidxml (cereal) and the Go
+# test program of graphqlparser
+openappsec/agent/external/cereal/external/rapidxml/manual.html
+openappsec/attachment/external/cereal/external/rapidxml/manual.html
+openappsec/agent/external/graphqlparser/go/
