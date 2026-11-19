@@ -84,7 +84,7 @@ test("mentions notify no one, #N names the upstream issue", () => {
 test("the copy carries its marker, its link and the upstream text, cut to fit", () => {
 	const body = copyBody("openappsec/openappsec", issue(9, "open", { body: "x".repeat(70000) }));
 	assert.ok(body.startsWith(marker("openappsec/openappsec", 9)));
-	assert.match(body, /https:\/\/github.com\/openappsec\/openappsec\/issues\/9/);
+	assert.ok(body.includes("**Upstream:** https://github.com/openappsec/openappsec/issues/9\n"), body.slice(0, 300));
 	assert.match(body, /`bug`/);
 	assert.ok(body.length <= 60000, String(body.length));
 	assert.match(body, /cut, the full text is upstream/);
