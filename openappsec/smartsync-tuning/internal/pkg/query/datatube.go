@@ -3,9 +3,12 @@ package query
 import (
 	"context"
 	"database/sql/driver"
+	stderrors "errors"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"net"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync"
@@ -86,6 +89,10 @@ type Adapter struct {
 	nextPartitionDay  string
 	nextPartitionLock sync.Mutex
 	indexesCreated    bool
+	// NginxionS: the idle connections, reused (see getConn)
+	idle     []driver.Conn
+	idleLock sync.Mutex
+	closed   bool
 }
 
 type converter func(columns []string, data []driver.Value) interface{}
@@ -124,8 +131,8 @@ func NewAdapter(ctx context.Context, c Configuration, g GenQueries, driver drive
 		return nil, err
 	}
 
-	dbName := fmt.Sprintf("postgres://%s:%s@%s:%v/i2datatubeschemasecurityeventlogsv03?sslmode=%s",
-		dbUser, pass, dbHost, dbPort, sslMode)
+	// NginxionS: escaped (a password with "@", "/", "#" or "%" broke the URL, and an error of its parsing quotes it)
+	dbName := postgresURL(dbUser, pass, dbHost, dbPort, "i2datatubeschemasecurityeventlogsv03", sslMode)
 
 	// NginxionS: the connection string holds the password of the database user: never log it
 	log.WithContext(ctx).Infof("db name: postgres://%s:***@%s:%v/i2datatubeschemasecurityeventlogsv03?sslmode=%s",
@@ -321,28 +328,16 @@ func mergeResponse(orig, new models.QueryResponse) models.QueryResponse {
 func (qa *Adapter) GetNumOfRequests(ctx context.Context, tenantID string) (int64, error) {
 	queryStr := qa.genQuery.GetNumOfRequests(tenantID)
 
-	conn, err := qa.driver.Open(qa.dbName)
+	// NginxionS: through runQuery, on a pooled connection whose statement and rows are closed (a connection was
+	// opened per call and never closed); a result without rows is io.EOF for database/sql drivers
+	r, err := qa.runQuery(ctx, queryStr)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to open connection to SQL server")
+		return 0, err
 	}
-
-	query, err := conn.Prepare(queryStr)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to prepare a SQL statement")
-	}
-
-	qctx, ok := query.(driver.StmtQueryContext)
-	if !ok {
-		return 0, errors.New("driver not implementing driver.QueryerContext interface")
-	}
-
-	r, err := qctx.QueryContext(ctx, nil)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to query")
-	}
+	defer r.Close()
 	row := make([]driver.Value, 1)
 	err = r.Next(row)
-	if err == iterator.Done {
+	if err == iterator.Done || err == io.EOF {
 		return 0, errors.Errorf("no data found for dataset %v", tenantID).SetClass(errors.ClassNotFound)
 	} else if err != nil {
 		return 0, errors.Wrap(err, "failed to read query response")
@@ -465,65 +460,75 @@ func unionAttackTypes(types []string) []string {
 	return attackTypes
 }
 
+// NginxionS: the rows are read on a pooled connection and returned in memory: the statement, the rows and the
+// connection are released before return (a connection was opened per query and never closed: under load the
+// connections piled up to max_connections of Postgres). The callers read every row anyway.
 func (qa *Adapter) runQuery(
 	ctx context.Context, q string) (driver.Rows, error) {
 	log.WithContext(ctx).Infof("run query: %v", q)
 
-	conn, err := qa.driver.Open(qa.dbName)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to open connection to SQL server")
-	}
+	var result *memRows
+	err := qa.withConn(ctx, false, func(conn driver.Conn) error {
+		query, err := conn.Prepare(q)
+		if err != nil {
+			return errors.Wrap(err, "failed to prepare a SQL statement")
+		}
+		defer query.Close()
+		start := time.Now()
 
-	query, err := conn.Prepare(q)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to prepare a SQL statement")
-	}
-	start := time.Now()
+		warningThreshold, err := qa.config.GetDuration(confKeyQueryDurationWarningThreshold)
+		if err != nil {
+			warningThreshold = defaultQueryDurationWarningThreshold
+			log.WithContext(ctx).Warnf(
+				"failed to get query warning duration threshold, err: %v. using default %v", err,
+				defaultQueryDurationWarningThreshold,
+			)
+		}
 
-	warningThreshold, err := qa.config.GetDuration(confKeyQueryDurationWarningThreshold)
-	if err != nil {
-		warningThreshold = defaultQueryDurationWarningThreshold
-		log.WithContext(ctx).Warnf(
-			"failed to get query warning duration threshold, err: %v. using default %v", err,
-			defaultQueryDurationWarningThreshold,
-		)
-	}
+		qctx, ok := query.(driver.StmtQueryContext)
+		if !ok {
+			return errors.New("driver not implementing driver.QueryerContext interface")
+		}
 
-	qctx, ok := query.(driver.StmtQueryContext)
-	if !ok {
-		return nil, errors.New("driver not implementing driver.QueryerContext interface")
-	}
+		rows, err := qctx.QueryContext(ctx, nil)
 
-	rows, err := qctx.QueryContext(ctx, nil)
-
-	if err != nil {
-		log.WithContext(ctx).Warnf("got error reading query: %v", err)
-		if qa.genQuery.ParseError(err) == errors.ClassForbidden {
-			for i := 0; i < maxRetries; i++ {
-				time.Sleep(time.Second * time.Duration(i+1))
-				log.WithContext(ctx).Infof("retry query")
-				rows, err = qctx.QueryContext(ctx, nil)
-				if err == nil {
-					break
+		if err != nil {
+			log.WithContext(ctx).Warnf("got error reading query: %v", err)
+			if qa.genQuery.ParseError(err) == errors.ClassForbidden {
+				for i := 0; i < maxRetries; i++ {
+					time.Sleep(time.Second * time.Duration(i+1))
+					log.WithContext(ctx).Infof("retry query")
+					rows, err = qctx.QueryContext(ctx, nil)
+					if err == nil {
+						break
+					}
 				}
 			}
-		}
-		if err != nil {
-			if qa.genQuery.ParseError(err) == errors.ClassNotFound {
-				return nil, errors.Wrapf(err, "not found").SetClass(errors.ClassNotFound)
+			if err != nil {
+				if qa.genQuery.ParseError(err) == errors.ClassNotFound {
+					return errors.Wrapf(err, "not found").SetClass(errors.ClassNotFound)
+				}
+				return errors.Wrapf(err, "failed to read query job: %v", q)
 			}
-			return nil, errors.Wrapf(err, "failed to read query job: %v", q)
 		}
+		defer rows.Close()
+		result, err = readRows(rows)
+		if err != nil {
+			return errors.Wrapf(err, "failed while reading the rows of: %v", q)
+		}
+
+		end := time.Now()
+		elapsed := end.Sub(start)
+
+		if elapsed > warningThreshold {
+			log.WithContext(ctx).Warnf("query %v took %v (over the %v threshold)", q, elapsed, warningThreshold)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	end := time.Now()
-	elapsed := end.Sub(start)
-
-	if elapsed > warningThreshold {
-		log.WithContext(ctx).Warnf("query %v took %v (over the %v threshold)", q, elapsed, warningThreshold)
-	}
-
-	return rows, nil
+	return result, nil
 }
 
 // GetTuningLogs return the logs based on the tuning event
@@ -750,18 +755,14 @@ func (qa *Adapter) InsertLog(ctx context.Context, message *models.AgentMessage) 
 	}
 	// NginxionS: no connection string (password) in the log
 	log.WithContext(ctx).Infof("insert statement: %v", stmtStr)
-	conn, err := qa.driver.Open(qa.dbName)
-	if err != nil {
-		// NginxionS: the first logs come in parallel; when another writer created the database first, this one gets
-		// "duplicate key ... pg_database_datname_index" and dropped its log. The database exists then: it is opened.
-		if errCreateDB := qa.createDB(ctx); errCreateDB != nil {
-			log.WithContext(ctx).Warnf("failed to create db (another writer may have), err: %v", errCreateDB)
-		}
-		conn, err = qa.driver.Open(qa.dbName)
-		if err != nil {
-			return errors.Wrap(err, "failed to open connection to DB")
-		}
-	}
+	// NginxionS: on a pooled connection (one was opened per log and never closed, see runQuery)
+	return qa.withConn(ctx, true, func(conn driver.Conn) error {
+		return qa.insertLog(ctx, conn, message, stmtStr, args)
+	})
+}
+
+func (qa *Adapter) insertLog(
+	ctx context.Context, conn driver.Conn, message *models.AgentMessage, stmtStr string, args []driver.Value) error {
 	qa.ensureNextPartition(ctx, conn, message)
 	affected, err := executeStmt(ctx, conn, stmtStr, args)
 	if err != nil {
@@ -788,6 +789,8 @@ func executeStmt(ctx context.Context, conn driver.Conn, stmtStr string, args []d
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to prepare stmt: %v", stmtStr)
 	}
+	// NginxionS: a prepared statement lives on its connection until closed, and connections are reused now
+	defer stmt.Close()
 	var res driver.Result
 	if stmtCtx, ok := stmt.(driver.StmtExecContext); ok {
 		namedArgs := make([]driver.NamedValue, len(args))
@@ -920,13 +923,151 @@ func (qa *Adapter) createDB(ctx context.Context) error {
 		return err
 	}
 
-	rootConn := fmt.Sprintf("postgres://%s:%s@%s:%v/?sslmode=%s", dbUser, pass, dbHost, dbPort, sslMode)
+	rootConn := postgresURL(dbUser, pass, dbHost, dbPort, "", sslMode) // NginxionS: escaped, see NewAdapter
 
 	conn, err := qa.driver.Open(rootConn)
 	if err != nil {
 		return errors.Wrap(err, "failed to open connection as root user")
 	}
+	// NginxionS: closed (it was left to the GC)
+	defer conn.Close()
 	log.WithContext(ctx).Infof("run stmt: %v", stmt)
 	_, err = executeStmt(ctx, conn, stmt, nil)
 	return err
+}
+
+// NginxionS: the connections of the adapter. Every operation opened a connection with driver.Open and closed
+// neither it nor its statements and rows (openappsec/smartsync-tuning, "Connection leak in query Adapter"): only the
+// GC closed them, and under load the open connections reached max_connections of Postgres ("too many clients
+// already"), every write and query failing meanwhile. A connection is now taken from a small pool of idle ones and
+// given back after use, at most maxIdleConns stay open while idle.
+
+const maxIdleConns = 8
+
+// getConn: an idle connection (pooled) or a new one. With createDB, a failed open creates the database and opens
+// again: the first logs come in parallel; when another writer created the database first, this one gets
+// "duplicate key ... pg_database_datname_index". The database exists then: it is opened.
+func (qa *Adapter) getConn(ctx context.Context, createDB bool) (driver.Conn, bool, error) {
+	qa.idleLock.Lock()
+	for n := len(qa.idle); n > 0; n = len(qa.idle) {
+		conn := qa.idle[n-1]
+		qa.idle = qa.idle[:n-1]
+		if v, ok := conn.(driver.Validator); ok && !v.IsValid() {
+			_ = conn.Close()
+			continue
+		}
+		qa.idleLock.Unlock()
+		return conn, true, nil
+	}
+	qa.idleLock.Unlock()
+	conn, err := qa.driver.Open(qa.dbName)
+	if err != nil && createDB {
+		if errCreateDB := qa.createDB(ctx); errCreateDB != nil {
+			log.WithContext(ctx).Warnf("failed to create db (another writer may have), err: %v", errCreateDB)
+		}
+		conn, err = qa.driver.Open(qa.dbName)
+	}
+	if err != nil {
+		return nil, false, errors.Wrap(err, "failed to open connection to SQL server")
+	}
+	return conn, false, nil
+}
+
+// putConn gives a connection back to the idle ones, or closes it when broken or when enough are idle
+func (qa *Adapter) putConn(conn driver.Conn, err error) {
+	broken := stderrors.Is(err, driver.ErrBadConn)
+	if v, ok := conn.(driver.Validator); ok && !v.IsValid() {
+		broken = true
+	}
+	if !broken {
+		qa.idleLock.Lock()
+		if !qa.closed && len(qa.idle) < maxIdleConns {
+			qa.idle = append(qa.idle, conn)
+			qa.idleLock.Unlock()
+			return
+		}
+		qa.idleLock.Unlock()
+	}
+	_ = conn.Close()
+}
+
+// withConn runs fn on a connection and gives it back. A pooled connection found broken (driver.ErrBadConn, nothing
+// was sent: the server restarted, it closed an idle session) is dropped and fn runs again on another.
+func (qa *Adapter) withConn(ctx context.Context, createDB bool, fn func(conn driver.Conn) error) error {
+	for attempt := 0; ; attempt++ {
+		conn, pooled, err := qa.getConn(ctx, createDB)
+		if err != nil {
+			return err
+		}
+		err = fn(conn)
+		qa.putConn(conn, err)
+		if pooled && attempt <= maxIdleConns && stderrors.Is(err, driver.ErrBadConn) {
+			continue
+		}
+		return err
+	}
+}
+
+// idleConns: the idle connections (tests)
+func (qa *Adapter) idleConns() []driver.Conn {
+	qa.idleLock.Lock()
+	defer qa.idleLock.Unlock()
+	return append([]driver.Conn(nil), qa.idle...)
+}
+
+// Close closes the idle connections; the connections in use are closed when given back
+func (qa *Adapter) Close() {
+	qa.idleLock.Lock()
+	idle := qa.idle
+	qa.idle = nil
+	qa.closed = true
+	qa.idleLock.Unlock()
+	for _, conn := range idle {
+		_ = conn.Close()
+	}
+}
+
+// postgresURL: the connection URL of lib/pq, user and password escaped
+func postgresURL(user, pass, host, port, database, sslMode string) string {
+	u := url.URL{Scheme: "postgres", User: url.UserPassword(user, pass), Host: net.JoinHostPort(host, port),
+		Path: "/" + database, RawQuery: url.Values{"sslmode": {sslMode}}.Encode()}
+	return u.String()
+}
+
+// memRows: rows read in memory (runQuery)
+type memRows struct {
+	columns []string
+	rows    [][]driver.Value
+}
+
+func readRows(rows driver.Rows) (*memRows, error) {
+	m := &memRows{columns: rows.Columns()}
+	for {
+		row := make([]driver.Value, len(m.columns))
+		err := rows.Next(row)
+		if err == io.EOF {
+			return m, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		// a driver may reuse the memory of []byte values on the next row
+		for i, v := range row {
+			if b, ok := v.([]byte); ok {
+				row[i] = append([]byte(nil), b...)
+			}
+		}
+		m.rows = append(m.rows, row)
+	}
+}
+
+func (m *memRows) Columns() []string { return m.columns }
+func (m *memRows) Close() error      { m.rows = nil; return nil }
+func (m *memRows) Next(dest []driver.Value) error {
+	if len(m.rows) == 0 {
+		return io.EOF
+	}
+	copy(dest, m.rows[0])
+	m.rows = m.rows[1:]
+	return nil
 }
