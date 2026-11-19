@@ -56,8 +56,11 @@ ENV OPENAPPSEC_NANO_AGENT=TRUE
 # Boost: only the libraries the binaries of the agent link (boost.deps, from scanelf in agent-build), not the package
 # "boost", which installs every Boost library and with boost-python3 Python and SQLite
 COPY --from=agent-build /out/boost.deps /tmp/boost.deps
+# the day of the build (CI passes the UTC date): a new value rebuilds this layer, so "apk upgrade" takes the security
+# fixes of Alpine at least daily; the build cache otherwise kept an old layer (OpenSSL 3.5.9-r0, 5 CVEs fixed in -r1)
+ARG APK_REFRESH=
 # hadolint ignore=SC2046
-RUN apk upgrade --no-cache -a && \
+RUN echo "packages of ${APK_REFRESH:-this build}" && apk upgrade --no-cache -a && \
     apk add --no-cache busybox zlib brotli bash libstdc++ icu-libs curl \
         libunwind libxml2 pcre2 ca-certificates coreutils $(cat /tmp/boost.deps) && \
     rm /tmp/boost.deps && \
