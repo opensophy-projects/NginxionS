@@ -201,6 +201,13 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
     first=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'Host: test.local' "$HTTP/first-$1$XSS")
     normal=$(curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 15 -H 'Host: test.local' "$HTTP/?q=hello")
     [ "$first" = 403 ] || fail "the first attack after the agent's restart got $first (fail-open $1)"
+    # issue 90: the first single request gave no event (it was not inspected): the agent logs this very request
+    for i in $(seq 1 30); do
+      $CURL "$ADMIN/api/nginxions/events?important=true&host=test.local&q=first-$1" \
+        | grep -q '"action": *"Prevent"' && break
+      [ "$i" = 30 ] && fail "no Prevent event for the first attack after the agent's restart (fail-open $1)"
+      sleep 2
+    done
     case "$normal" in
       "200 "*) ;;
       *) fail "a normal request after the agent's restart got \"$normal\" (status, bytes; fail-open $1)" ;;
