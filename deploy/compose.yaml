@@ -37,6 +37,8 @@ services:
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # root on volumes that are root's: no capability is needed (no chown to another user)
     cap_drop:
       - ALL
@@ -71,6 +73,8 @@ services:
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # the agent and its services run as root on files of root: no capability is needed
     cap_drop:
       - ALL
@@ -172,6 +176,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     healthcheck:
       test: ["CMD", "wget", "-q", "-T", "4", "-O", "/dev/null", "http://127.0.0.1:7080/healthz"]
       interval: 30s
@@ -226,6 +232,8 @@ services:
       - SETGID
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # the same check as the image
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
@@ -282,6 +290,8 @@ services:
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # the user postgres of the image (uid 70) from the start, no capability: a new volume gets the owner of the
     # directory of the image, one of an older install was handed to postgres by the entrypoint before. The root
     # filesystem is read-only: postgres writes its data volume, its socket directory and /tmp (tmpfs)
@@ -326,6 +336,8 @@ services:
     # no process gains privileges it did not start with (setuid binaries, file capabilities)
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # CrowdSec runs as root on files of root (its volumes, the logs it reads): no capability is needed. The root
     # filesystem is read-only: it writes its volumes (configuration, database, hub) and /tmp
     read_only: true
@@ -382,6 +394,8 @@ services:
     entrypoint: ["/bin/sh", "/nginxions-clamav.sh"]
     security_opt:
       - no-new-privileges:true
+      # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
+      - seccomp=./seccomp/nginxions.json
     # the user clamav of the image from the start (clamd parses the files visitors upload), no capability, a read-only
     # root filesystem: nginxions-clamav.sh starts clamd and freshclam itself with their configuration in /tmp
     user: "100:101"
