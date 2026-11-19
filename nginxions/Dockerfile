@@ -7,7 +7,7 @@ ARG LUAJIT_LIB=/usr/lib
 
 ARG AWSLC_VER=683ebde4bf3bcc016a9a710ad6b49c0c91b59161 # v5.2.0
 
-ARG NGINX_VER=aaecf65316bb4af1e4f12f6a8746da2ab278c967 # release-1.31.7
+ARG NGINX_VER=c2c44702c2fbc572e4cfb0a52331061d7fcaca16 # release-1.31.9
 ARG DTR_VER=1.29.2
 ARG RCP_VER=1.31.2
 ARG ZNP_VER=1.30.0
@@ -162,7 +162,13 @@ COPY --from=attachment . /src/attachment
 WORKDIR /src/attachment
 RUN cmake /src/attachment -G Ninja && \
     ninja && \
-    mv -v /src/attachment/attachments/nginx/ngx_module/libngx_module.so /usr/local/nginx/modules/libngx_module.so
+    mv -v /src/attachment/attachments/nginx/ngx_module/libngx_module.so /usr/local/nginx/modules/libngx_module.so && \
+    # NginxionS: each library of the attachment resolves its symbols by its own dependencies, not by what nginx loaded
+    # before it (libosrc_compression_utils.so was not linked to zlib-ng: "undefined symbol" with another nginx)
+    for lib in core/shmem_ipc_2/libshmem_ipc_2.so core/compression/libosrc_compression_utils.so \
+               attachments/nginx/nginx_attachment_util/libosrc_nginx_attachment_util.so; do \
+      if ldd "/src/attachment/$lib" 2>&1 | grep -i "symbol not found"; then echo "unresolved symbols: $lib"; exit 1; fi; \
+    done
 
 # NginxionS: cjson of LuaJIT for the CrowdSec bouncer, built here: the package lua5.1-cjson of Alpine brings Lua 5.1 and
 # its CVEs into the image (Grype), and nginx runs LuaJIT
