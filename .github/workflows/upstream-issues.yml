@@ -1,0 +1,37 @@
+# Every hour: the issues of the upstream repositories of the agent (openappsec/openappsec, attachment,
+# smartsync-shared-files, smartsync-tuning, smartsync) are copied here as issues labelled "upstream", and a copy is
+# closed or reopened with its upstream issue (scripts/upstream-issues.mjs). By hand: Actions → Upstream issues →
+# Run workflow.
+#
+# Scheduled workflows run from the default branch of the repository.
+name: Upstream issues
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-issues
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    name: openappsec issues → issues here
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # the copies, their labels and comments
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: copy and follow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/upstream-issues.mjs

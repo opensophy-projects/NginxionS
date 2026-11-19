@@ -170,6 +170,7 @@ flowchart LR
   - `workflows/nightly.yml` — каждую ночь: долгий фаззинг парсеров (`fuzz.test.mjs`, Lua File Security), опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке, отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
   - `workflows/security-weekly.yml` — каждую неделю: ветка `security/<дата>` от `work`, полный CI на ней, issue с
     отчётом, удаление веток старше 8 недель
+  - `workflows/upstream-issues.yml` — каждый час: issue openappsec (5 репозиториев агента) копируются сюда как issue, их закрытие и открытие повторяется (`scripts/upstream-issues.mjs`)
   - `workflows/training.yml` — обучение модели WAF: ветки `training/**`, `[train]` в коммите или кнопка; модель,
     её карточка и сравнение со штатной — в артефакте `waf-model` (`docs/MODEL.md`)
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
@@ -279,6 +280,7 @@ flowchart LR
 - `check-runtime.sh` — проверка работающих контейнеров стека (расширенный прогон): привилегии, capabilities,
   пространства имён хоста, сокет Docker, root, запись в корень
 - `security-report.mjs` — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
+- `upstream-issues.mjs` — копии issue репозиториев агента (openappsec/openappsec, attachment, smartsync-shared-files, smartsync-tuning, smartsync) в issue этого репозитория с меткой `upstream`; копия закрывается и открывается вместе с исходной
 - `sarif-accepted.mjs` — убирает из SARIF принятые риски и подавленные в коде находки перед загрузкой в Code scanning
 - `update-ips-signatures.mjs` — сигнатуры IPS агента из правил виртуальных патчей хаба CrowdSec (`openappsec/agent/nginxions/ips-protections.json`; коммит хаба — `CROWDSEC_HUB_REF` в `deploy/openappsec/sources.env`)
 - `upgrade-from-npmos.sh` — перенос томов стека времён названия NPMOS (`npmos_*`) в NginxionS: копия томов, имена секретов, роль и база Postgres
