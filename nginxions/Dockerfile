@@ -301,7 +301,10 @@ COPY COPYING /COPYING
 COPY certbot-requirements.txt /tmp/certbot-requirements.txt
 
 WORKDIR /app
-RUN apk upgrade --no-cache -a && \
+# NginxionS: the day of the build (CI passes the UTC date): a new value rebuilds this layer, so "apk upgrade" takes the
+# security fixes of Alpine at least daily instead of an old layer of the build cache
+ARG APK_REFRESH=
+RUN echo "packages of ${APK_REFRESH:-this build}" && apk upgrade --no-cache -a && \
     apk add --no-cache tzdata tini llvm-libunwind libc++ \
                        pcre2 luajit zlib-ng brotli zstd libxml2 libldap quickjs-ng-libs libmaxminddb-libs \
                        curl coreutils findutils grep jq openssl shadow su-exec util-linux-misc \
