@@ -21,6 +21,16 @@ net=()
 [ -z "${HTTPS_PROXY:-}" ] || net+=(--network host -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY)
 [ -z "${CA_BUNDLE:-}" ] || net+=(-v "$CA_BUNDLE:/etc/ssl/certs/ca-certificates.crt:ro")
 
+# the image is pulled first, retried: Docker Hub resets a connection now and then ("failed to fetch oauth token ...
+# connection reset by peer"), and docker run failed the job before any test ran
+for i in 1 2 3 4; do
+  docker image inspect "$image" > /dev/null 2>&1 && break
+  docker pull -q "$image" && break
+  [ "$i" = 4 ] && { echo "could not pull $image"; exit 1; }
+  echo "pull of $image failed, retry in $((i * 5)) s"
+  sleep $((i * 5))
+done
+
 for svc in smartsync-shared-files smartsync-tuning smartsync; do
   echo "==> $svc"
   docker run --rm "${net[@]}" -e GOTOOLCHAIN=local -e CGO_ENABLED=0 -e SVC="$svc" -e COVER="${cover:+/cover}" \
