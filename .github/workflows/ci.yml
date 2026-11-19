@@ -298,6 +298,8 @@ jobs:
           {
             echo "VERSION=$v"
             echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
+            # the day of the build: the "apk upgrade" layers of the images are rebuilt daily (Dockerfiles, APK_REFRESH)
+            echo "APK_REFRESH=$(date -u +%F)"
           } >> "$GITHUB_ENV"
           for f in nginxions/frontend/package.json nginxions/backend/package.json; do
             jq --arg v "$v" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
@@ -317,6 +319,7 @@ jobs:
           build-args: |
             CROWDSEC_VERSION=${{ env.CROWDSEC_VERSION }}
             FLAGS=-march=x86-64-v2 -mtune=generic -fcf-protection=full
+            APK_REFRESH=${{ env.APK_REFRESH }}
       - name: build nginxions-openappsec
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -328,6 +331,8 @@ jobs:
           tags: docker.io/${{ env.NAMESPACE }}/nginxions-openappsec:${{ env.VERSION }}
           cache-from: type=gha,scope=openappsec-amd64
           cache-to: type=gha,mode=max,scope=openappsec-amd64
+          build-args: |
+            APK_REFRESH=${{ env.APK_REFRESH }}
           # smartsync (central learning) is not built: it needs a Fog token the agent lacks in local-only
           # mode. NginxionS learns locally; see docs/adr/0011-learning.md.
       - name: policy contract with the agent of this build
@@ -587,6 +592,7 @@ jobs:
             echo "VERSION=$v"
             echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
             echo "TAGS=$tags"
+            echo "APK_REFRESH=$(date -u +%F)"
           } >> "$GITHUB_ENV"
           for f in nginxions/frontend/package.json nginxions/backend/package.json; do
             jq --arg v "$v" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
@@ -612,6 +618,7 @@ jobs:
           build-args: |
             CROWDSEC_VERSION=${{ env.CROWDSEC_VERSION }}
             FLAGS=-mbranch-protection=standard
+            APK_REFRESH=${{ env.APK_REFRESH }}
       - name: arch tags
         if: env.PUBLISH == 'true'
         run: |
@@ -671,6 +678,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: day of the build (APK_REFRESH, see the job images)
+        run: echo "APK_REFRESH=$(date -u +%F)" >> "$GITHUB_ENV"
       - name: build nginxions-openappsec (arm64)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -680,6 +689,8 @@ jobs:
             control=nginxions/backend/nginxions/control
           cache-from: type=gha,scope=openappsec-arm64
           cache-to: type=gha,mode=max,scope=openappsec-arm64
+          build-args: |
+            APK_REFRESH=${{ env.APK_REFRESH }}
 
   report:
     name: Security report
