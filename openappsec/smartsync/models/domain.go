@@ -23,6 +23,12 @@ type DataCollector interface {
 	ClearMergedData()
 }
 
+// NodeAwareCollector is a collector told which node (server of NginxionS) the next data comes from (NginxionS: the
+// manager puts the id of a node into the path of its data, so one node can be kept from making the norm alone)
+type NodeAwareCollector interface {
+	SetDataNode(node string)
+}
+
 // SyncHandler defines a handler for sync per type
 type SyncHandler interface {
 	DataCollector
