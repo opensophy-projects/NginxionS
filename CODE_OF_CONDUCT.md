@@ -228,17 +228,17 @@ flowchart LR
 исходников, как остальной код (`docs/DEVSECOPS.md`). Агент не обращается к облаку open-appsec ни при какой настройке.
 
 - **`agent/`** — агент (C++): без облака вовсе (не регистрируется, не подключается к Fog, отказывается слать
-  сообщения и скачивать файлы с хостов open-appsec/Check Point, ходит к локальным tuning и shared storage без
+  сообщения и скачивать файлы с хостов open-appsec, ходит к локальным tuning и shared storage без
   токена); политика из GUI (`apply-policy`) применяется за секунды, а не на следующей проверке обновлений; лимиты для хостов без схемы и с портом, правила лимитов локальной политики (без `action` и `match`);
   локальная политика v1beta2 применяется полностью (`docs/WAF-POLICY.md`: перенаправление, действие, условия и
   ответ правил лимитов, лимит на ассет, доверенные источники без идентификатора, все файлы Snort, протокол
   syslog/CEF), unit-тесты секций — `components/security_apps/local_policy_mgmt_gen/local_policy_mgmt_gen_ut/`;
   выгрузка признаков модели для обучения (только на стенде обучения, `docs/MODEL.md`); модель
-  `components/security_apps/waap/resources/waap.data` — продвинутая модель Check Point («Advanced model, V2.0»,
+  `components/security_apps/waap/resources/waap.data` — продвинутая модель («V3.0»,
   лицензия внутри файла) с заголовками браузеров (`Sec-Fetch-*`, `Priority`…) среди чистых заголовков сигнатур;
   конвертер сигнатур Snort на JavaScript (`nodes/http_transaction_handler/package/snort_to_ips_local.mjs`: в образе
   нет Python; питоновский оригинал upstream лежит рядом как эталон для теста `snort_to_ips_local.test.mjs` с
-  правилами `testdata/snort-rules.txt`); IPS загружает открытые (не зашифрованные Check Point) сигнатуры, свои
+  правилами `testdata/snort-rules.txt`); IPS загружает открытые (не зашифрованные) сигнатуры, свои
   сигнатуры NginxionS — `nginxions/ips-protections.json` (правила виртуальных патчей хаба CrowdSec, MIT, перевод
   `scripts/update-ips-signatures.mjs`; ctest `ips_ut` проверяет, что каждая загружается); генератор локальной
   политики кладёт их в секцию IPS, когда практика включает `intrusionPrevention`
