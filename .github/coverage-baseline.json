@@ -1,6 +1,7 @@
 {
-	"$comment": "The coverage of the code by the tests (lines, %) the CI may not fall under by more than 0.5 point: scripts/coverage-report.mjs. Raised with --update when the coverage went up; «backend (unit + stack)» is set after the first full run that measures it.",
+	"$comment": "The coverage of the code by the tests (lines, %) the CI may not fall under by more than 0.5 point: scripts/coverage-report.mjs. Raised with --update when the coverage went up.",
 	"backend (unit)": 56,
+	"backend (unit + stack)": 72.8,
 	"frontend": 52.9,
 	"go/smartsync-shared-files": 56.1,
 	"go/smartsync-tuning": 21.3
