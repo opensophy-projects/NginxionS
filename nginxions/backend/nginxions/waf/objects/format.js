@@ -191,7 +191,6 @@ const triggerFromV1 = (t) => {
 			httpHeaders: t["extended-logging"]?.["http-headers"] ?? false,
 			requestBody: t["extended-logging"]?.["request-body"] ?? false,
 		},
-		// never the Check Point cloud
 		logDestination: defined({
 			cloud: false,
 			stdout: dest.stdout ?? { format: "json" },

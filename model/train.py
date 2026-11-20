@@ -198,7 +198,7 @@ def main(argv=None):
     ap.add_argument("--dump", required=True, help="directory of the feature dump of the stock model's run")
     ap.add_argument("--verdicts", required=True, help="verdicts of the stock model's run")
     ap.add_argument("--base", required=True, help="waap.data of the image (the model of the image: the advanced "
-                    "model of Check Point; a linear base model is the start of the training)")
+                    "model of opensophy; a linear base model is the start of the training)")
     ap.add_argument("--l2", type=float, default=1.0, help="L2 regularization (default 1.0)")
     ap.add_argument("--name", default=datetime.date.today().isoformat(), help="model version suffix")
     ap.add_argument("--out", required=True, help="output directory")

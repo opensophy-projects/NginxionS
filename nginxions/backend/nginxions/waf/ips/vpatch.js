@@ -1,16 +1,4 @@
-// Virtual patching rules of the CrowdSec hub (appsec-rules, MIT) → IPS protections of the agent (docs/WAF-POLICY.md,
-// "IPS"). The IPS engine of open-appsec is in the open source agent, its signatures came only from the Check Point
-// cloud: NginxionS gives it these instead (openappsec/agent/nginxions/ips-protections.json, made by
-// scripts/update-ips-signatures.mjs), so that intrusionPrevention of a practice works with all its fields (severity,
-// confidence, performance impact, CVE year, actions) and its events are events of the agent.
-//
-// A rule of the hub is a list of rules (any of them), each a condition or and/or of conditions; a condition matches a
-// value of zones (URI, ARGS, HEADERS...) after transforms (lowercase, urldecode...). A protection of the agent is
-// keywords (data, pcre) on contexts of the request (HTTP_PATH_DECODED, HTTP_QUERY_DECODED, HTTP_REQUEST_HEADER,
-// HTTP_REQUEST_BODY...), all of them. So a rule becomes one protection per way it can match: a zone of several
-// contexts (ARGS: the query or the body) and "or" give several. The IPS has the decoded path and query but the raw
-// body: a value of the body is matched as sent (form, JSON or multipart), not decoded. A rule that needs what the IPS
-// cannot do (libinjection, b64decode, length, counts) is left out and listed.
+
 import { parse } from "yaml";
 
 /** a condition the IPS cannot express */

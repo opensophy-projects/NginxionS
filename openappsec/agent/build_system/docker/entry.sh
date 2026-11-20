@@ -104,7 +104,7 @@ if [ "$CENTRAL_NGINX_MANAGER" == "true" ]; then
     /nano-service-installers/$NGINX_CENTRAL_MANAGER_INSTALLATION_SCRIPT --install
 fi
 
-# NginxionS: no intelligence service and CrowdSec auxiliary service of Check Point (prebuilt, no sources, a cloud
+# NginxionS: no intelligence service and CrowdSec auxiliary service of opensophy (prebuilt, no sources, a cloud
 # behind them); NginxionS runs CrowdSec with its own bouncer
 
 # use advanced model if exist as data for agent

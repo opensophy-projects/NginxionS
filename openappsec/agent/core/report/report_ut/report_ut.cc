@@ -653,7 +653,7 @@ TEST_F(ReportTest, testCef)
 
     EXPECT_EQ(
         report.getCef(),
-        "CEF:0|Check Point|AccessControlApp||Event Driven|Log Test|Low|"
+        "CEF:0|opensophy|AccessControlApp||Event Driven|Log Test|Low|"
         "eventTime=0:0:0.123 agent=\"Secret\" eventTraceId=\"\" eventSpanId=\"\" issuingEngineVersion=\"\""
         " serviceName=\"Access Control App\" serviceId=\"\""
         " serviceFamilyId=\"\" Bond=\"1\""

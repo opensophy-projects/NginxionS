@@ -108,7 +108,7 @@ services:
     # Hybrid mode (= --standalone in the open-appsec docs) applies the declarative local_policy.yaml
     # written by NginxionS (offline mode only reads a compiled policy). The agent of NginxionS
     # (openappsec/agent) has no cloud: it never registers, never connects to a Fog and refuses any
-    # message to a host of open-appsec (Check Point), whatever its configuration says.
+    # message to a host of open-appsec, whatever its configuration says.
     command: ["--hybrid-mode"]
     environment:
       TZ: ${TZ:-UTC}

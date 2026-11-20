@@ -38,7 +38,7 @@ cp_exec()
 
 run_installation()
 {
-    cp_print "Starting installation of Check Point ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting installation of opensophy ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
     cp_exec "cp lib/libbrotli*.so* /usr/lib/"
     cp_exec "cp lib/libosrc_compression_utils.so /usr/lib/libosrc_compression_utils.so"
@@ -75,7 +75,7 @@ run_installation()
 
 usage()
 {
-    echo "Check Point: available flags are"
+    echo "opensophy: available flags are"
     echo "--install           : install ${NANO_SERVICE_NAME} Nano Service"
     echo "--uninstall         : remove ${NANO_SERVICE_NAME} Nano Service"
     echo "--pre_install_test  : run Pre-installation test for ${NANO_SERVICE_NAME} Nano Service install package"
@@ -85,24 +85,24 @@ usage()
 
 run_uninstall()
 {
-    cp_print "Starting uninstallation of Check Point ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting uninstallation of opensophy ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
     cp_print "Uninstallation completed successfully." $FORCE_STDOUT
 }
 
 run_pre_install_test()
 {
-    cp_print "Starting Pre-installation test of Check Point ${ATTACHMENT_NAME} installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting Pre-installation test of opensophy ${ATTACHMENT_NAME} installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
-    cp_print "Successfully finished pre-installation test for Check Point ${ATTACHMENT_NAME} installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished pre-installation test for opensophy ${ATTACHMENT_NAME} installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 }
 
 run_post_install_test()
 {
-    cp_print "Starting Post-installation test of Check Point ${ATTACHMENT_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting Post-installation test of opensophy ${ATTACHMENT_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
-    cp_print "Successfully finished post-installation test for Check Point ${ATTACHMENT_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished post-installation test for opensophy ${ATTACHMENT_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 }
 
