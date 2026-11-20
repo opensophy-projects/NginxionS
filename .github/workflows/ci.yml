@@ -481,6 +481,14 @@ jobs:
           # DAST is expected when it ran (a run of chosen tests of the stack may leave it out)
           EXPECT: images${{ needs.level.outputs.dast == 'true' && ',dast' || '' }}
         run: node scripts/security-report.mjs --in reports --scope images,dast --expect "$EXPECT"
+      # the coverage of the code: unit tests (artifact security-quality) and what the backend ran in the tests of the
+      # stack (artifacts tests-*), with its ratchet .github/coverage-baseline.json (scripts/coverage-report.mjs)
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: tests-*
+          path: reports/tests
+      - name: coverage of the code by the tests (it may not fall)
+        run: node scripts/coverage-report.mjs --in reports
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: env.PUBLISH == 'true'
         with:
