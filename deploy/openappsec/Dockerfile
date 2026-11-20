@@ -26,7 +26,12 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 RUN apk add --no-cache build-base cmake git python3 bash linux-headers \
         boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis \
         libmaxminddb-dev yq brotli-dev zlib-dev pax-utils
-
+# changes of NginxionS in the agent (grep "NginxionS:"): no cloud at all (no registration, no Fog, no message or
+# download to a host of open-appsec, no token for the local services); rate limits for hosts of the local policy (no
+# scheme) and its rules (no "action" and "match"); host:port of services; the feature dump for training. Its model
+# (components/security_apps/waap/resources/waap.data) has the request headers of browsers
+# (Sec-Fetch-*, Priority, client hints) among the clean headers of its signatures; a model uploaded in WAF -> Agent
+# replaces it at the start of the agent.
 COPY --from=openappsec agent/ /src/
 WORKDIR /src
 # the unit tests of the agent (C++, gtest) run here, one after another (in parallel two of them compete for the
