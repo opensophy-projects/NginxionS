@@ -67,6 +67,32 @@ const site = (host, path = "/", { method = "GET", auth, tls = false } = {}) =>
 		req.end();
 	});
 
+/** a request over HTTPS to a site by its name (SNI too), with a client certificate (.p12) or without: the status */
+const tlsStatus = (host, { pfx, passphrase } = {}) =>
+	new Promise((resolve) => {
+		const req = https.request(
+			{
+				host: HTTP.hostname,
+				port: 443,
+				path: "/",
+				headers: { Host: host },
+				servername: host,
+				// the server certificate is of a test CA of the scenario: not checked
+				rejectUnauthorized: false,
+				timeout: 10000,
+				...(pfx ? { pfx, passphrase } : {}),
+			},
+			(res) => {
+				res.resume();
+				res.on("end", () => resolve(res.statusCode));
+			},
+		);
+		req.on("timeout", () => req.destroy(new Error("timeout")));
+		// a refused handshake is a refusal too
+		req.on("error", () => resolve(0));
+		req.end();
+	});
+
 /** waits until check() returns a truthy value; the last value is in the error */
 async function until(what, check, { timeout = 60000, every = 1500 } = {}) {
 	const end = Date.now() + timeout;
@@ -480,6 +506,112 @@ const scenarios = [
 		async cleanup() {
 			const st = (await api("GET", "/nginx/streams")).find((x) => Number(x.incoming_port) === 2333);
 			if (st) await api("DELETE", `/nginx/streams/${st.id}`);
+		},
+	},
+	{
+		name: "pki-mtls",
+		title:
+			"PKI: root CA, trust domain, server certificate as TLS of a host; mTLS on: without a certificate refused, with the .p12 200, revoked refused",
+		async run() {
+			const domain = "gui-mtls.local";
+			const p12Password = "gui-p12-password";
+			const modal = () => page.locator(".modal.show").last();
+			// Certificates → PKI → Create a root CA
+			await go("/pki?tab=cas");
+			await page.getByRole("button", { name: "Create a root CA" }).click();
+			await modal().locator("#pki-ca-name").fill("GUI Root");
+			await modal().locator("#pki-ca-cn").fill("GUI Root");
+			await modal().getByRole("button", { name: "Create", exact: true }).click();
+			await saved("root CA");
+			// its menu → New trust domain
+			const caAction = async (name, item) => {
+				await page.locator("tbody tr", { hasText: name }).first().getByRole("button", { name: "Actions" }).click();
+				await menuItem(item).click();
+			};
+			await caAction("GUI Root", "New trust domain");
+			await modal().locator("#pki-ca-name").fill("GUI Servers");
+			await modal().locator("#pki-ca-cn").fill("GUI Servers");
+			await modal().getByRole("button", { name: "Create", exact: true }).click();
+			await saved("trust domain");
+			// the trust domain → Issue certificate: Server, installed as a certificate of NginxionS
+			await caAction("GUI Servers", "Issue certificate");
+			await modal().getByRole("button", { name: "Server", exact: true }).click();
+			await modal().locator("#pki-subject-commonName").fill(domain);
+			await modal().locator("#pki-dns").fill(domain);
+			await modal()
+				.locator("label", { hasText: "Install as a certificate of NginxionS" })
+				.locator("input")
+				.check({ force: true });
+			await modal().getByRole("button", { name: "Issue", exact: true }).click();
+			await modal().getByRole("button", { name: "Done" }).click();
+			await saved("server certificate");
+
+			// Hosts: a proxy host, its TLS column → the installed certificate
+			await addProxyHost(domain);
+			let row = await hostRow(domain);
+			await row.getByRole("button", { name: "TLS", exact: true }).click();
+			await page.getByRole("menuitem").filter({ hasText: `${domain} (PKI)` }).last().click();
+			await until("the host answers over HTTPS", async () => (await tlsStatus(domain)) === 200);
+
+			// the switch of mTLS: on (a trust domain of the host is made in one step), no certificate → refused
+			row = await hostRow(domain);
+			await row.locator("input[aria-label^='Turn on mTLS']").click();
+			await until("without a client certificate the host refuses", async () => {
+				const code = await tlsStatus(domain);
+				return { ok: code === 403 || code === 0, code };
+			});
+
+			// mTLS → Issue access certificate…: a .p12 with our password, downloaded like a user does
+			row = await hostRow(domain);
+			await row.getByRole("button", { name: "mTLS", exact: true }).click();
+			await menuItem("Issue access certificate…").click();
+			await modal().locator("#mtls-access-name").fill("gui-alice");
+			await modal().locator("#mtls-access-password").fill(p12Password);
+			await modal().getByRole("button", { name: "Issue", exact: true }).click();
+			const download = modal().getByRole("button", { name: "Download .p12" });
+			await download.waitFor({ timeout: 30000 });
+			const [file] = await Promise.all([page.waitForEvent("download"), download.click()]);
+			const pfx = readFileSync(await file.path());
+			await modal().getByRole("button", { name: "Done" }).click();
+			await saved("access certificate");
+			const withCert = () => tlsStatus(domain, { pfx, passphrase: p12Password });
+			await until("with the .p12 the host answers", async () => {
+				const code = await withCert();
+				return { ok: code === 200, code };
+			});
+
+			// mTLS → Choose a certificate → its menu → Revoke: the same .p12 is refused
+			row = await hostRow(domain);
+			await row.getByRole("button", { name: "mTLS", exact: true }).click();
+			await page.getByRole("menuitem").filter({ hasText: "Choose a certificate" }).last().click();
+			await modal().getByRole("button", { name: "Actions" }).first().click();
+			await menuItem("Revoke").click();
+			await modal().getByRole("button", { name: "Revoke", exact: true }).click();
+			await page.waitForTimeout(1000);
+			const err = await shownError();
+			if (err) throw new Error(`revoke: ${err}`);
+			await until(
+				"a revoked certificate is refused",
+				async () => {
+					const code = await withCert();
+					return { ok: code !== 200, code };
+				},
+				{ timeout: 90000 },
+			);
+		},
+		async cleanup() {
+			await removeProxyHost("gui-mtls.local");
+			const { cas } = await api("GET", "/nginxions/pki");
+			// the trust domain mTLS made for the host may be under another root: by its name first
+			for (const ca of cas.filter((c) => c.name.includes("gui-mtls.local"))) {
+				await api("DELETE", `/nginxions/pki/cas/${ca.id}?cascade=true&disable_hosts=true`).catch(() => {});
+			}
+			for (const ca of cas.filter((c) => c.name === "GUI Root")) {
+				await api("DELETE", `/nginxions/pki/cas/${ca.id}?cascade=true&disable_hosts=true`);
+			}
+			for (const c of await api("GET", "/nginx/certificates")) {
+				if (c.nice_name === "gui-mtls.local (PKI)") await api("DELETE", `/nginx/certificates/${c.id}`);
+			}
 		},
 	},
 	{
