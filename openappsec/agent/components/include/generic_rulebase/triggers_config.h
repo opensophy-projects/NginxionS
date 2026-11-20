@@ -2,7 +2,6 @@
 
 /// \file triggers_config.h
 /// \brief Declaration of classes WebTriggerConf and LogTriggerConf, and related functions.
-/// \author opensophy Software Technologies Ltd.
 /// \date 2022
 
 #ifndef __TRIGGERS_CONFIG_H__

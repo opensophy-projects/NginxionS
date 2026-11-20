@@ -1053,7 +1053,7 @@
 		"defaultMessage": "For example: write to security@example.com"
 	},
 	"nginxions.block-page.description": {
-		"defaultMessage": "What a visitor sees when a request is refused: by open-appsec, by the CrowdSec bouncer or by an access list. It replaces the page of the agent with the text of opensophy."
+		"defaultMessage": "What a visitor sees when a request is refused: by open-appsec, by the CrowdSec bouncer or by an access list. It replaces the page of the agent with the text of the vendor of the agent."
 	},
 	"nginxions.block-page.details": {
 		"defaultMessage": "Show the request ID, IP, host and time (for a request to the administrator)"
@@ -5856,7 +5856,7 @@
 		"defaultMessage": "Mode"
 	},
 	"nginxions.policy.f.fileSecurity.threatEmulationEnabled": {
-		"defaultMessage": "Threat emulation: the deep static analysis of ClamAV (Office macros, broken executables and media) instead of the sandbox of opensophy"
+		"defaultMessage": "Threat emulation: the deep static analysis of ClamAV (Office macros, broken executables and media) instead of the sandbox of the vendor of the agent"
 	},
 	"nginxions.policy.f.fileSecurity.unnamedFilesAction": {
 		"defaultMessage": "Action for a file with no name (a binary upload with no name in Content-Disposition or the path)"
@@ -8322,10 +8322,10 @@
 		"defaultMessage": "Advanced ML model"
 	},
 	"nginxions.waf.model.basic": {
-		"defaultMessage": "Built-in model: opensophy advanced model (V2.0)"
+		"defaultMessage": "Built-in model: advanced model (V2.0)"
 	},
 	"nginxions.waf.model.description": {
-		"defaultMessage": "NginxionS ships with the advanced model of opensophy (Advanced model, V2.0). Another model (open-appsec-advanced-model.tgz, for example one trained by NginxionS, see docs/MODEL.md) replaces it: it is unpacked when the agent starts; the upload restarts the agent."
+		"defaultMessage": "NginxionS ships with the advanced model (Advanced model, V2.0). Another model (open-appsec-advanced-model.tgz, for example one trained by NginxionS, see docs/MODEL.md) replaces it: it is unpacked when the agent starts; the upload restarts the agent."
 	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Uploaded: {size}, {date}"
@@ -8334,7 +8334,7 @@
 		"defaultMessage": "Remove model"
 	},
 	"nginxions.waf.model.remove-warning": {
-		"defaultMessage": "The agent restarts and goes back to the built-in model of the image (opensophy advanced model)."
+		"defaultMessage": "The agent restarts and goes back to the built-in model of the image (advanced model)."
 	},
 	"nginxions.waf.model.removed": {
 		"defaultMessage": "Model removed, the agent is restarting"

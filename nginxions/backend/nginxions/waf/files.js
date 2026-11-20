@@ -75,7 +75,7 @@ export const fileRule = (rule, practices, path) => {
 		},
 		// a file whose name is not known: a body of a binary type with no name in Content-Disposition or the path
 		unnamed_action: actionOf(fs.unnamedFilesAction, mode),
-		// threat emulation: instead of the sandbox of opensophy, the deep static analysis of clamd counts (Office
+		// threat emulation: instead of the sandbox of the vendor of the agent, the deep static analysis of clamd counts (Office
 		// macros, broken executables and media, partitions that intersect); off, these findings are left out
 		deep: fs.threatEmulationEnabled === true,
 	};

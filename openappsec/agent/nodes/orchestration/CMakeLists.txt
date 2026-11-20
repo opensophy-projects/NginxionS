@@ -181,5 +181,5 @@ gen_package(
 	install-cp-nano-agent.sh
 	orchestration
 	"./orchestration_package.sh;--x86"
-	opensophy Nano Agent Version ${PACKAGE_VERSION} Install Package
+	Nano Agent Version ${PACKAGE_VERSION} Install Package
 )

@@ -127,7 +127,7 @@ check_flags_options()
 
 _main()
 {
-    echo "Starting verification of opensophy support with local nginx server"
+    echo "Starting verification of agent support with local nginx server"
     initializeEnviroment
     getNginxVersion
     ${nginx_cmd} -V &> "$TMP_NGINX_UNPARSED_CONFIGURATION"
@@ -170,7 +170,7 @@ _main()
     fi
     if [[ $CUR_NGINX_ALREADY_SUPPORTED == true ]]; then
         tearDown
-        echo -e "opensophy Nano Agent already supported on this environment"
+        echo -e "Nano Agent already supported on this environment"
     else
         tearDown
         echo -e "Extracted environment data to $(pwd)/${FILE_NAME} \nPlease send file to nano-agent-attachments-support@checkpoint.com"
@@ -444,7 +444,7 @@ add_nginx_and_release_versions()
     echo -e "RELEASE_VERSION=${RELEASE_VERSION}" >> ${FILE_NAME}
 }
 
-echo -e "opensophy Nano Agent Nginx compatibility verifier version ${PACKAGE_VERSION}\n"
+echo -e "Nano Agent Nginx compatibility verifier version ${PACKAGE_VERSION}\n"
 check_flags_options "$@"
 initializeEnviroment
 _main

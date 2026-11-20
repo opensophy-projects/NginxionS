@@ -49,9 +49,9 @@ void
 printVersion()
 {
 #ifdef NGINX_CONF_COLLECTOR_VERSION
-    cout << "opensophy NGINX configuration collector version: " << NGINX_CONF_COLLECTOR_VERSION << '\n';
+    cout << "NGINX configuration collector version: " << NGINX_CONF_COLLECTOR_VERSION << '\n';
 #else
-    cout << "opensophy NGINX configuration collector version: Private" << '\n';
+    cout << "NGINX configuration collector version: Private" << '\n';
 #endif
 }
 

@@ -1,5 +1,5 @@
 // Agents → Block page: what a visitor sees when a request is refused by open-appsec, the CrowdSec bouncer or an
-// access list, instead of the page of the agent ("opensophy's Application Security has detected an attack").
+// access list, instead of the page of the agent ("Application Security has detected an attack").
 // The settings in the interface or as code, with the page as it will look.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
