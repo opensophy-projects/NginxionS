@@ -29,7 +29,7 @@ NginxionS — форк NPMplus с встроенными open-appsec (ML-WAF) и
 
 Из `nginxions/` удалены файлы NPMplus, которые NginxionS не использует: `caddy/`, `compose.yaml`, `ech-cron-cloudflare-example.sh`, `renovate.json`, `.github/`; во frontend — страницы, которые заменили страницы NginxionS (`pages/Dashboard`, `pages/AuditLog`, `pages/Certificates`, `pages/Nginx/*`), окна `HTTPCertificateModal`, `DNSCertificateModal`, `PermissionsModal`, хуки `useAuditLogs`, `useHostReport` и функции API только для них. `nginxions/README.md` заменён описанием каталога; `patches/attachment.patch` внесён в код `openappsec/attachment`. Если при обновлении NPMplus они вернутся конфликтом «modify/delete», удаляйте их снова (`git rm`).
 
-Из `openappsec/` удалено то, что агент NginxionS не собирает и не запускает: `agent/deployment/` (примеры деплоя), `agent/examples/juiceshop/` (примеры шлюзов: nginx, swag, kong, envoy, apisix), `agent/build_system/apisix/`, `agent/build_system/charts/`, `agent/build_system/docker/Dockerfile` (образ — `deploy/openappsec/Dockerfile`), установщики Check Point без исходников (intelligence, CrowdSec auxiliary), готовые бинарники `agent/external/yajl` (примеры и тесты), `attachment/docker/` (kong, envoy, webhook), `attachment/attachments/{envoy,kong,nano_attachment}`, `smartsync*/build/` (их Dockerfile), `smartsync-tuning/internal/app/tuningdomain/v1` (не собирался). При `git subtree pull` они возвращаются конфликтом «modify/delete» — удаляйте снова.
+Из `openappsec/` удалено то, что агент NginxionS не собирает и не запускает: `agent/deployment/` (примеры деплоя), `agent/examples/juiceshop/` (примеры шлюзов: nginx, swag, kong, envoy, apisix), `agent/build_system/apisix/`, `agent/build_system/charts/`, `agent/build_system/docker/Dockerfile` (образ — `deploy/openappsec/Dockerfile`), установщики без исходников (intelligence, CrowdSec auxiliary), готовые бинарники `agent/external/yajl` (примеры и тесты), `attachment/docker/` (kong, envoy, webhook), `attachment/attachments/{envoy,kong,nano_attachment}`, `smartsync*/build/` (их Dockerfile), `smartsync-tuning/internal/app/tuningdomain/v1` (не собирался). При `git subtree pull` они возвращаются конфликтом «modify/delete» — удаляйте снова.
 
 ## Обновление NPMplus
 
@@ -70,7 +70,7 @@ scripts/test-airgap.sh
 | `nginxions-openappsec` | `deploy/openappsec/Dockerfile`: агент (C++), shared storage и tuning (Go) из `openappsec/` (контекст сборки `openappsec=openappsec`), `nginxions-control` (контекст `control=nginxions/backend/nginxions/control`) | долго: C++ |
 | CrowdSec, ClamAV, Postgres | официальные образы, версии в `deploy/.env` | — |
 
-Модель агента в образе — продвинутая модель Check Point (`openappsec/agent/components/security_apps/waap/resources/waap.data`, лицензия внутри
+Модель агента в образе — продвинутая модель (`openappsec/agent/components/security_apps/waap/resources/waap.data`, лицензия внутри
 файла). Модель WAF NginxionS обучается из неё в CI на настоящем агенте (`training.yml`: ветки `training/**` или `[train]` в коммите) и
 выпускается, только если на отложенных сайтах и атаках она не хуже модели образа; устройство, данные и выпуск —
 `docs/MODEL.md`.
