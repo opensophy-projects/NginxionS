@@ -27,6 +27,8 @@ const WafAnalytics = lazy(() => import("src/nginxions/pages/WafAnalytics"));
 const Notifications = lazy(() => import("src/nginxions/pages/Notifications"));
 // NginxionS: one page per agent: its policies (GUI or code) and the agent itself
 const AgentOpenappsec = lazy(() => import("src/nginxions/pages/AgentOpenappsec"));
+// NginxionS: Agents → Nodes, the servers of NginxionS under this one (phase 15)
+const Nodes = lazy(() => import("src/nginxions/pages/Nodes"));
 const BlockPage = lazy(() => import("src/nginxions/pages/BlockPage"));
 const Crowdsec = lazy(() => import("src/nginxions/pages/Crowdsec"));
 // NginxionS: the decisions of CrowdSec are in Analytics → Blocks
@@ -110,6 +112,7 @@ function Router() {
 						<Route path="/crowdsec" element={<Crowdsec />} />
 						<Route path="/agents/open-appsec" element={<AgentOpenappsec />} />
 						<Route path="/agents/block-page" element={<BlockPage />} />
+						<Route path="/agents/nodes" element={<Nodes />} />
 						<Route path="/analytics/blocks" element={<Blocks />} />
 						{/* NginxionS: every request of the hosts is a kind of Events */}
 						<Route path="/analytics/requests" element={<RequestsRedirect />} />

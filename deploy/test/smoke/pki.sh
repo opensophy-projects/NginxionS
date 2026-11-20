@@ -251,3 +251,56 @@ $CURL "$ADMIN/api/nginxions/mtls/proxy_host/$quick_id" | tr -d ' \n' | grep -q '
 if $CURL "$ADMIN/api/nginxions/certificates?limit=200" | grep -q "proxy_host-$quick_id\.ca\.pem"; then
   fail "the CA file of quick.local is left in the registry"
 fi
+
+# ------------------------------------------------- servers of NginxionS (docs/adr/0012-nodes.md, phase 15)
+step "Nodes: this server joins itself as a node with a one-time code (CSR, PKI, token, heartbeat), then is disabled"
+node_answer=$(api_json -X POST "$ADMIN/api/nginxions/nodes" -d '{"name": "smoke-node", "labels": ["smoke"]}' | json)
+node_id=$(echo "$node_answer" | grep -o '"node":{"id":[0-9]*' | grep -o '[0-9]*$')
+node_code=$(echo "$node_answer" | grep -o '"code":"n-[0-9a-f]*\.[A-Za-z0-9_-]*"' | cut -d'"' -f4)
+[ -n "$node_id" ] && [ -n "$node_code" ] || fail "no node or join code: $node_answer"
+expect "$(as_analyst -X POST -H 'Content-Type: application/json' "$ADMIN/api/nginxions/nodes" -d '{"name": "x"}')" 403 \
+  "analyst adds a node"
+# without login: a code that is not ours is refused
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -X POST \
+  "$ADMIN/api/nginxions/nodes/register" -d '{"code": "n-0000000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "csr_pem": "x"}')" \
+  401 "register with an unknown code"
+# the backend of this server calls its own panel as its manager (the certificate of the panel is pinned)
+member=$(api_json -X PUT "$ADMIN/api/nginxions/cluster/member" \
+  -d "{\"manager_url\": \"https://127.0.0.1:81\", \"code\": \"$node_code\"}" | json)
+echo "$member" | grep -q '"joined":true' || fail "this server did not join itself: $member"
+echo "$member" | grep -q '"fingerprint":"[0-9A-F:]\{95\}"' || fail "no pinned fingerprint of the manager: $member"
+$CURL "$ADMIN/api/nginxions/nodes" | json | grep -q "\"id\":$node_id,[^}]*\"status\":\"active\"" \
+  || fail "the node is not active: $($CURL "$ADMIN/api/nginxions/nodes" | json)"
+$CURL "$ADMIN/api/nginxions/pki" | json | grep -q '"name":"NginxionSNodes"' \
+  || fail "no trust domain of the nodes in the PKI"
+# the code worked once
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -X POST \
+  "$ADMIN/api/nginxions/nodes/register" -d "{\"code\": \"$node_code\", \"csr_pem\": \"x\"}")" 401 "the join code used again"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/heartbeat")" 401 "a heartbeat with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/package")" 401 "a package with a wrong token"
+
+step "Nodes: a host given to the node comes in its signed package; here its domain is taken, so it is left out and told"
+api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [$host_id]}" | json | grep -q "\[$host_id\]" \
+  || fail "the host was not given to the node"
+applied=""
+for _ in $(seq 1 30); do
+  nodes_now=$($CURL "$ADMIN/api/nginxions/nodes" | json)
+  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":1' && { applied=1; break; }
+  sleep 2
+done
+[ -n "$applied" ] || fail "the package of the node was not applied: $nodes_now"
+echo "$nodes_now" | grep -q '"package_error":""' || fail "the package of the node has an error: $nodes_now"
+# the host of this server is still the one serving mtls.local (one row, not a copy)
+expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
+$CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"
+# its next heartbeat (every 30 s) learns it was disabled
+disabled=""
+for _ in $(seq 1 25); do
+  $CURL "$ADMIN/api/nginxions/cluster/member" | json | grep -q '"disabled":true' && { disabled=1; break; }
+  sleep 2
+done
+[ -n "$disabled" ] || fail "the node did not learn it was disabled: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
+$CURL -X DELETE "$ADMIN/api/nginxions/cluster/member" | json | grep -q '"joined":false' || fail "leaving the manager failed"
+$CURL -X DELETE "$ADMIN/api/nginxions/nodes/$node_id" | grep -q true || fail "the disabled node was not deleted"

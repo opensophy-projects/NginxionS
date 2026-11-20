@@ -686,3 +686,64 @@ export const putBlockPageCode = (content: string, dryRun: boolean) =>
 		valid: boolean;
 		error?: string;
 	}>;
+
+// ------------------------------------------------------- servers of NginxionS (docs/adr/0012-nodes.md)
+
+export type NodeState = "pending" | "expired" | "online" | "offline" | "revoked";
+
+export interface ClusterNode {
+	id: number;
+	uid: string;
+	name: string;
+	status: "pending" | "active" | "revoked";
+	state: NodeState;
+	labels: string[];
+	fingerprint: string;
+	address: string;
+	info: {
+		version?: string;
+		hostname?: string;
+		hosts?: number | null;
+		uptime?: number | null;
+		agent?: string;
+		package_version?: string;
+		package_skipped?: number | null;
+		package_error?: string;
+	};
+	host_ids: number[];
+	created_on: string;
+	registered_on: string | null;
+	last_seen_on: string | null;
+	code_expires_on: string | null;
+}
+
+export interface NodeCode {
+	node: ClusterNode;
+	code: string;
+	code_expires_on: string;
+}
+
+export interface ClusterMember {
+	joined: boolean;
+	manager_url?: string;
+	uid?: string;
+	name?: string;
+	fingerprint?: string;
+	joined_on?: string;
+	last_ok_on?: string | null;
+	last_error?: string;
+	disabled?: boolean;
+}
+
+export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });
+export const addNode = (data: { name: string; labels?: string[] }): Promise<NodeCode> =>
+	api.post({ url: "/nginxions/nodes", data });
+export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/nginxions/nodes/${id}/code` });
+export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
+export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
+export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });
+export const joinCluster = (data: { manager_url: string; code: string }): Promise<ClusterMember> =>
+	api.put({ url: "/nginxions/cluster/member", data });
+export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
+export const setNodeHosts = (id: number, hostIds: number[]): Promise<number[]> =>
+	api.put({ url: `/nginxions/nodes/${id}/hosts`, data: { host_ids: hostIds } });

@@ -24,6 +24,8 @@ import internalHosts, { HOST_OBJECTS } from "./hosts.js";
 import internalLearning from "./learning/index.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
+import internalNodes from "./nodes/index.js";
+import internalMember from "./nodes/member.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
@@ -39,6 +41,7 @@ import internalWaf from "./waf/index.js";
 import { getAgentMetrics } from "./waf/metrics.js";
 import internalWafObjects, { simulateHostMode } from "./waf/objects/api.js";
 import internalWafSchemas from "./waf/schemas.js";
+import { sensitiveLimiter } from "./rate-limit.js";
 import internalWafTrial from "./waf/trial.js";
 
 const router = express.Router({
@@ -2955,5 +2958,183 @@ router
 	.options((_, res) => res.sendStatus(204))
 	.all(jwtdecode())
 	.delete(handle((req, res) => internalLearningSnapshots.remove(res.locals.access, String(req.params.snapshot_id))));
+
+// ------------------------------------------------------------------ servers of NginxionS (docs/adr/0012-nodes.md)
+
+const nodeSchema = {
+	type: "object",
+	additionalProperties: false,
+	properties: {
+		name: { type: "string", minLength: 1, maxLength: 100 },
+		labels: { type: "array", maxItems: 20, items: { type: "string", maxLength: 32 } },
+	},
+};
+const nodeId = (req) => {
+	const id = Number(req.params.node_id);
+	if (!Number.isInteger(id) || id < 1 || id > MAX_ID) throw new errs.ValidationError("invalid node id");
+	return id;
+};
+
+/**
+ * GET  /api/nginxions/nodes — the nodes of this manager with their state
+ * POST /api/nginxions/nodes — {name, labels?}: a node to come and its one-time join code
+ */
+router
+	.route("/nodes")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_, res) => internalNodes.list(res.locals.access)))
+	.post(
+		handle(
+			async (req, res) =>
+				internalNodes.add(res.locals.access, await validator({ ...nodeSchema, required: ["name"] }, req.body)),
+			201,
+		),
+	);
+
+const unknownNode = (res, message) => res.status(401).send({ error: { code: 401, message } });
+
+/**
+ * POST /api/nginxions/nodes/register — without login: a node registers with its join code.
+ *   {code, csr_pem, info?} → {uid, name, token, cert_pem, chain_pem}
+ */
+router.post("/nodes/register", sensitiveLimiter, express.json({ limit: "64kb" }), async (req, res, next) => {
+	try {
+		res.set("Cache-Control", "no-store");
+		const answer = await internalNodes.register(
+			{ code: String(req.body?.code ?? ""), csr_pem: req.body?.csr_pem, info: req.body?.info },
+			req.ip,
+		);
+		if (!answer) return unknownNode(res, "Unknown, used or expired join code");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * POST /api/nginxions/nodes/heartbeat — without login: Authorization: Bearer <token of the node>; {info} →
+ *   {uid, name, labels, server_time}; 401 for an unknown or disabled node
+ */
+router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.heartbeat(token, req.body?.info, req.ip);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * GET /api/nginxions/nodes/package — without login: Authorization: Bearer <token of the node>; the signed package of
+ *   the node {schema, version, body, signature}; 401 for an unknown or disabled node
+ */
+router.get("/nodes/package", async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.package(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
+ * DELETE /api/nginxions/nodes/:node_id — a node not active (waiting or disabled)
+ */
+router
+	.route("/nodes/:node_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) =>
+			internalNodes.update(res.locals.access, nodeId(req), await validator(nodeSchema, req.body)),
+		),
+	)
+	.delete(handle((req, res) => internalNodes.remove(res.locals.access, nodeId(req))));
+
+/** POST /api/nginxions/nodes/:node_id/code — a new join code (the old one stops working) */
+router
+	.route("/nodes/:node_id/code")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
+
+/**
+ * GET /api/nginxions/nodes/:node_id/hosts — the proxy hosts the node serves (ids of this server)
+ * PUT /api/nginxions/nodes/:node_id/hosts — {host_ids}: they go to the node with its next package
+ */
+router
+	.route("/nodes/:node_id/hosts")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.hosts(res.locals.access, nodeId(req))))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["host_ids"],
+					properties: {
+						host_ids: {
+							type: "array",
+							maxItems: 5000,
+							items: { type: "integer", minimum: 1, maximum: MAX_ID },
+						},
+					},
+				},
+				req.body,
+			);
+			return internalNodes.setHosts(res.locals.access, nodeId(req), data.host_ids);
+		}),
+	);
+
+/** POST /api/nginxions/nodes/:node_id/revoke — disable: its certificate revoked, its token forgotten */
+router
+	.route("/nodes/:node_id/revoke")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalNodes.revoke(res.locals.access, nodeId(req))));
+
+/**
+ * GET    /api/nginxions/cluster/member — this server as a node: its manager, id, last contact
+ * PUT    /api/nginxions/cluster/member — {manager_url, code}: connect to a manager
+ * DELETE /api/nginxions/cluster/member — disconnect (disable it on the manager too)
+ */
+router
+	.route("/cluster/member")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_, res) => internalMember.status(res.locals.access)))
+	.put(
+		handle(async (req, res) =>
+			internalMember.join(
+				res.locals.access,
+				await validator(
+					{
+						type: "object",
+						additionalProperties: false,
+						required: ["manager_url", "code"],
+						properties: {
+							manager_url: { type: "string", minLength: 8, maxLength: 255 },
+							code: { type: "string", minLength: 20, maxLength: 120 },
+						},
+					},
+					req.body,
+				),
+			),
+		),
+	)
+	.delete(handle((_, res) => internalMember.leave(res.locals.access)));
 
 export default router;
