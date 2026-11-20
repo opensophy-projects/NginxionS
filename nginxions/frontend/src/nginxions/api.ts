@@ -700,7 +700,17 @@ export interface ClusterNode {
 	labels: string[];
 	fingerprint: string;
 	address: string;
-	info: { version?: string; hostname?: string; hosts?: number | null; uptime?: number | null; agent?: string };
+	info: {
+		version?: string;
+		hostname?: string;
+		hosts?: number | null;
+		uptime?: number | null;
+		agent?: string;
+		package_version?: string;
+		package_skipped?: number | null;
+		package_error?: string;
+	};
+	host_ids: number[];
 	created_on: string;
 	registered_on: string | null;
 	last_seen_on: string | null;
@@ -735,3 +745,5 @@ export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/n
 export const joinCluster = (data: { manager_url: string; code: string }): Promise<ClusterMember> =>
 	api.put({ url: "/nginxions/cluster/member", data });
 export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
+export const setNodeHosts = (id: number, hostIds: number[]): Promise<number[]> =>
+	api.put({ url: `/nginxions/nodes/${id}/hosts`, data: { host_ids: hostIds } });

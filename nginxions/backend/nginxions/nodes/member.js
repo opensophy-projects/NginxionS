@@ -19,9 +19,13 @@ import pjson from "../../package.json" with { type: "json" };
 import { makeCsr } from "../pki/ops.js";
 import { generateKey } from "../pki/x509.js";
 import { decrypt, encrypt } from "../secrets.js";
+import { applyContent } from "./apply.js";
 import { HEARTBEAT_MS, normalizeManagerUrl, uidOfCode } from "./model.js";
+import { openPackage } from "./package-model.js";
 
 export const MEMBER_FILE = process.env.NGINXIONS_MEMBER_FILE || "/data/nginxions/cluster/member.json";
+/** the content of the last package applied: what a failed package goes back to */
+const PACKAGE_FILE = () => path.join(path.dirname(MEMBER_FILE), "package.json");
 const TIMEOUT_MS = 10000;
 const MAX_ANSWER = 256 * 1024;
 
@@ -129,7 +133,7 @@ const statusOf = (state) =>
 		: { joined: false };
 
 /** what the node tells the manager in its heartbeat */
-const ownInfo = async () => {
+const ownInfo = async (state) => {
 	let hosts = null;
 	try {
 		const [row] = await db()("proxy_host").where({ is_deleted: 0, enabled: 1 }).count({ n: "id" });
@@ -137,10 +141,64 @@ const ownInfo = async () => {
 	} catch {
 		hosts = null;
 	}
-	return { version: pjson.version, hostname: hostname(), hosts, uptime: Math.round(process.uptime()) };
+	return {
+		version: pjson.version,
+		hostname: hostname(),
+		hosts,
+		uptime: Math.round(process.uptime()),
+		package_version: state?.applied_version ?? "",
+		package_skipped: state?.package_skipped ?? null,
+		package_error: state?.package_error ?? "",
+	};
 };
 
 // ------------------------------------------------------------------------------------------------ heartbeat
+/** the package applied last, or none (no managed rows) */
+const lastContent = async () => {
+	try {
+		return JSON.parse(await readFile(PACKAGE_FILE(), "utf8"));
+	} catch {
+		return { hosts: [], certificates: [], access_lists: [], waf_hosts: [], waf_locations: [] };
+	}
+};
+
+/**
+ * The package of the manager: fetched, its signature checked against the pinned key, applied; a package nginx
+ * refuses is replaced by the one before (the node keeps serving what worked) and is not tried again.
+ * @returns {Promise<object>} what changes in the state
+ */
+export const sync = async (state) => {
+	try {
+		if (!state.signing_key) throw new Error("no key of the manager to check its package");
+		const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/package", {
+			method: "GET",
+			token: decrypt(state.token_enc),
+			pin: state.fingerprint,
+		});
+		if (answer.status !== 200) throw new Error(`the manager answered ${answer.status}`);
+		const content = openPackage(answer.body, state.signing_key);
+		const result = await applyContent(content);
+		if (result.offline.length) {
+			const before = await lastContent();
+			await applyContent(before);
+			const error = `nginx refused ${result.offline.length} host(s): ${result.offline[0].error}`;
+			logger.warn(`Cluster: the package ${answer.body.version.slice(0, 12)} was rolled back: ${error}`);
+			return { failed_version: answer.body.version, package_error: error.slice(0, 300) };
+		}
+		await mkdir(path.dirname(PACKAGE_FILE()), { recursive: true, mode: 0o700 });
+		await writeFile(PACKAGE_FILE(), JSON.stringify(content), { mode: 0o600 });
+		logger.info(`Cluster: package ${answer.body.version.slice(0, 12)} applied (${result.hosts} host(s))`);
+		return {
+			applied_version: answer.body.version,
+			failed_version: "",
+			package_error: "",
+			package_skipped: result.skipped.length,
+		};
+	} catch (err) {
+		return { package_error: String(err.message).slice(0, 300) };
+	}
+};
+
 let timer = null;
 let running = false;
 
@@ -153,15 +211,22 @@ export const beat = async () => {
 		const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/heartbeat", {
 			token: decrypt(state.token_enc),
 			pin: state.fingerprint,
-			body: { info: await ownInfo() },
+			body: { info: await ownInfo(state) },
 		});
 		if (answer.status === 200) {
-			await writeState({
+			let next = {
 				...state,
 				name: answer.body?.name || state.name,
+				// a node joined before step 15.2 learns the key of its manager here, over the pinned channel
+				signing_key: state.signing_key || answer.body?.signing_key || "",
 				last_ok_on: new Date(),
 				last_error: "",
-			});
+			};
+			const version = answer.body?.package_version;
+			if (version && version !== next.applied_version && version !== next.failed_version) {
+				next = { ...next, ...(await sync(next)) };
+			}
+			await writeState(next);
 		} else if (answer.status === 401 || answer.status === 403) {
 			await writeState({ ...state, disabled: true, last_error: "disabled on the manager" });
 			logger.warn("Cluster: this node was disabled on its manager; it keeps protecting its sites on its own");
@@ -212,7 +277,7 @@ const internalMember = {
 		let answer;
 		try {
 			answer = await managerRequest(managerUrl, "/api/nginxions/nodes/register", {
-				body: { code, csr_pem: csrPem, info: await ownInfo() },
+				body: { code, csr_pem: csrPem, info: await ownInfo(null) },
 			});
 		} catch (err) {
 			throw new errs.ValidationError(`The manager is not reachable: ${err.message}`);
@@ -231,6 +296,7 @@ const internalMember = {
 			key_enc: encrypt(keyPem),
 			cert_pem: answer.body.cert_pem,
 			chain_pem: answer.body.chain_pem,
+			signing_key: answer.body.signing_key || "",
 			joined_on: now,
 			last_ok_on: now,
 			last_error: "",
