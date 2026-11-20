@@ -615,6 +615,60 @@ const scenarios = [
 		},
 	},
 	{
+		name: "nodes",
+		title:
+			"Agents → Nodes: a node added gets a code; this server joins itself with it (online), disabled it learns so, disconnected and deleted",
+		async run() {
+			const modal = () => page.locator(".modal.show").last();
+			await go("/agents/nodes");
+			await page.locator("#node-name").fill("gui-node");
+			await page.locator("#node-labels").fill("gui test");
+			await page.getByRole("button", { name: "Add node" }).click();
+			const code = (await page.getByTestId("node-code").innerText()).trim();
+			if (!/^n-[0-9a-f]{16}\./.test(code)) throw new Error(`no join code shown: ${code}`);
+			const row = () => page.locator("tr", { hasText: "gui-node" }).first();
+			await row().waitFor();
+			if (!/Waits for connection/.test(await row().innerText())) throw new Error("the new node does not wait");
+			// "This server": the backend calls its own panel as its manager
+			await page.locator("#cluster-manager").fill("https://127.0.0.1:81");
+			await page.locator("#cluster-code").fill(code);
+			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await page.getByText("Certificate of the manager (SHA-256)").waitFor({ timeout: 30000 });
+			await until("the node is online in the list", async () => {
+				await go("/agents/nodes");
+				return /Online/.test(await row().innerText());
+			});
+			// Disable → its next heartbeat learns it
+			await row().getByRole("button", { name: "Disable" }).click();
+			await modal().getByRole("button", { name: "Disable", exact: true }).click();
+			await saved("disable the node");
+			await until(
+				"the node learns it was disabled",
+				async () => {
+					await go("/agents/nodes");
+					return page.getByText("The manager disabled this node").isVisible();
+				},
+				{ timeout: 75000, every: 3000 },
+			);
+			await page.getByRole("button", { name: "Disconnect" }).click();
+			await modal().getByRole("button", { name: "Disconnect", exact: true }).click();
+			await saved("disconnect");
+			await row().getByRole("button", { name: "Delete" }).click();
+			await modal().getByRole("button", { name: "Delete", exact: true }).click();
+			await saved("delete the node");
+			await page.locator("tr", { hasText: "gui-node" }).waitFor({ state: "detached", timeout: 15000 });
+			if ((await api("GET", "/nginxions/cluster/member")).joined) throw new Error("still a node of a manager");
+		},
+		async cleanup() {
+			await api("DELETE", "/nginxions/cluster/member").catch(() => {});
+			for (const n of await api("GET", "/nginxions/nodes").catch(() => [])) {
+				if (n.name !== "gui-node") continue;
+				if (n.status === "active") await api("POST", `/nginxions/nodes/${n.id}/revoke`);
+				await api("DELETE", `/nginxions/nodes/${n.id}`);
+			}
+		},
+	},
+	{
 		name: "default-site",
 		title: "Settings → default site: «404» makes an unknown domain answer 404, «congratulations» brings the page back",
 		async run() {

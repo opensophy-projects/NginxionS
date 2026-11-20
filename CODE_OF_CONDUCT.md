@@ -319,7 +319,7 @@ flowchart LR
 - `ROADMAP.md` — план разработки по фазам
 - `LEARNING-RESEARCH.md` — исследование обучения агента open-appsec (перед фазой 8)
 - `tutor.md` — черновик статьи об open-appsec
-- `adr/` — архитектурные решения: сеть (0001), RBAC (0007), политика WAF (0008), PKI и mTLS (0009), CrowdSec (0010), обучение (0011)
+- `adr/` — архитектурные решения: сеть (0001), RBAC (0007), политика WAF (0008), PKI и mTLS (0009), CrowdSec (0010), обучение (0011), несколько серверов (0012)
 
 ### `nginxions/` — образ nginxions (NPMplus + NginxionS)
 
@@ -407,6 +407,10 @@ flowchart LR
       - `schema.js` — приведение старой базы к схеме NginxionS
       - `copy.js` — копирование строк в базу NginxionS
       - `files.js` — копирование файлов в `/data`
+    - **`nodes/`** — несколько серверов NginxionS (фаза 15, ADR-0012)
+      - `index.js` — узлы этого сервера: добавление с одноразовым кодом, регистрация по CSR (сертификат из PKI), heartbeat, отключение
+      - `member.js` — этот сервер как узел управляющего: подключение, закреплённый сертификат управляющего, heartbeat
+      - `model.js` — чистые функции узлов: идентификаторы, коды, хэши, состояние (без базы и сети)
     - **`notifications/`** — `index.js` (каналы, правила, движок проверки), `rules.js` (что проверяется и текст сообщений), `channels.js` (отправка: email, webhook с HMAC, Telegram)
     - **`pki/`** — свой PKI и mTLS
       - `index.js` — CA, выпуск, отзыв, CRL, OCSP, ссылки на скачивание
@@ -477,6 +481,7 @@ flowchart LR
       - `Certificates/` — раздел «Сертификаты» одной страницей: сводка, хосты с mTLS, таблица всех сертификатов (ACME, свои, PKI, пропуска mTLS, файлы) с массовым отзывом, блоки «Центры сертификации» и «ACME-серверы», окно настроек; старые `/pki`, `/mtls`, `/certificates/acme` ведут сюда
       - `Notifications/` — уведомления
       - `Roles/` — роли и права
+      - `Nodes/` — Агенты → Узлы: серверы под управлением этого (код подключения, состояние, отключение) и подключение этого сервера к управляющему
       - `Services/` — сервисы стека
     - **`modals/`** — окна: запрос (`RequestModal.tsx`), событие WAF (`WafEventModal.tsx`), CrowdSec в окнах событий (`BanActions.tsx`), история хоста (`HostHistoryModal.tsx`), логи сервиса (`ServiceLogsModal.tsx`), подтверждение (`ConfirmModal.tsx`), политика только для чтения (`WafPolicyModal.tsx`)
     - **`components/`** — части форм хостов: WAF (`WafFields.tsx`), страны (`GeoFields.tsx`); редактор кода с подсветкой только нужных языков (`CodeEditor.tsx`, на него указывает `vite.config.ts` вместо пакета `@uiw/react-textarea-code-editor`)

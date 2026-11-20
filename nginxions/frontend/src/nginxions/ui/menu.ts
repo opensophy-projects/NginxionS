@@ -83,6 +83,8 @@ export const navigation: NavItem[] = [
 			{ id: "crowdsec", label: "nginxions.crowdsec", to: "/crowdsec", rbac: "crowdsec" },
 			// what a refused visitor sees, for both agents
 			{ id: "block-page", label: "nginxions.block-page", to: "/agents/block-page", rbac: "waf_policy" },
+			// the servers of NginxionS under this one (docs/adr/0012-nodes.md)
+			{ id: "nodes", label: "nginxions.nodes", to: "/agents/nodes", rbac: "nodes" },
 		],
 	},
 	{
