@@ -63,6 +63,9 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 					let answer = null;
 					if (req.url === "/api/nginxions/nodes/register")
 						answer = await nodes.register(body, "198.51.100.7");
+					if (req.url === "/api/nginxions/nodes/package") {
+						answer = await nodes.package(/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1]);
+					}
 					if (req.url === "/api/nginxions/nodes/heartbeat") {
 						const token = /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1];
 						answer = await nodes.heartbeat(token, body.info, "198.51.100.7");
@@ -119,6 +122,12 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await member.beat();
 		const state = await member.readState();
 		assert.equal(state.last_error, "");
+		// the key of the manager is pinned, the (empty) package of the node is applied and its version told
+		assert.match(state.signing_key, /BEGIN PUBLIC KEY/);
+		assert.match(state.applied_version, /^[0-9a-f]{64}$/);
+		assert.equal(state.package_error, "");
+		await member.beat();
+		assert.equal((await nodes.list(ADMIN))[0].info.package_version, state.applied_version);
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
 	});
 

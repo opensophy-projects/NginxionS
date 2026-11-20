@@ -1,9 +1,10 @@
 // Agents → Nodes (docs/ROADMAP.md, phase 15; docs/adr/0012-nodes.md): the servers of NginxionS connected to this
 // one, and this server as a node of a manager. A node is added here and gets a one-time join code; on the new server
 // the code and the address of this one are entered in "This server".
-import { IconCopy, IconKey, IconPlugConnected, IconPlus, IconTrash, IconUnlink } from "@tabler/icons-react";
+import { IconCopy, IconKey, IconPlugConnected, IconPlus, IconServer, IconTrash, IconUnlink } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
+import { getProxyHosts, type ProxyHost } from "src/api/backend";
 import Alert from "react-bootstrap/Alert";
 import { Button, HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
@@ -22,6 +23,7 @@ import {
 	type NodeState,
 	newNodeCode,
 	revokeNode,
+	setNodeHosts,
 } from "../../api";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { useCan } from "../../rbac/hooks";
@@ -68,6 +70,74 @@ function CodeBox({ result, onClose }: { result: NodeCode; onClose: () => void })
 	);
 }
 
+/** the proxy hosts of this server a node serves: ticked ones go to the node with its next package */
+function HostsPicker({ hosts, picked }: { hosts: ProxyHost[]; picked: Set<number> }) {
+	const [, redraw] = useState(0);
+	if (!hosts.length) {
+		return (
+			<p className="text-secondary mb-0">
+				<T id="nginxions.nodes.hosts.none" />
+			</p>
+		);
+	}
+	return (
+		<>
+			<p className="text-secondary small">
+				<T id="nginxions.nodes.hosts.hint" />
+			</p>
+			<div className="nx-scroll" style={{ maxHeight: "50vh", overflowY: "auto" }}>
+				{hosts.map((h) => (
+					<label key={h.id} className="form-check">
+						<input
+							type="checkbox"
+							className="form-check-input"
+							checked={picked.has(h.id)}
+							onChange={(e) => {
+								if (e.target.checked) picked.add(h.id);
+								else picked.delete(h.id);
+								redraw((n) => n + 1);
+							}}
+						/>
+						<span className="form-check-label">{h.domainNames.join(", ")}</span>
+					</label>
+				))}
+			</div>
+		</>
+	);
+}
+
+/** the package of a node: applied, refused, or not there yet */
+function PackageState({ node }: { node: ClusterNode }) {
+	if (node.status !== "active") return <>—</>;
+	if (node.info.package_error) {
+		return (
+			<span className="text-danger small" title={node.info.package_error}>
+				<T id="nginxions.nodes.package.error" data={{ error: node.info.package_error.slice(0, 80) }} />
+			</span>
+		);
+	}
+	if (!node.info.package_version) {
+		return (
+			<span className="text-secondary small">
+				<T id="nginxions.nodes.package.waiting" />
+			</span>
+		);
+	}
+	return (
+		<span className="small">
+			<span className="badge bg-green-lt me-1">
+				<T id="nginxions.nodes.package.applied" />
+			</span>
+			<span className="text-secondary font-monospace">{node.info.package_version.slice(0, 12)}</span>
+			{!!node.info.package_skipped && (
+				<div className="text-warning">
+					<T id="nginxions.nodes.package.skipped" data={{ count: node.info.package_skipped }} />
+				</div>
+			)}
+		</span>
+	);
+}
+
 function NodesCard() {
 	const can = useCan();
 	const { locale } = useLocaleState();
@@ -83,6 +153,25 @@ function NodesCard() {
 	const [saving, setSaving] = useState(false);
 	const [code, setCode] = useState<NodeCode | null>(null);
 	const refresh = () => queryClient.invalidateQueries({ queryKey: ["nginxions-nodes"] });
+	const { data: proxyHosts } = useQuery({
+		queryKey: ["nginxions-nodes-proxy-hosts"],
+		queryFn: () => getProxyHosts(),
+		enabled: manage,
+	});
+
+	const onHosts = (node: ClusterNode) => {
+		const picked = new Set(node.host_ids);
+		showConfirmModal({
+			tTitle: "nginxions.nodes.hosts.title",
+			tConfirm: "save",
+			children: <HostsPicker hosts={proxyHosts ?? []} picked={picked} />,
+			onConfirm: async () => {
+				await setNodeHosts(node.id, [...picked]);
+				showSuccess(t("nginxions.nodes.hosts.saved", { name: node.name }));
+				refresh();
+			},
+		});
+	};
 
 	const onAdd = async (e: FormEvent) => {
 		e.preventDefault();
@@ -222,6 +311,9 @@ function NodesCard() {
 									<T id="nginxions.nodes.server" />
 								</th>
 								<th>
+									<T id="nginxions.nodes.package" />
+								</th>
+								<th>
 									<T id="nginxions.nodes.last-seen" />
 								</th>
 								<th className="w-1" />
@@ -275,10 +367,22 @@ function NodesCard() {
 											)}
 										</div>
 									</td>
+									<td data-label={t("nginxions.nodes.package")}>
+										<PackageState node={node} />
+									</td>
 									<td data-label={t("nginxions.nodes.last-seen")}>
 										{node.last_seen_on ? formatDateTime(node.last_seen_on, locale) : "—"}
 									</td>
 									<td className="text-nowrap nx-actions-row">
+										{manage && node.status !== "revoked" && (
+											<Button size="sm" className="me-2" onClick={() => onHosts(node)}>
+												<IconServer size={16} className="me-1" />
+												<T
+													id="nginxions.nodes.hosts.button"
+													data={{ count: node.host_ids.length }}
+												/>
+											</Button>
+										)}
 										{manage && node.status === "pending" && (
 											<Button size="sm" className="me-2" onClick={() => onNewCode(node)}>
 												<IconKey size={16} className="me-1" />

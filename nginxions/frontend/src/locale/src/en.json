@@ -4349,6 +4349,21 @@
 	"nginxions.nodes.hosts": {
 		"defaultMessage": "{count, plural, one {# host} other {# hosts}}"
 	},
+	"nginxions.nodes.hosts.button": {
+		"defaultMessage": "Hosts ({count})"
+	},
+	"nginxions.nodes.hosts.hint": {
+		"defaultMessage": "The ticked hosts go to the node with their certificates, access lists and WAF modes; it applies them within a minute. ACME certificates stay here: their renewal is on this server."
+	},
+	"nginxions.nodes.hosts.none": {
+		"defaultMessage": "This server has no proxy hosts yet."
+	},
+	"nginxions.nodes.hosts.saved": {
+		"defaultMessage": "Hosts of {name} saved"
+	},
+	"nginxions.nodes.hosts.title": {
+		"defaultMessage": "Hosts of the node"
+	},
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Labels"
 	},
@@ -4369,6 +4384,21 @@
 	},
 	"nginxions.nodes.none": {
 		"defaultMessage": "No nodes yet: this server works on its own."
+	},
+	"nginxions.nodes.package": {
+		"defaultMessage": "Configuration"
+	},
+	"nginxions.nodes.package.applied": {
+		"defaultMessage": "Applied"
+	},
+	"nginxions.nodes.package.error": {
+		"defaultMessage": "Not applied: {error}"
+	},
+	"nginxions.nodes.package.skipped": {
+		"defaultMessage": "{count, plural, one {# item left out} other {# items left out}}"
+	},
+	"nginxions.nodes.package.waiting": {
+		"defaultMessage": "Waits for the node"
 	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Disable"

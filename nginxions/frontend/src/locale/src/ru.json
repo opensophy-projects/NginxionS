@@ -4349,6 +4349,21 @@
 	"nginxions.nodes.hosts": {
 		"defaultMessage": "{count, plural, one {# хост} few {# хоста} many {# хостов} other {# хоста}}"
 	},
+	"nginxions.nodes.hosts.button": {
+		"defaultMessage": "Хосты ({count})"
+	},
+	"nginxions.nodes.hosts.hint": {
+		"defaultMessage": "Отмеченные хосты уходят на узел вместе с сертификатами, списками доступа и режимами WAF; узел применит их в течение минуты. Сертификаты ACME остаются здесь: их продлевает этот сервер."
+	},
+	"nginxions.nodes.hosts.none": {
+		"defaultMessage": "На этом сервере пока нет прокси-хостов."
+	},
+	"nginxions.nodes.hosts.saved": {
+		"defaultMessage": "Хосты узла {name} сохранены"
+	},
+	"nginxions.nodes.hosts.title": {
+		"defaultMessage": "Хосты узла"
+	},
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Метки"
 	},
@@ -4369,6 +4384,21 @@
 	},
 	"nginxions.nodes.none": {
 		"defaultMessage": "Узлов пока нет: этот сервер работает самостоятельно."
+	},
+	"nginxions.nodes.package": {
+		"defaultMessage": "Конфигурация"
+	},
+	"nginxions.nodes.package.applied": {
+		"defaultMessage": "Применена"
+	},
+	"nginxions.nodes.package.error": {
+		"defaultMessage": "Не применена: {error}"
+	},
+	"nginxions.nodes.package.skipped": {
+		"defaultMessage": "{count, plural, one {# объект пропущен} few {# объекта пропущено} many {# объектов пропущено} other {# объекта пропущено}}"
+	},
+	"nginxions.nodes.package.waiting": {
+		"defaultMessage": "Ждёт узел"
 	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Отключить"

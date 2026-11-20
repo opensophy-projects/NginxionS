@@ -51,6 +51,10 @@ export const normalizeInfo = (info) => {
 		hosts: int(src.hosts),
 		uptime: int(src.uptime),
 		agent: ["ok", "down", "off"].includes(src.agent) ? src.agent : "",
+		// the package of configuration the node applied (step 15.2), what it left out, its last error
+		package_version: /^[0-9a-f]{64}$/.test(src.package_version ?? "") ? src.package_version : "",
+		package_skipped: int(src.package_skipped),
+		package_error: text(src.package_error, 300),
 	};
 };
 

@@ -10,6 +10,7 @@ import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
 import internalPki, { SYSTEM } from "../pki/index.js";
 import { readCsr } from "../pki/ops.js";
+import { hostIdsOf, packageOf, signingKey } from "./package.js";
 import { parseCert } from "../pki/x509.js";
 import {
 	CODE_HOURS,
@@ -33,7 +34,7 @@ const parse = (value) => (typeof value === "string" ? JSON.parse(value || "null"
 const audit = (access, action, id, meta) =>
 	internalAuditLog.add(access, { action, object_type: "node", object_id: id, meta });
 
-const toNode = (row, now = Date.now()) => ({
+const toNode = (row, now = Date.now(), hostIds = []) => ({
 	id: row.id,
 	uid: row.uid,
 	name: row.name,
@@ -47,6 +48,7 @@ const toNode = (row, now = Date.now()) => ({
 	registered_on: row.registered_on,
 	last_seen_on: row.last_seen_on,
 	code_expires_on: row.status === "pending" ? row.code_expires_on : null,
+	host_ids: hostIds,
 });
 
 const rowOf = async (id) => {
@@ -102,8 +104,15 @@ const internalNodes = {
 	list: async (access) => {
 		await access.can("nodes:view");
 		const rows = await db()(TABLE).orderBy("id");
+		const links = await db()("nginxions_node_host");
 		const now = Date.now();
-		return rows.map((row) => toNode(row, now));
+		return rows.map((row) =>
+			toNode(
+				row,
+				now,
+				links.filter((l) => l.node_id === row.id).map((l) => l.proxy_host_id),
+			),
+		);
 	},
 
 	/**
@@ -187,6 +196,7 @@ const internalNodes = {
 		await access.can("nodes:manage");
 		const row = await rowOf(id);
 		if (row.status === "active") throw new errs.ValidationError("Disable the node first");
+		await db()("nginxions_node_host").where({ node_id: id }).delete();
 		await db()(TABLE).where({ id }).delete();
 		await audit(access, "deleted", id, { name: row.name, uid: row.uid });
 		return true;
@@ -240,7 +250,14 @@ const internalNodes = {
 				modified_on: now,
 			});
 		await audit(SYSTEM, "updated", row.id, { name: row.name, uid, registered: true });
-		return { uid, name: row.name, token, cert_pem: issued.files.cert_pem, chain_pem: issued.files.chain_pem };
+		return {
+			uid,
+			name: row.name,
+			token,
+			cert_pem: issued.files.cert_pem,
+			chain_pem: issued.files.chain_pem,
+			signing_key: (await signingKey()).publicKeyPem,
+		};
 	},
 
 	/**
@@ -258,7 +275,47 @@ const internalNodes = {
 				address: String(address).slice(0, 64),
 				info: JSON.stringify(normalizeInfo(info)),
 			});
-		return { uid: row.uid, name: row.name, labels: parse(row.labels) ?? [], server_time: now.toISOString() };
+		const pkg = await packageOf(row.id);
+		return {
+			uid: row.uid,
+			name: row.name,
+			labels: parse(row.labels) ?? [],
+			server_time: now.toISOString(),
+			package_version: pkg.version,
+			signing_key: (await signingKey()).publicKeyPem,
+		};
+	},
+
+	/** Without login: the signed package of the node with this token; null for an unknown or disabled node */
+	package: async (token) => {
+		const row = await nodeOfToken(token);
+		return row ? packageOf(row.id) : null;
+	},
+
+	/** the proxy hosts a node serves (ids of this manager) */
+	hosts: async (access, id) => {
+		await access.can("nodes:view");
+		await rowOf(id);
+		return hostIdsOf(id);
+	},
+
+	/** @param {number[]} hostIds  the proxy hosts of this manager the node serves from now on */
+	setHosts: async (access, id, hostIds) => {
+		await access.can("nodes:manage");
+		const row = await rowOf(id);
+		const wanted = [...new Set(hostIds)];
+		const found = wanted.length
+			? (await db()("proxy_host").whereIn("id", wanted).where({ is_deleted: 0 })).map((h) => h.id)
+			: [];
+		const unknown = wanted.filter((h) => !found.includes(h));
+		if (unknown.length) throw new errs.ValidationError(`Unknown proxy hosts: ${unknown.join(", ")}`);
+		await db().transaction(async (trx) => {
+			await trx("nginxions_node_host").where({ node_id: id }).delete();
+			if (found.length)
+				await trx("nginxions_node_host").insert(found.map((h) => ({ node_id: id, proxy_host_id: h })));
+		});
+		await audit(access, "updated", id, { name: row.name, hosts: found });
+		return hostIdsOf(id);
 	},
 };
 

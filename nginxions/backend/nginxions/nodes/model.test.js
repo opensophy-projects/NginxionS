@@ -66,7 +66,16 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 		agent: "ok",
 		secret: "never stored",
 	});
-	assert.deepEqual(Object.keys(info).sort(), ["agent", "hostname", "hosts", "uptime", "version"]);
+	assert.deepEqual(Object.keys(info).sort(), [
+		"agent",
+		"hostname",
+		"hosts",
+		"package_error",
+		"package_skipped",
+		"package_version",
+		"uptime",
+		"version",
+	]);
 	assert.equal(info.hostname.length, 64);
 	assert.equal(info.hosts, 12);
 	assert.equal(info.uptime, null);
