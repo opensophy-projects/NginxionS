@@ -85,6 +85,7 @@ flowchart TB
         agent["Агент open-appsec (ML-WAF)<br/>127.0.0.1:7777<br/>политика /ext/appsec/local_policy.yaml"]
         storage["Shared storage<br/>127.0.0.1:7811<br/>обучение, decisions.data"]
         tuning["Tuning<br/>127.0.0.1:7813<br/>статистика, подсказки"]
+        smartsync["smartsync<br/>127.0.0.1:7815<br/>общее обучение (управляющий с узлами)"]
 
         subgraph np["контейнер nginxions"]
             nginx["nginx (NPMplus)<br/>+ attachment open-appsec"]
@@ -108,6 +109,7 @@ flowchart TB
     backend --> storage
     backend --> tuning
     tuning --> postgres
+    smartsync --> storage
     control --> docker
     crowdsec -. "читает логи nginx и агента (тома)" .-> nginx
     init -. "до остальных сервисов" .-> postgres
@@ -249,7 +251,9 @@ flowchart LR
 - **`smartsync-tuning/`** — tuning (Go): события WAF, статистика и предложения обучения; пароль базы не пишется в
   лог; значения запроса логов экранированы (`queries_nginxions_test.go`); библиотеки подняты в `go.mod` (chi v5,
   client-go 0.20 и др.)
-- **`smartsync/`** — централизованное обучение нескольких агентов (Go); в образ пока не входит, нужен для нескольких серверов (фаза 15 в ROADMAP)
+- **`smartsync/`** — общее обучение нескольких агентов (Go): в образе агента, работает на управляющем сервере с
+  узлами (standalone: REST `/api/sync`, блокировка файлом, без Kafka и Redis); tenant `local` — корень хранилища, как
+  у агента без облака (`internal/pkg/db/s3/s3_test.go`); ADR-0012, п. 5c
 
 Не используемое NginxionS удалено из upstream (`CLAUDE.md`, «Удалено из upstream»): примеры деплоя, плагины шлюзов
 (kong, apisix, envoy), webhook, Dockerfile upstream, Helm-чарты, готовые бинарники без исходников.
@@ -414,6 +418,10 @@ flowchart LR
       - `package.js` — пакет конфигурации узла на управляющем: его хосты, их сертификаты, списки доступа и режимы WAF; ключ подписи Ed25519
       - `package-model.js` — чистые функции пакета: каноническая форма, версия, подпись и проверка, перевод идентификаторов
       - `apply.js` — узел применяет пакет: управляемые строки, удаление лишнего, домены своих хостов не трогает, nginx с проверкой
+      - `learning.js` — общее обучение на управляющем: запросы агента узла к его shared storage и smartsync
+      - `learning-model.js` — что узлу можно в хранилище управляющего: чтение, запись только данных окна под id узла
+      - `relay.js` — ретранслятор обучения на узле (127.0.0.1:7817 хранилище, :7818 smartsync) к управляющему
+      - `role.js` — роль сервера в общем обучении: smartsync (есть узлы), обучение через управляющего (сам узел)
     - **`notifications/`** — `index.js` (каналы, правила, движок проверки), `rules.js` (что проверяется и текст сообщений), `channels.js` (отправка: email, webhook с HMAC, Telegram)
     - **`pki/`** — свой PKI и mTLS
       - `index.js` — CA, выпуск, отзыв, CRL, OCSP, ссылки на скачивание

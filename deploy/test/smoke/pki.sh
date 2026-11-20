@@ -254,6 +254,8 @@ fi
 
 # ------------------------------------------------- servers of NginxionS (docs/adr/0012-nodes.md, phase 15)
 step "Nodes: this server joins itself as a node with a one-time code (CSR, PKI, token, heartbeat), then is disabled"
+# the WAF on test.local: the agent of the node then reads its labels through the manager (step "learns through")
+ensure_waf_on
 node_answer=$(api_json -X POST "$ADMIN/api/nginxions/nodes" -d '{"name": "smoke-node", "labels": ["smoke"]}' | json)
 node_id=$(echo "$node_answer" | grep -o '"node":{"id":[0-9]*' | grep -o '[0-9]*$')
 node_code=$(echo "$node_answer" | grep -o '"code":"n-[0-9a-f]*\.[A-Za-z0-9_-]*"' | cut -d'"' -f4)
@@ -280,6 +282,10 @@ expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: 
   "$ADMIN/api/nginxions/nodes/heartbeat")" 401 "a heartbeat with a wrong token"
 expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
   "$ADMIN/api/nginxions/nodes/package")" 401 "a package with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/learning/storage//x/tuning/decisions.data")" 401 "the storage of the manager with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/learning/sync" -d '{}')" 401 "smartsync of the manager with a wrong token"
 
 step "Nodes: a host given to the node comes in its signed package; here its domain is taken, so it is left out and told"
 api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [$host_id]}" | json | grep -q "\[$host_id\]" \
@@ -306,6 +312,19 @@ done
 [ -n "$forwarded" ] || fail "no event of the node on the manager: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
 # the host of this server is still the one serving mtls.local (one row, not a copy)
 expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
+
+step "Nodes: the agent of the node learns through the manager (its relay, the shared storage of the manager)"
+# the join restarted the agent with the storage and smartsync of the manager (docs/adr/0012-nodes.md 5c); it reads the
+# labels of each WAF site every minute: through the relay of NginxionS, the pinned TLS of the node, the storage there
+learning=""
+for _ in $(seq 1 60); do
+  member=$($CURL "$ADMIN/api/nginxions/cluster/member" | json)
+  # the time of the last answer of the storage to the relay (not the heartbeat: "learning":{..., "last_ok_on":"..."})
+  echo "$member" | grep -q '"learning":{[^}]*"last_ok_on":"' && { learning=1; break; }
+  sleep 3
+done
+[ -n "$learning" ] || fail "the agent of the node did not reach the storage of the manager: $member"
+step "Nodes: the node is disabled on the manager, learns it with its heartbeat and leaves"
 $CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"
 # its next heartbeat (every 30 s) learns it was disabled
 disabled=""

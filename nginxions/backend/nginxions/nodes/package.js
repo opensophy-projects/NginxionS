@@ -4,7 +4,7 @@
 // public key given to the node at its registration and pinned there); the version is the SHA-256 of the content, so
 // a node fetches it again only when something changed.
 // What a node cannot serve on its own is left out and told: a certificate of ACME (its renewal is on the manager).
-import { generateKeyPairSync, createPrivateKey, createPublicKey } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import db from "../../db.js";

@@ -1334,6 +1334,18 @@
 	"nginxions.cluster.last-ok": {
 		"defaultMessage": "Последняя связь"
 	},
+	"nginxions.cluster.learning": {
+		"defaultMessage": "Обучение"
+	},
+	"nginxions.cluster.learning-hint": {
+		"defaultMessage": "Агент этого сервера отправляет обученное на управляющий сервер и получает то, чему научились все серверы вместе. Без управляющего сервера он продолжает защищать с тем, что знает."
+	},
+	"nginxions.cluster.learning-ok": {
+		"defaultMessage": "вместе с другими серверами, через управляющий сервер (последний ответ {time})"
+	},
+	"nginxions.cluster.learning-waiting": {
+		"defaultMessage": "через управляющий сервер: запросов агента ещё не было (начнутся после перезапуска агента)"
+	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Отключить от управляющего"
 	},
