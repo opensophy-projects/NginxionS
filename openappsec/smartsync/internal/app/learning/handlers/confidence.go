@@ -78,6 +78,11 @@ type logger struct {
 type confidenceMergedData struct {
 	// maps key -> value -> sources set
 	log mms
+	// NginxionS: the node each source was first seen through, the nodes of the merged data, the node of the data now
+	// merged (SetDataNode)
+	sourceNode  map[string]string
+	nodes       map[string]bool
+	currentNode string
 }
 
 // Values list of valuesSet
@@ -155,6 +160,7 @@ func (c *ConfidenceCalculator) MergeData(data interface{}) {
 			}
 			for _, src := range value.Value {
 				c.md.log[key.Key][value.Key][src] = true
+				c.noteSourceNode(src)
 			}
 		}
 	}
@@ -435,6 +441,34 @@ func (c *ConfidenceCalculator) GetDependencies() map[models.SyncID]models.SyncHa
 func (c *ConfidenceCalculator) ClearMergedData() {
 	// Replace with fresh empty map instead of nil to avoid nil map assignment panics in future merges
 	c.md.log = mms{}
+	c.md.sourceNode = nil
+	c.md.nodes = nil
+	c.md.currentNode = ""
+}
+
+// SetDataNode the node the next merged data comes from (NginxionS)
+func (c *ConfidenceCalculator) SetDataNode(node string) {
+	c.md.currentNode = node
+	if node == "" {
+		return
+	}
+	if c.md.nodes == nil {
+		c.md.nodes = map[string]bool{}
+	}
+	c.md.nodes[node] = true
+}
+
+// noteSourceNode keeps the node a source was first seen through (NginxionS)
+func (c *ConfidenceCalculator) noteSourceNode(src string) {
+	if c.md.currentNode == "" {
+		return
+	}
+	if c.md.sourceNode == nil {
+		c.md.sourceNode = map[string]string{}
+	}
+	if _, ok := c.md.sourceNode[src]; !ok {
+		c.md.sourceNode[src] = c.md.currentNode
+	}
 }
 
 // ProcessDataFromCentralData processes data from the central data source
@@ -503,15 +537,33 @@ func (c *ConfidenceCalculator) isBenignOfType(title string, eventType models.Eve
 	return false
 }
 
+// countSources counts the sources of a value. NginxionS: with the data of two nodes or more, the sources one node
+// brings count up to MinSources-1: one node (or whoever took it over) never makes a value confident alone, the others
+// have to see it too. A source labelled benign in the GUI counts MinSources, as before (a decision of the
+// administrator, not of a node).
 func (c *ConfidenceCalculator) countSources(ctx context.Context, sources map[string]bool) int {
 	count := 0
+	perNode := map[string]int{}
+	capNodes := len(c.md.nodes) >= 2
 	for source := range sources {
 		if c.isSourceBenign(source) {
 			log.WithContext(ctx).Debugf("source %v is set to benign", source)
 			count += c.params.MinSources
+		} else if node, ok := c.md.sourceNode[source]; capNodes && ok {
+			perNode[node]++
 		} else {
 			count++
 		}
+	}
+	nodeCap := c.params.MinSources - 1
+	if nodeCap < 1 {
+		nodeCap = 1
+	}
+	for _, n := range perNode {
+		if n > nodeCap {
+			n = nodeCap
+		}
+		count += n
 	}
 	return count
 }
