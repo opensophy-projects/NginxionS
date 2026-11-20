@@ -260,6 +260,9 @@
 	"certificates.request.title": {
 		"defaultMessage": "Получить новый сертификат"
 	},
+	"cluster": {
+		"defaultMessage": "Подключение к управляющему"
+	},
 	"column.access": {
 		"defaultMessage": "Доступ"
 	},
@@ -1309,6 +1312,48 @@
 	},
 	"nginxions.certs.used.yes": {
 		"defaultMessage": "Используется хостами"
+	},
+	"nginxions.cluster.code": {
+		"defaultMessage": "Код подключения"
+	},
+	"nginxions.cluster.disabled": {
+		"defaultMessage": "Управляющий сервер отключил этот узел. Свои сайты он защищает самостоятельно; отключите его здесь, чтобы подключиться заново с новым кодом."
+	},
+	"nginxions.cluster.fingerprint": {
+		"defaultMessage": "Сертификат управляющего (SHA-256)"
+	},
+	"nginxions.cluster.hint": {
+		"defaultMessage": "Подключите этот сервер к управляющему: им будут управлять оттуда, а если управляющий недоступен, он продолжит защищать свои сайты."
+	},
+	"nginxions.cluster.join": {
+		"defaultMessage": "Подключить"
+	},
+	"nginxions.cluster.joined": {
+		"defaultMessage": "Подключено к управляющему серверу"
+	},
+	"nginxions.cluster.last-ok": {
+		"defaultMessage": "Последняя связь"
+	},
+	"nginxions.cluster.leave": {
+		"defaultMessage": "Отключить от управляющего"
+	},
+	"nginxions.cluster.leave.confirm": {
+		"defaultMessage": "Отключить этот сервер от управляющего? Отключите его и на управляющем сервере."
+	},
+	"nginxions.cluster.manager": {
+		"defaultMessage": "Адрес управляющего сервера"
+	},
+	"nginxions.cluster.manager.placeholder": {
+		"defaultMessage": "https://manager.example.com:81"
+	},
+	"nginxions.cluster.node": {
+		"defaultMessage": "Этот узел"
+	},
+	"nginxions.cluster.standalone": {
+		"defaultMessage": "Этот сервер работает самостоятельно."
+	},
+	"nginxions.cluster.this-server": {
+		"defaultMessage": "Этот сервер"
 	},
 	"nginxions.code.applied": {
 		"defaultMessage": "Применено"
@@ -4271,6 +4316,90 @@
 	"nginxions.nav.user-menu": {
 		"defaultMessage": "Меню пользователя"
 	},
+	"nginxions.nodes": {
+		"defaultMessage": "Узлы"
+	},
+	"nginxions.nodes.add": {
+		"defaultMessage": "Добавить узел"
+	},
+	"nginxions.nodes.code.how": {
+		"defaultMessage": "На новом сервере откройте «Агенты → Узлы → Этот сервер», введите адрес {address} и этот код. Код действует до {time} и срабатывает один раз."
+	},
+	"nginxions.nodes.code.title": {
+		"defaultMessage": "Код подключения узла {name}: показывается один раз"
+	},
+	"nginxions.nodes.code.until": {
+		"defaultMessage": "код действует до {time}"
+	},
+	"nginxions.nodes.copied": {
+		"defaultMessage": "Скопировано"
+	},
+	"nginxions.nodes.copy": {
+		"defaultMessage": "Копировать"
+	},
+	"nginxions.nodes.delete": {
+		"defaultMessage": "Удалить"
+	},
+	"nginxions.nodes.delete.confirm": {
+		"defaultMessage": "Удалить узел {name} из списка?"
+	},
+	"nginxions.nodes.hint": {
+		"defaultMessage": "Серверы NginxionS, которыми управляет этот. Добавьте узел — получите одноразовый код подключения, затем введите его на новом сервере в «Этот сервер»."
+	},
+	"nginxions.nodes.hosts": {
+		"defaultMessage": "{count, plural, one {# хост} few {# хоста} many {# хостов} other {# хоста}}"
+	},
+	"nginxions.nodes.labels": {
+		"defaultMessage": "Метки"
+	},
+	"nginxions.nodes.labels.placeholder": {
+		"defaultMessage": "eu edge (через пробел или запятую)"
+	},
+	"nginxions.nodes.last-seen": {
+		"defaultMessage": "Последняя связь"
+	},
+	"nginxions.nodes.name": {
+		"defaultMessage": "Имя"
+	},
+	"nginxions.nodes.name.placeholder": {
+		"defaultMessage": "edge-1, Москва…"
+	},
+	"nginxions.nodes.new-code": {
+		"defaultMessage": "Новый код"
+	},
+	"nginxions.nodes.none": {
+		"defaultMessage": "Узлов пока нет: этот сервер работает самостоятельно."
+	},
+	"nginxions.nodes.revoke": {
+		"defaultMessage": "Отключить"
+	},
+	"nginxions.nodes.revoke.confirm": {
+		"defaultMessage": "Отключить узел {name}? Его сертификат будет отозван, и он перестанет управляться отсюда. Свои сайты он продолжит защищать самостоятельно."
+	},
+	"nginxions.nodes.server": {
+		"defaultMessage": "Сервер"
+	},
+	"nginxions.nodes.state": {
+		"defaultMessage": "Состояние"
+	},
+	"nginxions.nodes.state.expired": {
+		"defaultMessage": "Код истёк"
+	},
+	"nginxions.nodes.state.offline": {
+		"defaultMessage": "Нет связи"
+	},
+	"nginxions.nodes.state.online": {
+		"defaultMessage": "На связи"
+	},
+	"nginxions.nodes.state.pending": {
+		"defaultMessage": "Ждёт подключения"
+	},
+	"nginxions.nodes.state.revoked": {
+		"defaultMessage": "Отключён"
+	},
+	"nginxions.nodes.version": {
+		"defaultMessage": "версия {version}"
+	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Проблема"
 	},
@@ -6503,6 +6632,12 @@
 	"nginxions.rbac.resource.dead_hosts.desc": {
 		"defaultMessage": "Домены, отвечающие 404"
 	},
+	"nginxions.rbac.resource.nodes": {
+		"defaultMessage": "Узлы"
+	},
+	"nginxions.rbac.resource.nodes.desc": {
+		"defaultMessage": "Серверы NginxionS, которыми управляет этот: добавить, отключить"
+	},
 	"nginxions.rbac.resource.notifications": {
 		"defaultMessage": "Уведомления"
 	},
@@ -8221,6 +8356,9 @@
 	},
 	"no-tls": {
 		"defaultMessage": "Без TLS"
+	},
+	"node": {
+		"defaultMessage": "Узел"
 	},
 	"notfound.action": {
 		"defaultMessage": "Вернуться на главную"
