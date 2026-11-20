@@ -2,7 +2,7 @@
 //
 //   backend    the unit tests (lcov of `node --test`, artifact security-quality) and the tests of the stack: what the
 //              backend ran during smoke, the interface in a browser and driven like a user (raw V8 coverage that
-//              scripts/test-airgap.sh collects into reports/**/coverage-stack/backend). A line run by either counts.
+//              scripts/test-airgap.sh collects into reports/**/coverage-stack/{backend,control}). A line run by either counts.
 //              Every file of nginxions/backend/nginxions is counted, a file no test loaded too (0 %).
 //   frontend   vitest (coverage-frontend/coverage-summary.json)
 //   go/<svc>   go test of the services of the agent (coverage-go-<svc>.txt)
@@ -13,7 +13,7 @@
 // --update when the coverage went up.
 //
 //   node scripts/coverage-report.mjs --in reports [--baseline .github/coverage-baseline.json] [--update] [--out dir]
-//   node scripts/coverage-report.mjs --trim reports/coverage-stack/backend    (keeps only our scripts: smaller files)
+//   node scripts/coverage-report.mjs --trim reports/coverage-stack    (keeps only our scripts: smaller files)
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -115,6 +115,17 @@ export function parseLcov(text, base = BACKEND) {
 	return files;
 }
 
+/**
+ * the file of the backend a script of the V8 coverage is: the backend is /app in its image (nginxions/Dockerfile),
+ * nginxions-control /opt/nginxions-control in the image of the agent (deploy/openappsec/Dockerfile)
+ */
+export const sourceOf = (url = "") => {
+	const app = /^file:\/\/\/app\/(.+)$/.exec(url);
+	if (app) return app[1];
+	const control = /^file:\/\/\/opt\/nginxions-control\/(.+)$/.exec(url);
+	return control ? `nginxions/control/${control[1]}` : undefined;
+};
+
 /** the files of raw V8 coverage of the backend → Map(rel path → Map(line → hits)), merged (max of the hits) */
 export function stackHits(jsonFiles, base = BACKEND) {
 	const files = new Map();
@@ -126,20 +137,19 @@ export function stackHits(jsonFiles, base = BACKEND) {
 			continue;
 		}
 		for (const script of doc.result ?? []) {
-			// the backend is /app in the image (nginxions/Dockerfile)
-			const m = /^file:\/\/\/app\/(.+)$/.exec(script.url ?? "");
-			if (!m || !counted(m[1])) continue;
+			const rel = sourceOf(script.url);
+			if (!rel || !counted(rel)) continue;
 			// read without a check before (a check then a read is a race: CodeQL js/file-system-race)
 			let source;
 			try {
-				source = readFileSync(join(base, m[1]), "utf8");
+				source = readFileSync(join(base, rel), "utf8");
 			} catch {
 				continue;
 			}
 			const hits = v8LineHits(source, script);
-			const into = files.get(m[1]) ?? new Map();
+			const into = files.get(rel) ?? new Map();
 			for (const [n, h] of hits) into.set(n, Math.max(into.get(n) ?? 0, h));
-			files.set(m[1], into);
+			files.set(rel, into);
 		}
 	}
 	return files;
@@ -184,7 +194,7 @@ export function trim(dir) {
 	for (const f of walk(dir).filter((x) => x.endsWith(".json"))) {
 		try {
 			const doc = JSON.parse(readFileSync(f, "utf8"));
-			doc.result = (doc.result ?? []).filter((s) => /^file:\/\/\/app\/nginxions\//.test(s.url ?? ""));
+			doc.result = (doc.result ?? []).filter((s) => counted(sourceOf(s.url) ?? ""));
 			delete doc["source-map-cache"];
 			writeFileSync(f, JSON.stringify(doc));
 		} catch {}
@@ -209,7 +219,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 	const parts = {};
 	const lcov = files.find((f) => f.endsWith("lcov-backend.info"));
-	const v8 = files.filter((f) => /coverage-stack[/\\]backend[/\\].+\.json$/.test(f));
+	const v8 = files.filter((f) => /coverage-stack[/\\](backend|control)[/\\].+\.json$/.test(f));
 	// the tests of the stack that gave coverage: reports/<artifact tests-<suite>>/coverage-stack/...
 	const suites = new Set(v8.map((f) => /tests-([a-z-]+)[/\\]/.exec(f)?.[1]).filter(Boolean));
 	if (lcov || v8.length) {

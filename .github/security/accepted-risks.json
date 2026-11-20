@@ -940,6 +940,38 @@
 			"id": "security-txt",
 			"reason": "detection, not a weakness: security.txt (RFC 9116) is published on purpose, with the contact for reporting a vulnerability",
 			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "kics",
+			"id": "610e266e-6c12-4bca-9925-1ed0cd29742b",
+			"where": "deploy/test/compose.airgap.yaml",
+			"reason": "an overlay of compose.yaml for the closed-network test: its nginxions and control only add an environment variable and a volume of coverage; they get security_opt from compose.yaml (docker compose config merges them), compose refuses the same item repeated in the overlay. The services of the overlay itself have it",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "kics",
+			"id": "ce76b7d0-9e77-464d-b86f-c5c48e03e22d",
+			"where": "deploy/test/compose.airgap.yaml",
+			"reason": "an overlay of compose.yaml for the closed-network test: its nginxions and control only add an environment variable and a volume of coverage; they get cap_drop from compose.yaml (docker compose config merges them), compose refuses the same item repeated in the overlay. The services of the overlay itself have it",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/disabling-certificate-validation",
+			"where": "deploy/test/gui-e2e.mjs",
+			"reason": "a test, not product code: it asks the default site of the test stack over HTTPS by its address in the closed network, where NginxionS answers with its placeholder certificate, not one of a CA; the check is about the answer (404, the page), not the certificate",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification",
+			"where": "deploy/test/gui-e2e.mjs",
+			"reason": "a test, not product code: it asks the default site of the test stack over HTTPS by its address in the closed network, where NginxionS answers with its placeholder certificate; NODE_TLS_REJECT_UNAUTHORIZED is not set, one request skips the check",
+			"until": "2027-05-01"
 		}
 	]
 }
