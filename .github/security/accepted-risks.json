@@ -877,6 +877,69 @@
 			"where": "контейнер nginxions",
 			"reason": "SETGID: nginx (root) sets the groups of its workers at start; every other capability is dropped",
 			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "tls-version",
+			"reason": "detection, not a weakness: nuclei lists the TLS versions the interface speaks (1.2 and 1.3); testssl.sh checks the protocols and ciphers and fails on a weak one",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "ssl-issuer",
+			"reason": "detection, not a weakness: the issuer of the certificate of the interface (the test CA of the DAST stack); a certificate names its issuer by design",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "ssl-dns-names",
+			"reason": "detection, not a weakness: the names of the certificate of the interface; a certificate lists its names by design",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "nameserver-fingerprint",
+			"reason": "detection, not a weakness: the DNS servers of the network the scan runs in (the Docker resolver of the closed test network), not part of NginxionS",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "soa-detect",
+			"reason": "detection, not a weakness: the SOA record of the resolver of the test network, not part of NginxionS",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "waf-detect",
+			"reason": "detection, not a weakness: nuclei sees that a WAF (open-appsec) answers the host, which is what it is there for",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "waf-fuzz",
+			"reason": "detection, not a weakness: nuclei fuzzes the WAF to fingerprint it; the requests are refused or answered without an error",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "swagger-api",
+			"reason": "detection, not a weakness: the schema of the API (/api/docs, /api/schema) is the documentation of the API of NginxionS (an open project); every operation in it needs the login of the interface, and the interface listens on 127.0.0.1 by default (NGINXIONS_ADMIN_BIND_IP)",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "nuclei",
+			"id": "security-txt",
+			"reason": "detection, not a weakness: security.txt (RFC 9116) is published on purpose, with the contact for reporting a vulnerability",
+			"until": "2027-05-01"
 		}
 	]
 }

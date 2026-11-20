@@ -24,6 +24,11 @@ const internalAccessList = {
 	 */
 	create: async (access, data) => {
 		await access.can("access_lists:create", data);
+		// NginxionS: a new login without a password is a bad request: bcrypt got undefined and the API answered 500
+		// (DAST, schemathesis: items [{}]); on update an empty password keeps the current one
+		if ((data.items ?? []).some((item) => typeof item.password !== "string" || !item.password)) {
+			throw new errs.ValidationError("A login of an access list needs a password");
+		}
 		const row = await accessListModel
 			.query()
 			.insertAndFetch({
@@ -38,7 +43,7 @@ const internalAccessList = {
 
 		const promises = [];
 		// Items
-		data.items.map((item) => {
+		(data.items ?? []).map((item) => {
 			promises.push(
 				accessListAuthModel.query().insert({
 					access_list_id: row.id,
