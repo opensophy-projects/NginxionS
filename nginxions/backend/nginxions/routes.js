@@ -25,10 +25,12 @@ import internalLearning from "./learning/index.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
 import internalNodes from "./nodes/index.js";
+import { MAX_LEARNING_BODY } from "./nodes/learning-model.js";
 import internalMember from "./nodes/member.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
+import { sensitiveLimiter } from "./rate-limit.js";
 import internalRbac from "./rbac/index.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
@@ -41,7 +43,6 @@ import internalWaf from "./waf/index.js";
 import { getAgentMetrics } from "./waf/metrics.js";
 import internalWafObjects, { simulateHostMode } from "./waf/objects/api.js";
 import internalWafSchemas from "./waf/schemas.js";
-import { sensitiveLimiter } from "./rate-limit.js";
 import internalWafTrial from "./waf/trial.js";
 
 const router = express.Router({
@@ -3059,6 +3060,57 @@ router.get("/nodes/package", async (req, res, next) => {
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
 		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
 		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * GET|PUT /api/nginxions/nodes/learning/storage/<path> — without login: Authorization: Bearer <token of the node>; the
+ *   agent of the node (through its relay) reads and writes the shared storage of this manager (step 15.4; what it may:
+ *   nodes/learning-model.js); 401 for an unknown or disabled node
+ */
+const LEARNING_STORAGE = "/nodes/learning/storage";
+router.all(
+	[LEARNING_STORAGE, `${LEARNING_STORAGE}{/*path}`],
+	express.raw({ type: () => true, limit: MAX_LEARNING_BODY }),
+	async (req, res, next) => {
+		try {
+			const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+			// the path as the agent sent it, not normalized (an agent without a tenant asks //<asset>/...; "..": the
+			// rules of nodes/learning-model.js refuse it): after the prefix of the route
+			const [pathname, search = ""] = String(req.originalUrl).split(/\?(.*)/s);
+			const rawPath = pathname.slice(pathname.indexOf(LEARNING_STORAGE) + LEARNING_STORAGE.length);
+			const answer = await internalNodes.learningStorage(token, {
+				method: req.method,
+				rawPath,
+				query: new URLSearchParams(search),
+				body: rawBytes(req),
+			});
+			res.set("Cache-Control", "no-store");
+			if (!answer) return unknownNode(res, "Unknown or disabled node");
+			res.status(answer.status).type(answer.type);
+			// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- bytes of the storage to the agent, never HTML of the panel
+			res.send(answer.body);
+		} catch (err) {
+			next(err);
+		}
+	},
+);
+
+/**
+ * POST /api/nginxions/nodes/learning/sync — without login: Authorization: Bearer <token of the node>; {assetId, type,
+ *   windowId}: the agent of the node tells smartsync of this manager that the data of a window is in the storage
+ */
+router.post("/nodes/learning/sync", express.raw({ type: () => true, limit: "16kb" }), async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.learningSync(token, rawBytes(req));
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		res.status(answer.status).type(answer.type);
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- the answer of smartsync to the agent
+		res.send(answer.body);
 	} catch (err) {
 		next(err);
 	}

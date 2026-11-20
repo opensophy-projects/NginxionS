@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,8 +25,38 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let server;
 	let managerUrl;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
+	// the shared storage and smartsync of the manager (step 15.4): what reaches them
+	const learned = [];
+	const fakeServices = [];
+	const fake = (name, answer) =>
+		new Promise((resolve) => {
+			const service = http.createServer((req, res) => {
+				const chunks = [];
+				req.on("data", (d) => chunks.push(d));
+				req.on("end", () => {
+					learned.push({
+						name,
+						method: req.method,
+						url: req.url,
+						tenant: req.headers["x-tenant-id"],
+						body: Buffer.concat(chunks).toString(),
+					});
+					const [status, body] = answer(req);
+					res.writeHead(status, { "Content-Type": "application/json" });
+					res.end(body);
+				});
+			});
+			fakeServices.push(service);
+			service.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${service.address().port}`));
+		});
 
 	before(async () => {
+		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req) =>
+			req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'],
+		);
+		process.env.NGINXIONS_APPSEC_SMARTSYNC_URL = await fake("smartsync", () => [200, ""]);
+		// the settings file of the agent (its learning role): never /ext of the machine running the tests
+		process.env.NGINXIONS_APPSEC_POLICY_FILE = path.join(dir, "appsec", "local_policy.yaml");
 		process.env.NGINXIONS_SECRET_KEY_FILE = path.join(dir, "secret.key");
 		process.env.NGINXIONS_MEMBER_FILE = path.join(dir, "cluster", "member.json");
 		// the signing key of the manager (step 15.2): never /data of the machine running the tests
@@ -56,36 +87,46 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		server = https.createServer(
 			{ key: readFileSync(path.join(dir, "panel.key")), cert: readFileSync(path.join(dir, "panel.crt")) },
 			(req, res) => {
-				let raw = "";
-				req.on("data", (d) => {
-					raw += d;
-				});
+				const chunks = [];
+				req.on("data", (d) => chunks.push(d));
 				req.on("end", async () => {
 					// an error of the manager is an answer (500 with its message), never a request left without one
 					try {
-						await answerOf(raw);
+						await answerOf(Buffer.concat(chunks));
 					} catch (err) {
 						res.writeHead(500, { "Content-Type": "application/json" });
 						res.end(JSON.stringify({ error: { code: 500, message: String(err.message) } }));
 					}
 				});
+				const token = () => /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1];
 				const answerOf = async (raw) => {
-					const body = JSON.parse(raw || "{}");
+					// the learning routes (bytes in and out), as routes.js has them: the path not normalized
+					const [pathname, search = ""] = req.url.split(/\?(.*)/s);
+					const storagePrefix = "/api/nginxions/nodes/learning/storage";
+					if (pathname.startsWith(storagePrefix) || pathname === "/api/nginxions/nodes/learning/sync") {
+						const answer = pathname.startsWith(storagePrefix)
+							? await nodes.learningStorage(token(), {
+									method: req.method,
+									rawPath: pathname.slice(storagePrefix.length),
+									query: new URLSearchParams(search),
+									body: raw,
+								})
+							: await nodes.learningSync(token(), raw);
+						if (!answer) {
+							res.writeHead(401);
+							return res.end();
+						}
+						res.writeHead(answer.status, { "Content-Type": answer.type });
+						return res.end(answer.body);
+					}
+					const body = JSON.parse(raw.toString() || "{}");
 					let answer = null;
 					if (req.url === "/api/nginxions/nodes/register")
 						answer = await nodes.register(body, "198.51.100.7");
-					if (req.url === "/api/nginxions/nodes/events") {
-						answer = await nodes.events(
-							/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1],
-							body.events,
-						);
-					}
-					if (req.url === "/api/nginxions/nodes/package") {
-						answer = await nodes.package(/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1]);
-					}
+					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
+					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
 					if (req.url === "/api/nginxions/nodes/heartbeat") {
-						const token = /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1];
-						answer = await nodes.heartbeat(token, body.info, "198.51.100.7");
+						answer = await nodes.heartbeat(token(), body.info, "198.51.100.7");
 					}
 					res.writeHead(answer ? 200 : 401, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(answer ?? { error: { code: 401, message: "Unknown" } }));
@@ -97,6 +138,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	});
 	after(async () => {
 		server?.close();
+		for (const service of fakeServices) service.close();
+		await (await import("./relay.js")).stopRelay();
 		await knex?.destroy();
 	});
 
@@ -166,6 +209,82 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
 	});
 
+	test("the agent of the node learns through the manager: its relay, the storage and smartsync there", async () => {
+		// the role in the settings of the agent: through the manager (a node) and smartsync (this manager has a node)
+		const env = readFileSync(path.join(dir, "appsec", "nginxions-agent.env"), "utf8");
+		assert.match(env, /^NGINXIONS_LEARNING_VIA=manager$/m);
+		assert.match(env, /^NGINXIONS_SMARTSYNC=true$/m);
+
+		const relay = await import("./relay.js");
+		const [storagePort, syncPort] = await relay.startRelay({ storagePort: 0, syncPort: 0 });
+		const { uid } = await member.readState();
+		// the agent sends its path as it is (no URL normalization, as fetch would do with ".." and "%2e%2e")
+		const agent = (port, method, urlPath, body) =>
+			new Promise((resolve, reject) => {
+				const req = http.request({ host: "127.0.0.1", port, method, path: urlPath }, (res) => {
+					const chunks = [];
+					res.on("data", (d) => chunks.push(d));
+					res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString() }));
+				});
+				req.on("error", reject);
+				req.end(body);
+			});
+		learned.length = 0;
+		// the data of a window: under the id of the node, whatever the agent calls itself
+		let answer = await agent(
+			storagePort,
+			"PUT",
+			"/api//shop/Indicators/Confidence/window_0_1/agent-a/data.data0",
+			'{"w":1}',
+		);
+		assert.equal(answer.status, 200, answer.text);
+		assert.deepEqual(learned.at(-1), {
+			name: "storage",
+			method: "PUT",
+			url: `/api/shop/Indicators/Confidence/window_0_1/${uid}/agent-a/data.data0`,
+			tenant: "local",
+			body: '{"w":1}',
+		});
+		// reads: the state put together and the labels of the manager; a file not there yet is the 404 of the storage
+		answer = await agent(storagePort, "GET", "/api/?list-type=2&prefix=/shop/Indicators/Confidence/remote");
+		assert.equal(answer.status, 200);
+		assert.equal(learned.at(-1).url, "/api/?list-type=2&prefix=%2Fshop%2FIndicators%2FConfidence%2Fremote");
+		assert.equal((await agent(storagePort, "GET", "/api//shop/tuning/missing.data")).status, 404);
+		// the state put together, the processed state of an agent, the labels: never written by a node
+		const before = learned.length;
+		for (const file of ["remote/confidence.data", "processed/confidence.data"]) {
+			answer = await agent(storagePort, "PUT", `/api//shop/Indicators/Confidence/${file}`, "{}");
+			assert.equal(answer.status, 403, file);
+		}
+		assert.equal((await agent(storagePort, "PUT", "/api//shop/tuning/decisions.data", "[]")).status, 403);
+		assert.equal((await agent(storagePort, "GET", "/api//shop/../../etc/passwd")).status, 400);
+		assert.equal(learned.length, before, "nothing refused reached the storage");
+		// the notification to smartsync: its fields only
+		answer = await agent(
+			syncPort,
+			"POST",
+			"/api/sync",
+			JSON.stringify({ assetId: "shop", type: "Indicators/Confidence", windowId: "window_0_1", x: 1 }),
+		);
+		assert.equal(answer.status, 200, answer.text);
+		assert.deepEqual(
+			{ ...learned.at(-1), body: JSON.parse(learned.at(-1).body) },
+			{
+				name: "smartsync",
+				method: "POST",
+				url: "/api/sync",
+				tenant: "local",
+				body: { assetId: "shop", type: "Indicators/Confidence", windowId: "window_0_1" },
+			},
+		);
+		assert.equal((await agent(syncPort, "POST", "/api/sync", "{}")).status, 400);
+		assert.equal((await agent(syncPort, "GET", "/health/live")).status, 404);
+		// the state of the node shows what its relay did last
+		const status = await member.default.status(ADMIN);
+		assert.ok(status.learning.last_ok_on);
+		assert.equal(status.learning.requests > 5, true);
+	});
+
 	test("another certificate on the address of the manager: the node sends nothing", async () => {
 		const state = await member.readState();
 		await assert.rejects(
@@ -204,6 +323,11 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		const state = await member.readState();
 		assert.equal(state.disabled, true);
 		assert.match(state.last_error, /disabled/);
+
+		// disabled: its relay says so (503), the agent learns here again
+		const env = readFileSync(path.join(dir, "appsec", "nginxions-agent.env"), "utf8");
+		assert.doesNotMatch(env, /NGINXIONS_LEARNING_VIA/);
+		assert.doesNotMatch(env, /NGINXIONS_SMARTSYNC/);
 
 		const left = await member.default.leave(ADMIN);
 		assert.equal(left.joined, false);

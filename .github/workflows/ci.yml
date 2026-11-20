@@ -333,8 +333,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=openappsec-amd64
           build-args: |
             APK_REFRESH=${{ env.APK_REFRESH }}
-          # smartsync (central learning) is not built: it needs a Fog token the agent lacks in local-only
-          # mode. NginxionS learns locally; see docs/adr/0011-learning.md.
+          # smartsync is built into it too (the learning of several servers, run on a manager with nodes:
+          # docs/adr/0012-nodes.md 5c)
       - name: policy contract with the agent of this build
         env:
           NGINXIONS_REGISTRY: docker.io/${{ env.NAMESPACE }}

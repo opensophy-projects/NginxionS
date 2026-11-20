@@ -8,9 +8,9 @@
 // The state (token and key encrypted with the secrets of NginxionS) is a file of the data volume.
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
+import { isIP } from "node:net";
 import { hostname } from "node:os";
 import path from "node:path";
-import { isIP } from "node:net";
 import tls from "node:tls";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
@@ -20,11 +20,13 @@ import pjson from "../../package.json" with { type: "json" };
 import { makeCsr } from "../pki/ops.js";
 import { generateKey } from "../pki/x509.js";
 import { decrypt, encrypt } from "../secrets.js";
+import { applyLearningRole } from "../waf/agent-settings.js";
 import { applyContent } from "./apply.js";
-import { HEARTBEAT_MS, normalizeManagerUrl, uidOfCode } from "./model.js";
+import { HEARTBEAT_MS, MEMBER_FILE, normalizeManagerUrl, uidOfCode } from "./model.js";
 import { openPackage } from "./package-model.js";
 
-export const MEMBER_FILE = process.env.NGINXIONS_MEMBER_FILE || "/data/nginxions/cluster/member.json";
+export { MEMBER_FILE };
+
 /** the content of the last package applied: what a failed package goes back to */
 const PACKAGE_FILE = () => path.join(path.dirname(MEMBER_FILE), "package.json");
 const TIMEOUT_MS = 10000;
@@ -36,11 +38,16 @@ const audit = (access, action, meta) => internalAuditLog.add(access, { action, o
 const sameFingerprint = (a, b) => String(a).toUpperCase() === String(b).toUpperCase();
 
 /**
- * A JSON request to the manager over a socket whose certificate is checked first: with a pin, a socket with another
+ * A request to the manager over a socket whose certificate is checked first: with a pin, a socket with another
  * certificate is closed before anything is written; without one (the first connection) its fingerprint is returned.
- * @returns {Promise<{status: number, body: any, fingerprint: string}>}
+ * The body and the answer are bytes (the learning relay, relay.js); managerRequest below speaks JSON.
+ * @returns {Promise<{status: number, headers: object, body: Buffer, fingerprint: string}>}
  */
-export const managerRequest = (managerUrl, urlPath, { method = "POST", body, token, pin } = {}) =>
+export const managerExchange = (
+	managerUrl,
+	urlPath,
+	{ method = "POST", body = null, headers = {}, token, pin, maxAnswer = MAX_ANSWER, timeoutMs = TIMEOUT_MS } = {},
+) =>
 	new Promise((resolve, reject) => {
 		const url = new URL(urlPath, managerUrl);
 		const port = Number(url.port || 443);
@@ -52,9 +59,9 @@ export const managerRequest = (managerUrl, urlPath, { method = "POST", body, tok
 			// the trust is the pin (or the first connection), not the CAs of the system: panels of NginxionS often
 			// have a certificate of their own
 			rejectUnauthorized: false,
-			timeout: TIMEOUT_MS,
+			timeout: timeoutMs,
 		});
-		socket.setTimeout(TIMEOUT_MS, () => socket.destroy(new Error("the manager did not answer in time")));
+		socket.setTimeout(timeoutMs, () => socket.destroy(new Error("the manager did not answer in time")));
 		socket.once("error", (err) => done(err));
 		socket.once("secureConnect", () => {
 			const fingerprint = socket.getPeerCertificate()?.fingerprint256 || "";
@@ -62,18 +69,18 @@ export const managerRequest = (managerUrl, urlPath, { method = "POST", body, tok
 				socket.destroy();
 				return done(new Error(`the certificate of the manager changed (${fingerprint || "none"})`));
 			}
-			const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
 			const req = http.request(
 				{
 					createConnection: () => socket,
 					host: url.hostname,
 					port,
-					path: url.pathname,
+					// as given, not normalized: the relay passes the path of the agent on and the manager judges it
+					path: urlPath.startsWith("/") ? urlPath : `${url.pathname}${url.search}`,
 					method,
 					headers: {
 						Host: url.host,
-						Accept: "application/json",
-						...(payload ? { "Content-Type": "application/json", "Content-Length": payload.length } : {}),
+						...headers,
+						...(body ? { "Content-Length": body.length } : {}),
 						...(token ? { Authorization: `Bearer ${token}` } : {}),
 					},
 				},
@@ -82,26 +89,47 @@ export const managerRequest = (managerUrl, urlPath, { method = "POST", body, tok
 					let size = 0;
 					res.on("data", (chunk) => {
 						size += chunk.length;
-						if (size > MAX_ANSWER) return res.destroy(new Error("the answer of the manager is too big"));
+						if (size > maxAnswer) return res.destroy(new Error("the answer of the manager is too big"));
 						chunks.push(chunk);
 					});
 					res.on("error", (err) => done(err));
 					res.on("end", () => {
 						socket.end();
-						let parsed = null;
-						try {
-							parsed = JSON.parse(Buffer.concat(chunks).toString() || "null");
-						} catch {
-							parsed = null;
-						}
-						done(null, { status: res.statusCode, body: parsed, fingerprint });
+						done(null, {
+							status: res.statusCode,
+							headers: res.headers,
+							body: Buffer.concat(chunks),
+							fingerprint,
+						});
 					});
 				},
 			);
 			req.on("error", (err) => done(err));
-			req.end(payload ?? undefined);
+			req.end(body ?? undefined);
 		});
 	});
+
+/**
+ * A JSON request to the manager (managerExchange).
+ * @returns {Promise<{status: number, body: any, fingerprint: string}>}
+ */
+export const managerRequest = async (managerUrl, urlPath, { method = "POST", body, token, pin } = {}) => {
+	const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
+	const answer = await managerExchange(managerUrl, urlPath, {
+		method,
+		body: payload,
+		headers: { Accept: "application/json", ...(payload ? { "Content-Type": "application/json" } : {}) },
+		token,
+		pin,
+	});
+	let parsed = null;
+	try {
+		parsed = JSON.parse(answer.body.toString() || "null");
+	} catch {
+		parsed = null;
+	}
+	return { status: answer.status, body: parsed, fingerprint: answer.fingerprint };
+};
 
 // --------------------------------------------------------------------------------------------- the state file
 export const readState = async () => {
@@ -274,6 +302,8 @@ export const beat = async () => {
 		} else if (answer.status === 401 || answer.status === 403) {
 			await writeState({ ...state, disabled: true, last_error: "disabled on the manager" });
 			logger.warn("Cluster: this node was disabled on its manager; it keeps protecting its sites on its own");
+			// the agent learns here again (step 15.4)
+			await applyLearningRole();
 		} else {
 			await writeState({ ...state, last_error: `the manager answered ${answer.status}` });
 		}
@@ -286,6 +316,10 @@ export const beat = async () => {
 
 export const start = () => {
 	if (timer) clearInterval(timer);
+	// the learning relay of a node (step 15.4): listens on every server, answers 503 while it is not a node
+	import("./relay.js")
+		.then(({ startRelay }) => startRelay())
+		.catch((err) => logger.warn(`Cluster: the learning relay: ${err.message}`));
 	const tick = () => beat().catch((err) => logger.warn(`Cluster heartbeat: ${err.message}`));
 	timer = setInterval(tick, HEARTBEAT_MS);
 	timer.unref?.();
@@ -298,7 +332,11 @@ const internalMember = {
 	/** @param {Access} access */
 	status: async (access) => {
 		await access.can("settings:view");
-		return statusOf(await readState());
+		const status = statusOf(await readState());
+		if (!status.joined) return status;
+		// the learning of the agent through the manager (step 15.4): what its relay did last
+		const { relayStatus } = await import("./relay.js");
+		return { ...status, learning: relayStatus() };
 	},
 
 	/**
@@ -351,6 +389,8 @@ const internalMember = {
 			uid: answer.body.uid,
 			fingerprint: answer.fingerprint,
 		});
+		// the agent learns together with the other servers, through the manager (step 15.4)
+		await applyLearningRole(access.token.getUserId(1));
 		return statusOf(await readState());
 	},
 
@@ -361,6 +401,7 @@ const internalMember = {
 		if (!state) return statusOf(null);
 		await rm(MEMBER_FILE, { force: true });
 		await audit(access, "deleted", { manager_url: state.manager_url, uid: state.uid });
+		await applyLearningRole(access.token.getUserId(1));
 		return statusOf(null);
 	},
 };

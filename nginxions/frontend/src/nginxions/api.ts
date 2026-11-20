@@ -733,6 +733,8 @@ export interface ClusterMember {
 	last_ok_on?: string | null;
 	last_error?: string;
 	disabled?: boolean;
+	/** the learning of the agent through the manager: what the relay of this node did last */
+	learning?: { requests: number; last_ok_on: string | null; last_error: string };
 }
 
 export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });

@@ -3,6 +3,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** the node_id of the rows of a node; "local" is this server */
+/** the state of this server as a node of a manager (member.js): token and key encrypted, in the data volume */
+export const MEMBER_FILE = process.env.NGINXIONS_MEMBER_FILE || "/data/nginxions/cluster/member.json";
+
 export const UID = /^n-[0-9a-f]{16}$/;
 /** the join code: <uid>.<secret>; the node puts the uid into its CSR, the manager keeps the hash of the code */
 export const CODE = /^(n-[0-9a-f]{16})\.([A-Za-z0-9_-]{32,64})$/;

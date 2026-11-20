@@ -8,11 +8,12 @@
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
+import { EVENT_TABLE, store } from "../events/store.js";
 import internalPki, { SYSTEM } from "../pki/index.js";
 import { readCsr } from "../pki/ops.js";
-import { hostIdsOf, packageOf, signingKey } from "./package.js";
-import { EVENT_TABLE, store } from "../events/store.js";
 import { parseCert } from "../pki/x509.js";
+import { applyLearningRole } from "../waf/agent-settings.js";
+import { forwardStorage, forwardSync } from "./learning.js";
 import {
 	CODE_HOURS,
 	hash,
@@ -26,6 +27,7 @@ import {
 	TOKEN,
 	uidOfCode,
 } from "./model.js";
+import { hostIdsOf, packageOf, signingKey } from "./package.js";
 
 const TABLE = "nginxions_node";
 export const NODES_ROOT = "NginxionS Nodes Root CA";
@@ -198,6 +200,8 @@ const internalNodes = {
 			modified_on: new Date(),
 		});
 		await audit(access, "disabled", id, { name: row.name, uid: row.uid });
+		// the last active node gone: smartsync is not needed here any more (step 15.4)
+		await applyLearningRole(access.token.getUserId(1));
 		return toNode(await rowOf(id));
 	},
 
@@ -260,6 +264,8 @@ const internalNodes = {
 				modified_on: now,
 			});
 		await audit(SYSTEM, "updated", row.id, { name: row.name, uid, registered: true });
+		// the first active node: smartsync of this manager puts the learning of the nodes together (step 15.4)
+		await applyLearningRole();
 		return {
 			uid,
 			name: row.name,
@@ -323,6 +329,21 @@ const internalNodes = {
 	package: async (token) => {
 		const row = await nodeOfToken(token);
 		return row ? packageOf(row.id) : null;
+	},
+
+	/**
+	 * Without login: a request of the agent of a node to the shared storage of this manager (step 15.4).
+	 * @returns {Promise<{status: number, type: string, body: Buffer}|null>} null: unknown or disabled node
+	 */
+	learningStorage: async (token, request) => {
+		const row = await nodeOfToken(token);
+		return row ? forwardStorage(row.uid, request) : null;
+	},
+
+	/** Without login: the agent of a node tells smartsync of this manager that the data of a window is there */
+	learningSync: async (token, body) => {
+		const row = await nodeOfToken(token);
+		return row ? forwardSync(body) : null;
 	},
 
 	/** the proxy hosts a node serves (ids of this manager) */
