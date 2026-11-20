@@ -1,8 +1,7 @@
 // What a node may ask of the storage and smartsync of its manager (step 15.4), and the paths of its relay.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { cleanStoragePath, storageRequestOf, syncNotificationOf } from "./learning-model.js";
-import { storageTarget, syncTarget } from "./relay.js";
+import { cleanStoragePath, storageRequestOf, storageTarget, syncNotificationOf, syncTarget } from "./learning-model.js";
 
 const UID = "n-0123456789abcdef";
 const q = (s = "") => new URLSearchParams(s);

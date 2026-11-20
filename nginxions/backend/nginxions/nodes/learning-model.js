@@ -91,3 +91,17 @@ export const syncNotificationOf = (body) => {
 	if (!SYNC_TYPE.test(type) || !WINDOW_ID.test(windowId)) return null;
 	return { assetId, type, windowId };
 };
+
+// the relay of a node (relay.js): which route of the manager a request of the local agent goes to
+
+/** /api/<path>?<query> of the agent → the storage route of the manager (the path as sent: the manager cleans it) */
+export const storageTarget = (raw, method) => {
+	if (method !== "GET" && method !== "PUT" && method !== "POST") return null;
+	const pathname = raw.split("?")[0];
+	if (pathname !== "/api" && !pathname.startsWith("/api/")) return null;
+	return `/api/nginxions/nodes/learning/storage${raw.slice(4)}`;
+};
+
+/** POST /api/sync of the agent → the smartsync route of the manager */
+export const syncTarget = (raw, method) =>
+	method === "POST" && raw.split("?")[0] === "/api/sync" ? "/api/nginxions/nodes/learning/sync" : null;

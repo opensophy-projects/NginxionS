@@ -8,7 +8,7 @@
 import http from "node:http";
 import { global as logger } from "../../logger.js";
 import { decrypt } from "../secrets.js";
-import { MAX_LEARNING_BODY } from "./learning-model.js";
+import { MAX_LEARNING_BODY, storageTarget, syncTarget } from "./learning-model.js";
 import { managerExchange, readState } from "./member.js";
 
 const STORAGE_PORT = Number(process.env.NGINXIONS_RELAY_STORAGE_PORT || 7817);
@@ -19,9 +19,13 @@ const TIMEOUT_MS = 60000;
 const stats = { requests: 0, last_ok_on: null, last_error: "" };
 export const relayStatus = () => ({ ...stats });
 
+/** an HTTP status as a number in its range, else 502 */
+const statusOf = (status) => (Number.isInteger(status) && status >= 100 && status <= 599 ? status : 502);
+
 const reply = (res, status, message) => {
-	res.writeHead(status, { "Content-Type": "application/json" });
-	res.end(JSON.stringify({ error: { code: status, message } }));
+	res.statusCode = statusOf(status);
+	res.setHeader("Content-Type", "application/json");
+	res.end(JSON.stringify({ error: { code: res.statusCode, message: String(message) } }));
 };
 
 /** the body of a request, refused above the limit */
@@ -76,7 +80,14 @@ export const relayHandler = (targetOf) => async (req, res) => {
 				300,
 			);
 		}
-		res.writeHead(answer.status, { "Content-Type": answer.headers["content-type"] || "application/octet-stream" });
+		res.statusCode = statusOf(answer.status);
+		// the type of the answer of the manager: JSON or bytes of the storage, nothing else is passed on
+		res.setHeader(
+			"Content-Type",
+			String(answer.headers["content-type"] || "").startsWith("application/json")
+				? "application/json"
+				: "application/octet-stream",
+		);
 		res.end(answer.body);
 	} catch (err) {
 		stats.last_error = `the manager is not reachable: ${err.message}`.slice(0, 300);
@@ -84,18 +95,6 @@ export const relayHandler = (targetOf) => async (req, res) => {
 		else res.destroy();
 	}
 };
-
-/** /api/<path>?<query> of the agent → the storage route of the manager (the path as sent: the manager cleans it) */
-export const storageTarget = (raw, method) => {
-	if (method !== "GET" && method !== "PUT" && method !== "POST") return null;
-	const pathname = raw.split("?")[0];
-	if (pathname !== "/api" && !pathname.startsWith("/api/")) return null;
-	return `/api/nginxions/nodes/learning/storage${raw.slice(4)}`;
-};
-
-/** POST /api/sync of the agent → the smartsync route of the manager */
-export const syncTarget = (raw, method) =>
-	method === "POST" && raw.split("?")[0] === "/api/sync" ? "/api/nginxions/nodes/learning/sync" : null;
 
 const servers = [];
 
