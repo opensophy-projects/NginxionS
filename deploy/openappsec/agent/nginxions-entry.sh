@@ -32,7 +32,18 @@ else
     unset CROWDSEC_ENABLED
 fi
 
-
+# Fail-open of the nginx attachment: profile settings in settings.json. The agent gets settings only from a
+# management cloud, which NginxionS never uses, so the file is ours.
+# Not agent.config.log.useBulkMode=false: without bulk mode every log goes to all streams at once on
+# the request path, the HTTP transaction handler then neither logs nor blocks (checked in CI).
+# orchestration.configTimeoutSeconds: the orchestration waits for the services to confirm a new policy up to 600 s by
+# default and checks no update meanwhile; a confirmation lost while the services restart (an agent restart from the
+# GUI) held every policy change of the GUI for 10 minutes. 60 s, then the policy is applied again.
+# agent.registrationThreadTimeout.nginxModule (issue 149): after a restart of the agent each nginx worker registers again
+# on the first request it gets, and its fail-open verdict was given when that took more than 100 ms: the first attack
+# after "Save and restart" passed unchecked (fail-open) or the first request was refused (fail-close). 3 s: the request
+# that registers waits for it; the attachment retries a failed registration with a growing pause, so an agent that is
+# down holds one request per pause, not every request.
 mkdir -p /etc/cp/conf
 printf '{"agentSettings": [%s, %s, %s, %s]}\n' \
     "{\"key\": \"agent.failOpenState.nginxModule\", \"value\": \"$NGINXIONS_FAIL_OPEN\"}" \
