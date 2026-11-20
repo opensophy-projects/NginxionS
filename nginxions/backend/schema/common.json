@@ -207,6 +207,10 @@
 			"items": {
 				"type": "object",
 				"additionalProperties": false,
+				"description": "NginxionS: a login has a username; an item without it got 500 (DAST, schemathesis)",
+				"required": [
+					"username"
+				],
 				"properties": {
 					"username": {
 						"type": "string",
@@ -233,6 +237,11 @@
 			"items": {
 				"type": "object",
 				"additionalProperties": false,
+				"description": "NginxionS: a rule has an address and a directive; one without them got 500 (DAST, schemathesis)",
+				"required": [
+					"address",
+					"directive"
+				],
 				"properties": {
 					"address": {
 						"$ref": "#/properties/address"

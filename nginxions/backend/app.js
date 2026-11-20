@@ -114,6 +114,15 @@ app.use((err, req, res, _) => {
 		};
 	}
 
+	// NginxionS: an internal error is always logged, with or without a stack (DAST, schemathesis: answers 500 with no
+	// line in the log, so their cause could not be found)
+	if (!err.status && !(typeof err.stack !== "undefined" && err.stack)) {
+		let what = String(err);
+		try {
+			what = typeof err === "object" ? JSON.stringify(err) : what;
+		} catch {}
+		logger.warn(`${req.method.toUpperCase()} ${req.originalUrl}: 500 ${what.slice(0, 500)}`);
+	}
 	// Not every error is worth logging - but this is good for now until it gets annoying.
 	if (typeof err.stack !== "undefined" && err.stack) {
 		debug(logger, err.stack);

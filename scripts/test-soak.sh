@@ -3,7 +3,9 @@
 # minutes (60 by default) clients send normal pages, an API, uploads and attacks to a proxy host under the WAF; every
 # few minutes the memory of each container, the size of the database and of the logs, and the latency of a request
 # are sampled. At the end:
-#   memory    no container grows by more than SOAK_MEM_GROWTH % (default 40) from the first to the last third
+#   memory    no container grows by more than SOAK_MEM_GROWTH % (default 20) from the middle to the last third: the
+#             first third is the warm-up (the shared buffers of PostgreSQL fill as the tables grow, caches of nginx), a
+#             leak keeps growing after it
 #   answers   no 5xx; attacks blocked
 #   latency   p95 of a normal request under SOAK_P95_MS (default 500)
 #   logs      the audit of scripts/audit-logs.mjs (report)
@@ -15,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DURATION="${DURATION:-60}"
 SAMPLE_EVERY="${SAMPLE_EVERY:-120}"
-MEM_GROWTH="${SOAK_MEM_GROWTH:-40}"
+MEM_GROWTH="${SOAK_MEM_GROWTH:-20}"
 P95_MS="${SOAK_P95_MS:-500}"
 CURL_VERSION=$(grep -m1 '^CURL_VERSION=' deploy/.env | cut -d= -f2)
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-nginxions-soak}"
@@ -101,14 +103,15 @@ const rows = readFileSync(`${out}/samples.tsv`, "utf8").trim().split("\n").slice
 const byName = new Map();
 for (const [m, name, mem] of rows) byName.set(name, [...(byName.get(name) ?? []), [Number(m), Number(mem)]]);
 const failures = [];
-const lines = ["## Long run (soak)", "", `requests: ${answers.length}, 5xx: ${s5xx}, attacks blocked: ${blocked}/${attacks}, p95 of a normal request: ${p95.toFixed(0)} ms`, "", "| container | memory first third, MiB | last third, MiB | growth |", "|---|---|---|---|"];
+const lines = ["## Long run (soak)", "", `requests: ${answers.length}, 5xx: ${s5xx}, attacks blocked: ${blocked}/${attacks}, p95 of a normal request: ${p95.toFixed(0)} ms`, "", "| container | memory first third (warm-up), MiB | middle third, MiB | last third, MiB | growth middle → last |", "|---|---|---|---|---|"];
 for (const [name, points] of byName) {
 	const third = Math.max(1, Math.floor(points.length / 3));
 	const avg = (p) => p.reduce((s, [, v]) => s + v, 0) / p.length;
 	const first = avg(points.slice(0, third));
+	const middle = avg(points.slice(third, -third).length ? points.slice(third, -third) : points.slice(0, third));
 	const last = avg(points.slice(-third));
-	const growth = first > 0 ? ((last - first) / first) * 100 : 0;
-	lines.push(`| ${name} | ${first.toFixed(0)} | ${last.toFixed(0)} | ${growth.toFixed(0)} % |`);
+	const growth = middle > 0 ? ((last - middle) / middle) * 100 : 0;
+	lines.push(`| ${name} | ${first.toFixed(0)} | ${middle.toFixed(0)} | ${last.toFixed(0)} | ${growth.toFixed(0)} % |`);
 	if (points.length >= 6 && growth > Number(growthMax)) failures.push(`${name}: memory +${growth.toFixed(0)} %`);
 }
 if (s5xx) failures.push(`${s5xx} answers 5xx`);

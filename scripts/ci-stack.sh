@@ -5,6 +5,7 @@
 #   smoke-waf        closed-network test with the smoke group waf (WAF of open-appsec, learning)
 #   smoke-crowdsec   closed-network test with the groups crowdsec and migration
 #   smoke-core       closed-network test with the other groups and the interface in a browser
+#   gui              the interface driven like a user, each action checked by its effect (deploy/test/gui-e2e.mjs)
 #   waf-score        GoTestWAF against a protected host (scripts/test-waf-score.sh)
 #   upgrade          update from the published develop (scripts/test-upgrade.sh)
 #   chaos            failures of the parts of the stack (scripts/test-chaos.sh)
@@ -14,7 +15,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-suite="${1:?the test: smoke-waf, smoke-crowdsec, smoke-core, waf-score, upgrade, chaos, dast}"
+suite="${1:?the test: smoke-waf, smoke-crowdsec, smoke-core, gui, waf-score, upgrade, chaos, dast}"
 # volumes and networks named after the test
 export COMPOSE_PROJECT_NAME="nginxions-$suite"
 
@@ -22,6 +23,7 @@ case "$suite" in
   smoke-waf) SMOKE_GROUPS="waf" UI_E2E=0 exec scripts/test-airgap.sh ;;
   smoke-crowdsec) SMOKE_GROUPS="crowdsec migration" UI_E2E=0 exec scripts/test-airgap.sh ;;
   smoke-core) SMOKE_GROUPS="services hosts rbac events pki certs" UI_E2E=1 exec scripts/test-airgap.sh ;;
+  gui) SMOKE_GROUPS="services" UI_E2E=0 GUI_E2E=1 exec scripts/test-airgap.sh ;;
   waf-score) OUT="${OUT:-reports/waf}" exec scripts/test-waf-score.sh ;;
   upgrade) exec scripts/test-upgrade.sh ;;
   chaos) exec scripts/test-chaos.sh ;;

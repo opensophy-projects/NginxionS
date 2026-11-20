@@ -8,19 +8,20 @@
 //   extended   the full run and the heavy checks
 //
 // A push to a branch is full when the message says [full], or when it changes what only the stack tests (the agent,
-// deploy/, the Dockerfiles, nginx's rootfs, the test scripts). [smoke:waf], [smoke:crowdsec], [smoke:core], [dast],
+// deploy/, the Dockerfiles, nginx's rootfs, the test scripts). [smoke:waf], [smoke:crowdsec], [smoke:core], [gui], [dast],
 // [waf-score], [upgrade], [chaos] in the message build the images and run only those tests. CodeQL for C++ and Go
 // runs when their code changed (the extended run and the weekly branch always run them): an incremental scan.
 //
 //   CHANGED=<file with one path a line, or empty: unknown> EVENT=push REF=refs/heads/x MESSAGE=... node ci-level.mjs
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-export const SUITES = ["smoke-waf", "smoke-crowdsec", "smoke-core", "waf-score", "upgrade", "chaos", "dast"];
+export const SUITES = ["smoke-waf", "smoke-crowdsec", "smoke-core", "gui", "waf-score", "upgrade", "chaos", "dast"];
 const TAGS = {
 	"[smoke:waf]": "smoke-waf",
 	"[smoke:learning]": "smoke-waf",
 	"[smoke:crowdsec]": "smoke-crowdsec",
 	"[smoke:core]": "smoke-core",
+	"[gui]": "gui",
 	"[dast]": "dast",
 	"[waf-score]": "waf-score",
 	"[upgrade]": "upgrade",
