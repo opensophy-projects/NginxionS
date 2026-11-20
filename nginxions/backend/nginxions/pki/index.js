@@ -506,7 +506,7 @@ const audit = (access, action, objectType, id, meta) =>
 	internalAuditLog.add(access, { action, object_type: objectType, object_id: id, meta });
 
 /** NginxionS itself: automatic renewals (no user) */
-const SYSTEM = { can: async () => true, token: { getUserId: () => 0 } };
+export const SYSTEM = { can: async () => true, token: { getUserId: () => 0 } };
 /** auto_renew of a certificate: "" none, "link" (people: next .p12 by a one-time link), "token" (services) */
 const AUTO_RENEW = ["", "link", "token"];
 const RENEW_HOURS = { min: 1, max: 8760 };

@@ -27,6 +27,8 @@ export const RESOURCES = {
 	roles: ["view", "manage"],
 	settings: ["view", "manage"],
 	audit_log: ["view"],
+	// servers of NginxionS connected to this one (docs/adr/0012-nodes.md): view the list, manage add/revoke/delete
+	nodes: ["view", "manage"],
 };
 
 /** the sections of upstream user_permission, by resource */
@@ -69,6 +71,7 @@ export const BUILTIN = {
 			"notifications:view",
 			...all("services"),
 			"audit_log:view",
+			"nodes:view",
 		],
 	},
 	security_analyst: {
@@ -83,6 +86,7 @@ export const BUILTIN = {
 			...all("crowdsec"),
 			"notifications:view",
 			"audit_log:view",
+			"nodes:view",
 		],
 	},
 	viewer: {
@@ -100,6 +104,7 @@ export const BUILTIN = {
 			"crowdsec",
 			"notifications",
 			"services",
+			"nodes",
 		),
 	},
 };
