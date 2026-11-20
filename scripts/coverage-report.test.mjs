@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { codeLines, counted, parseLcov, sourceOf, v8LineHits } from "./coverage-report.mjs";
+import { addedCoverage, addedLines, codeLines, counted, parseLcov, sourceOf, v8LineHits } from "./coverage-report.mjs";
 
 test("code lines: no blank lines, comments, brackets alone", () => {
 	const src = [
@@ -68,4 +68,25 @@ test("the scripts of the backend and of nginxions-control map to their sources",
 	assert.equal(sourceOf("file:///app/nginxions/pki/mtls.js"), "nginxions/pki/mtls.js");
 	assert.equal(sourceOf("file:///opt/nginxions-control/server.js"), "nginxions/control/server.js");
 	assert.equal(sourceOf("node:internal/main"), undefined);
+});
+
+test("the lines a change adds: from the patch of a comparison of GitHub, of our backend only", () => {
+	const patch = ["@@ -10,3 +10,4 @@ export const a = 1;", " const b = 2;", "-const c = 3;", "+const c = 4;", "+const d = 5;", " const e = 6;", "@@ -40 +41,2 @@", "+x();", "+y();"].join("\n");
+	const added = addedLines([
+		{ filename: "nginxions/backend/nginxions/pki/mtls.js", patch },
+		{ filename: "nginxions/backend/internal/nginx.js", patch },
+		{ filename: "nginxions/backend/nginxions/pki/mtls.test.js", patch },
+		{ filename: "nginxions/backend/nginxions/big.js" },
+	]);
+	assert.deepEqual([...added.keys()], ["nginxions/pki/mtls.js"]);
+	assert.deepEqual([...added.get("nginxions/pki/mtls.js")], [11, 12, 41, 42]);
+});
+
+test("the lines a change adds that a test ran; lines that are no code do not count", () => {
+	const perFile = [{ file: "nginxions/a.js", ran: new Map([[11, true], [12, false], [41, true]]) }];
+	const r = addedCoverage(perFile, new Map([["nginxions/a.js", new Set([11, 12, 41, 42])]]));
+	assert.equal(r.lines, 3);
+	assert.equal(r.ran, 2);
+	assert.deepEqual(r.files[0].missed, [12]);
+	assert.equal(Math.round(r.pct), 67);
 });
