@@ -325,7 +325,7 @@ SHELL_CMD_HANDLER(
 )
 SHELL_CMD_HANDLER(
     "Hardware",
-    R"(ver | sed -E 's/^This is opensophy'\''s +([^ ]+).*$/\1/')",
+    R"(ver | sed -E 's/^This is .*'\''s +([^ ]+).*$/\1/')",
     getHardware
 )
 #endif//smb

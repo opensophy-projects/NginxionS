@@ -27,5 +27,5 @@ gen_package(
 	install-cp-nano-attachment-registration-manager.sh
 	attachment_registration_manager_service
 	./install-attachment-registration-manager.sh
-	opensophy Attachment Registration Manager Nano Service Version ${PACKAGE_VERSION} Install Package
+	Attachment Registration Manager Nano Service Version ${PACKAGE_VERSION} Install Package
 )

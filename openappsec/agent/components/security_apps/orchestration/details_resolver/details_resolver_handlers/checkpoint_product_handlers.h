@@ -688,7 +688,7 @@ getOsRelease(shared_ptr<istream> file_stream)
 {
     string line;
     while (getline(*file_stream, line)) {
-        if (line.find("opensophy") != string::npos) return line;
+        if (line.find("Gaia") != string::npos) return line;
 
         static const string prety_name_attr = "PRETTY_NAME=";
         size_t pretty_name_idx = line.find(prety_name_attr);
