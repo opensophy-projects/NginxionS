@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { timingSafeEqual } from "node:crypto";
+import { takeCoverage } from "node:v8";
 // NginxionS control plane (nginxions-control): the only way the NginxionS backend reaches the Docker API.
 //
 // Runs in a container of its own (service "control" of deploy/compose.yaml: the image of the agent with a command of
@@ -455,3 +456,6 @@ if (process.env.NGINXIONS_CONTROL_WATCHDOG !== "false") {
 for (const signal of ["SIGINT", "SIGTERM"]) {
 	process.on(signal, () => server.close(() => process.exit(0)));
 }
+// the coverage of the tests of the stack: with NODE_V8_COVERAGE (only in deploy/test/compose.airgap.yaml) SIGUSR2
+// writes what nginxions-control ran so far (scripts/test-airgap.sh collects it)
+if (process.env.NODE_V8_COVERAGE) process.on("SIGUSR2", () => takeCoverage());

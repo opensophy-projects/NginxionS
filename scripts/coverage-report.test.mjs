@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { codeLines, counted, parseLcov, v8LineHits } from "./coverage-report.mjs";
+import { codeLines, counted, parseLcov, sourceOf, v8LineHits } from "./coverage-report.mjs";
 
 test("code lines: no blank lines, comments, brackets alone", () => {
 	const src = [
@@ -62,4 +62,10 @@ test("only our sources count: not tests, not the code of NPMplus", () => {
 	assert.equal(counted("nginxions/pki/mtls.test.js"), false);
 	assert.equal(counted("nginxions/test/helpers.js"), false);
 	assert.equal(counted("internal/nginx.js"), false);
+});
+
+test("the scripts of the backend and of nginxions-control map to their sources", () => {
+	assert.equal(sourceOf("file:///app/nginxions/pki/mtls.js"), "nginxions/pki/mtls.js");
+	assert.equal(sourceOf("file:///opt/nginxions-control/server.js"), "nginxions/control/server.js");
+	assert.equal(sourceOf("node:internal/main"), undefined);
 });
