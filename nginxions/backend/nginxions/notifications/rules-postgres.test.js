@@ -164,8 +164,11 @@ describe("rules of notifications on PostgreSQL", { skip: !postgres && "no Postgr
 	});
 
 	test("the WAF switched off: no alert of the agent or of the policy", async () => {
-		const { setSetting } = await import("../settings.js");
-		await setSetting("waf.enabled", false);
+		// the row itself: setSetting also writes the environment of the restart to /data, not writable outside the image
+		await knex("nginxions_setting")
+			.insert({ key: "waf.enabled", value: "false", modified_on: NOW })
+			.onConflict("key")
+			.merge();
 		assert.deepEqual(await check("agent_down", {}, NOW), []);
 		assert.deepEqual(await check("policy_error", {}, NOW), []);
 	});
