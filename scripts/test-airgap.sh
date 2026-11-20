@@ -49,8 +49,16 @@ collect_coverage() {
   sleep 3
   mkdir -p reports/coverage-stack
   docker cp "$("${compose[@]}" ps -q nginxions):/tmp/coverage-backend" reports/coverage-stack/backend > /dev/null 2>&1 || true
-  command -v node > /dev/null && node scripts/coverage-report.mjs --trim reports/coverage-stack/backend
-  echo "coverage of the backend: $(find reports/coverage-stack/backend -name '*.json' 2> /dev/null | wc -l) files"
+  # nginxions-control (node is its process 1); its coverage is on a volume, copied by a container of the same service
+  if [ -n "$("${compose[@]}" ps -q control 2> /dev/null)" ]; then
+    "${compose[@]}" exec -T control sh -c 'kill -USR2 1' || true
+    sleep 2
+    mkdir -p reports/coverage-stack/control
+    "${compose[@]}" run --rm --no-deps -T --entrypoint sh -v "$PWD/reports/coverage-stack/control:/out" control \
+      -c 'cp /coverage/*.json /out/ 2> /dev/null; true' > /dev/null 2>&1 || true
+  fi
+  command -v node > /dev/null && node scripts/coverage-report.mjs --trim reports/coverage-stack
+  echo "coverage: $(find reports/coverage-stack -name '*.json' 2> /dev/null | wc -l) files"
 }
 
 cleanup() {
