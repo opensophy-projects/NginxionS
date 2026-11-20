@@ -278,6 +278,22 @@ expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: applicati
   "$ADMIN/api/nginxions/nodes/register" -d "{\"code\": \"$node_code\", \"csr_pem\": \"x\"}")" 401 "the join code used again"
 expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer nt_wrong' \
   "$ADMIN/api/nginxions/nodes/heartbeat")" 401 "a heartbeat with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/package")" 401 "a package with a wrong token"
+
+step "Nodes: a host given to the node comes in its signed package; here its domain is taken, so it is left out and told"
+api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [$host_id]}" | json | grep -q "\[$host_id\]" \
+  || fail "the host was not given to the node"
+applied=""
+for _ in $(seq 1 30); do
+  nodes_now=$($CURL "$ADMIN/api/nginxions/nodes" | json)
+  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":1' && { applied=1; break; }
+  sleep 2
+done
+[ -n "$applied" ] || fail "the package of the node was not applied: $nodes_now"
+echo "$nodes_now" | grep -q '"package_error":""' || fail "the package of the node has an error: $nodes_now"
+# the host of this server is still the one serving mtls.local (one row, not a copy)
+expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
 $CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"
 # its next heartbeat (every 30 s) learns it was disabled
 disabled=""

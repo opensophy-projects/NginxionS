@@ -2992,35 +2992,6 @@ router
 		),
 	);
 
-/**
- * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
- * DELETE /api/nginxions/nodes/:node_id — a node not active (waiting or disabled)
- */
-router
-	.route("/nodes/:node_id")
-	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
-	.put(
-		handle(async (req, res) =>
-			internalNodes.update(res.locals.access, nodeId(req), await validator(nodeSchema, req.body)),
-		),
-	)
-	.delete(handle((req, res) => internalNodes.remove(res.locals.access, nodeId(req))));
-
-/** POST /api/nginxions/nodes/:node_id/code — a new join code (the old one stops working) */
-router
-	.route("/nodes/:node_id/code")
-	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
-	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
-
-/** POST /api/nginxions/nodes/:node_id/revoke — disable: its certificate revoked, its token forgotten */
-router
-	.route("/nodes/:node_id/revoke")
-	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
-	.post(handle((req, res) => internalNodes.revoke(res.locals.access, nodeId(req))));
-
 const unknownNode = (res, message) => res.status(401).send({ error: { code: 401, message } });
 
 /**
@@ -3058,6 +3029,82 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
 		next(err);
 	}
 });
+
+/**
+ * GET /api/nginxions/nodes/package — without login: Authorization: Bearer <token of the node>; the signed package of
+ *   the node {schema, version, body, signature}; 401 for an unknown or disabled node
+ */
+router.get("/nodes/package", async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.package(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
+ * DELETE /api/nginxions/nodes/:node_id — a node not active (waiting or disabled)
+ */
+router
+	.route("/nodes/:node_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) =>
+			internalNodes.update(res.locals.access, nodeId(req), await validator(nodeSchema, req.body)),
+		),
+	)
+	.delete(handle((req, res) => internalNodes.remove(res.locals.access, nodeId(req))));
+
+/** POST /api/nginxions/nodes/:node_id/code — a new join code (the old one stops working) */
+router
+	.route("/nodes/:node_id/code")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
+
+/**
+ * GET /api/nginxions/nodes/:node_id/hosts — the proxy hosts the node serves (ids of this server)
+ * PUT /api/nginxions/nodes/:node_id/hosts — {host_ids}: they go to the node with its next package
+ */
+router
+	.route("/nodes/:node_id/hosts")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.hosts(res.locals.access, nodeId(req))))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["host_ids"],
+					properties: {
+						host_ids: {
+							type: "array",
+							maxItems: 5000,
+							items: { type: "integer", minimum: 1, maximum: MAX_ID },
+						},
+					},
+				},
+				req.body,
+			);
+			return internalNodes.setHosts(res.locals.access, nodeId(req), data.host_ids);
+		}),
+	);
+
+/** POST /api/nginxions/nodes/:node_id/revoke — disable: its certificate revoked, its token forgotten */
+router
+	.route("/nodes/:node_id/revoke")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalNodes.revoke(res.locals.access, nodeId(req))));
 
 /**
  * GET    /api/nginxions/cluster/member — this server as a node: its manager, id, last contact
