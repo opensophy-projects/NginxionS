@@ -1,8 +1,6 @@
 /*! \file static_object.hpp
     \brief Internal polymorphism static object support
     \ingroup Internal */
-
-*/
 #ifndef CEREAL_DETAILS_STATIC_OBJECT_HPP_
 #define CEREAL_DETAILS_STATIC_OBJECT_HPP_
 
