@@ -3031,6 +3031,23 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
 });
 
 /**
+ * POST /api/nginxions/nodes/events — without login: Authorization: Bearer <token of the node>; {events} (at most 500)
+ *   → {stored}; 401 for an unknown or disabled node
+ */
+router.post("/nodes/events", express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.events(token, req.body?.events);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
  * GET /api/nginxions/nodes/package — without login: Authorization: Bearer <token of the node>; the signed package of
  *   the node {schema, version, body, signature}; 401 for an unknown or disabled node
  */

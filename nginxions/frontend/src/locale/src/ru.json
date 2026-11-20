@@ -2468,6 +2468,9 @@
 	"nginxions.events.newer": {
 		"defaultMessage": "Новее"
 	},
+	"nginxions.events.node": {
+		"defaultMessage": "Узел"
+	},
 	"nginxions.events.older": {
 		"defaultMessage": "Старше"
 	},
@@ -4342,6 +4345,9 @@
 	},
 	"nginxions.nodes.delete.confirm": {
 		"defaultMessage": "Удалить узел {name} из списка?"
+	},
+	"nginxions.nodes.events": {
+		"defaultMessage": "События"
 	},
 	"nginxions.nodes.hint": {
 		"defaultMessage": "Серверы NginxionS, которыми управляет этот. Добавьте узел — получите одноразовый код подключения, затем введите его на новом сервере в «Этот сервер»."

@@ -63,6 +63,12 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 					let answer = null;
 					if (req.url === "/api/nginxions/nodes/register")
 						answer = await nodes.register(body, "198.51.100.7");
+					if (req.url === "/api/nginxions/nodes/events") {
+						answer = await nodes.events(
+							/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1],
+							body.events,
+						);
+					}
 					if (req.url === "/api/nginxions/nodes/package") {
 						answer = await nodes.package(/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1]);
 					}
@@ -126,8 +132,26 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.match(state.signing_key, /BEGIN PUBLIC KEY/);
 		assert.match(state.applied_version, /^[0-9a-f]{64}$/);
 		assert.equal(state.package_error, "");
+		// an event of this server after the join goes to the manager with the id of the node (one database here: the
+		// manager keeps it as a second row)
+		const { classify } = await import("../events/normalize.js");
+		const { store } = await import("../events/store.js");
+		const { row: event } = classify({
+			eventTime: new Date().toISOString().replace("Z", ""),
+			eventName: "Web Request",
+			eventSeverity: "Critical",
+			eventSource: { serviceName: "HTTP Transaction Handler", assetName: "shop.example.com" },
+			eventData: { securityAction: "Prevent", waapIncidentType: "SQL Injection", sourceIP: "198.51.100.20" },
+		});
+		await store({ events: [event], telemetry: [], cursors: [] });
 		await member.beat();
 		assert.equal((await nodes.list(ADMIN))[0].info.package_version, state.applied_version);
+		const copies = await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" });
+		assert.deepEqual(copies.map((e) => e.node_id).sort(), ["local", node.uid].sort());
+		assert.equal((await member.readState()).events_error, "");
+		// sent once: the next heartbeat sends nothing again
+		await member.beat();
+		assert.equal((await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" })).length, 2);
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
 	});
 

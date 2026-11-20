@@ -374,6 +374,11 @@ function NodesCard() {
 										{node.last_seen_on ? formatDateTime(node.last_seen_on, locale) : "—"}
 									</td>
 									<td className="text-nowrap nx-actions-row">
+										{node.status === "active" && (
+											<a className="btn btn-sm me-2" href={`/waf/events?node=${node.uid}`}>
+												<T id="nginxions.nodes.events" />
+											</a>
+										)}
 										{manage && node.status !== "revoked" && (
 											<Button size="sm" className="me-2" onClick={() => onHosts(node)}>
 												<IconServer size={16} className="me-1" />
