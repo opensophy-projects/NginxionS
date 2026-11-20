@@ -6,6 +6,7 @@
 #   SERVICES="nginxions crowdsec" scripts/test-airgap.sh   # subset (dependencies are added by compose)
 #   SMOKE_GROUPS="waf crowdsec" scripts/test-airgap.sh       # some groups of smoke (deploy/test/smoke/), all by default
 #   UI_E2E=0 scripts/test-airgap.sh                            # without the interface in a browser
+#   GUI_E2E=1 scripts/test-airgap.sh                           # with the interface driven like a user (gui-e2e.mjs)
 #
 # A failed group of smoke does not stop the test: the checks after it still run, the test fails at its end. The
 # steps of smoke with their times are in reports/smoke (scripts/smoke-report.mjs) and in the summary of the run.
@@ -40,6 +41,18 @@ audit_logs() {
   fi
 }
 
+# what the backend ran during the test (NODE_V8_COVERAGE of deploy/test/compose.airgap.yaml): SIGUSR2 makes the backend
+# write it (index.js), then it is copied to reports/coverage-stack/backend for scripts/coverage-report.mjs
+collect_coverage() {
+  [ -n "$("${compose[@]}" ps -q nginxions 2> /dev/null)" ] || return 0
+  "${compose[@]}" exec -T nginxions sh -c 'for p in $(pgrep -f "[i]ndex.js"); do kill -USR2 "$p"; done' || return 0
+  sleep 3
+  mkdir -p reports/coverage-stack
+  docker cp "$("${compose[@]}" ps -q nginxions):/tmp/coverage-backend" reports/coverage-stack/backend > /dev/null 2>&1 || true
+  command -v node > /dev/null && node scripts/coverage-report.mjs --trim reports/coverage-stack/backend
+  echo "coverage of the backend: $(find reports/coverage-stack/backend -name '*.json' 2> /dev/null | wc -l) files"
+}
+
 cleanup() {
   status=$?
   audit_logs || true
@@ -69,6 +82,7 @@ cleanup() {
           2> /dev/null | tail -n 40' || true
     fi
   fi
+  collect_coverage || true
   [ "${KEEP:-}" = 1 ] || "${compose[@]}" down -v --remove-orphans > /dev/null 2>&1 || true
   exit $status
 }
@@ -107,27 +121,38 @@ echo "==> restart nginxions"
 wait_healthy
 "${compose[@]}" run --rm -T tester after-restart
 
-# the interface in a real browser with the session of smoke (deploy/test/ui-e2e.mjs): every page renders, no error of
-# JavaScript, no 5xx of the API; screenshots in reports/ui. The container installs the package of Playwright on the
-# default network, then is moved into the closed network of the stack.
-if [ "${UI_E2E:-1}" = 1 ]; then
-  echo "==> the interface in a browser: every page"
+# the interface in a real browser with the session of smoke: every page renders, no error of JavaScript, no 5xx of the
+# API, screenshots in reports/ui (deploy/test/ui-e2e.mjs, UI_E2E=1); the interface driven like a user, each action
+# checked by its effect on the sites (deploy/test/gui-e2e.mjs, GUI_E2E=1, reports/gui). The container installs the
+# package of Playwright on the default network, then is moved into the closed network of the stack.
+if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
   pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
   pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
   pw="${COMPOSE_PROJECT_NAME}-ui"
-  mkdir -p reports/ui
+  mkdir -p reports/ui reports/gui
   docker rm -f "$pw" > /dev/null 2>&1 || true
   docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
-    -v "$PWD/reports/ui:/out" -w /e2e "$pw_image" sleep 1800 > /dev/null
+    -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "$PWD/deploy/test/gui-e2e.mjs:/e2e/gui-e2e.mjs:ro" \
+    -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
+    -v "$PWD/reports/ui:/out" -v "$PWD/reports/gui:/out-gui" -w /e2e "$pw_image" sleep 3600 > /dev/null
   docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"
   docker network connect "${COMPOSE_PROJECT_NAME}_edge" "$pw"
   docker network disconnect bridge "$pw"
   ui_status=0
-  docker exec "$pw" node ui-e2e.mjs || ui_status=$?
+  if [ "${UI_E2E:-1}" = 1 ]; then
+    echo "==> the interface in a browser: every page"
+    docker exec "$pw" node ui-e2e.mjs || ui_status=$?
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/ui/ui-e2e.md ]; then cat reports/ui/ui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
+  fi
+  gui_status=0
+  if [ "${GUI_E2E:-0}" = 1 ]; then
+    echo "==> the interface driven like a user: each action checked by its effect"
+    docker exec -e OUT=/out-gui "$pw" node gui-e2e.mjs || gui_status=$?
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/gui/gui-e2e.md ]; then cat reports/gui/gui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
+  fi
   docker rm -f "$pw" > /dev/null 2>&1 || true
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/ui/ui-e2e.md ]; then cat reports/ui/ui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
   [ "$ui_status" = 0 ] || { echo "FAIL: a page of the interface is broken (reports/ui/ui-e2e.md)"; exit 1; }
+  [ "$gui_status" = 0 ] || { echo "FAIL: an action in the interface had no effect (reports/gui/gui-e2e.md)"; exit 1; }
 fi
 
 # the isolation of the networks, as an attacker on the edge network (the internet side) would try it: the internal

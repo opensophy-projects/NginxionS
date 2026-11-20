@@ -2,6 +2,12 @@
 # Used by scripts/test-airgap.sh; every phase adds scenarios to smoke.sh.
 
 services:
+  nginxions:
+    environment:
+      # what the backend runs during the tests of the stack (index.js writes it on SIGUSR2; scripts/test-airgap.sh
+      # collects it into reports/coverage-stack, scripts/coverage-report.mjs merges it with the unit tests)
+      NODE_V8_COVERAGE: /tmp/coverage-backend
+
   test-upstream:
     image: docker.io/traefik/whoami:${WHOAMI_VERSION}
     container_name: nginxions-test-upstream
