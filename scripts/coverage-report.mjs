@@ -1,0 +1,363 @@
+// The coverage of the code by the tests, every kind of test together, and its ratchet (docs/DEVSECOPS.md, «Покрытие»):
+//
+//   backend    the unit tests (lcov of `node --test`, artifact security-quality) and the tests of the stack: what the
+//              backend ran during smoke, the interface in a browser and driven like a user (raw V8 coverage that
+//              scripts/test-airgap.sh collects into reports/**/coverage-stack/{backend,control}). A line run by either counts.
+//              Every file of nginxions/backend/nginxions is counted, a file no test loaded too (0 %).
+//   frontend   vitest (coverage-frontend/coverage-summary.json)
+//   go/<svc>   go test of the services of the agent (coverage-go-<svc>.txt)
+//
+// The ratchet: no part may fall more than 0.5 point under .github/coverage-baseline.json (a part with no baseline, or
+// not measured in this run, is only reported). The backend of the stack is compared only when every test of the stack
+// that runs the backend gave its coverage (a run of chosen tests covers less on purpose). Raise the baseline with
+// --update when the coverage went up.
+//
+//   node scripts/coverage-report.mjs --in reports [--baseline .github/coverage-baseline.json] [--update] [--out dir]
+//     [--diff compare.json]   the comparison of GitHub of this branch with its base: of the lines of code it adds to the
+//                             backend, at least ADDED_MIN % must run in a test (unit or of the stack)
+//   node scripts/coverage-report.mjs --trim reports/coverage-stack    (keeps only our scripts: smaller files)
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+
+const ROOT = new URL("..", import.meta.url).pathname;
+const BACKEND = join(ROOT, "nginxions/backend");
+/** the code of NginxionS in the backend (the code of NPMplus is not ours to cover) */
+const OURS = "nginxions/";
+const TOLERANCE = 0.5;
+/** the tests of the stack that run the backend: all of them must have given coverage for the ratchet of the stack */
+export const STACK_SUITES = ["smoke-waf", "smoke-crowdsec", "smoke-core", "gui"];
+
+const walk = (dir, out = []) => {
+	let names;
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return out;
+	}
+	for (const name of names) {
+		const p = join(dir, name);
+		if (statSync(p).isDirectory()) walk(p, out);
+		else out.push(p);
+	}
+	return out;
+};
+
+/** a source file of ours: not a test, not test data */
+export const counted = (rel) => rel.startsWith(OURS) && rel.endsWith(".js") && !/\.test\.js$/.test(rel) && !rel.startsWith(`${OURS}test/`);
+
+/** lines that hold code: not blank, not only a comment, not only brackets and punctuation */
+export function codeLines(source) {
+	const lines = source.split("\n");
+	const out = new Set();
+	let inBlock = false;
+	lines.forEach((raw, i) => {
+		let line = raw.trim();
+		if (inBlock) {
+			const end = line.indexOf("*/");
+			if (end < 0) return;
+			line = line.slice(end + 2).trim();
+			inBlock = false;
+		}
+		if (line.startsWith("/*")) {
+			const end = line.indexOf("*/", 2);
+			if (end < 0) {
+				inBlock = true;
+				return;
+			}
+			line = line.slice(end + 2).trim();
+		}
+		if (!line || line.startsWith("//")) return;
+		if (/^[\s{}()[\];,]*$/.test(line)) return;
+		out.add(i + 1);
+	});
+	return out;
+}
+
+/**
+ * Line hits from the V8 coverage of one script: each line gets the count of the innermost range that holds its first
+ * character of code (a function, then its blocks, nested). Lines out of every range are not reported.
+ * @param {string} source
+ * @param {{functions: {ranges: {startOffset: number, endOffset: number, count: number}[]}[]}} script
+ * @returns {Map<number, number>} line (1-based) → count
+ */
+export function v8LineHits(source, script) {
+	const ranges = script.functions.flatMap((f) => f.ranges);
+	const hits = new Map();
+	let offset = 0;
+	const lines = source.split("\n");
+	lines.forEach((line, i) => {
+		const first = offset + (line.length - line.trimStart().length);
+		let best;
+		for (const r of ranges) {
+			if (r.startOffset <= first && first < r.endOffset) {
+				if (!best || r.endOffset - r.startOffset < best.endOffset - best.startOffset) best = r;
+			}
+		}
+		if (best) hits.set(i + 1, best.count);
+		offset += line.length + 1;
+	});
+	return hits;
+}
+
+/** lcov → Map(rel path → Map(line → hits)) for the files of the backend */
+export function parseLcov(text, base = BACKEND) {
+	const files = new Map();
+	let cur;
+	for (const line of text.split("\n")) {
+		if (line.startsWith("SF:")) {
+			const sf = line.slice(3).trim();
+			const rel = sf.startsWith("/") ? relative(base, sf) : sf.replace(/^nginxions\/backend\//, "");
+			cur = new Map();
+			files.set(rel, cur);
+		} else if (line.startsWith("DA:") && cur) {
+			const [n, h] = line.slice(3).split(",");
+			cur.set(Number(n), Math.max(cur.get(Number(n)) ?? 0, Number(h)));
+		}
+	}
+	return files;
+}
+
+/**
+ * the file of the backend a script of the V8 coverage is: the backend is /app in its image (nginxions/Dockerfile),
+ * nginxions-control /opt/nginxions-control in the image of the agent (deploy/openappsec/Dockerfile)
+ */
+export const sourceOf = (url = "") => {
+	const app = /^file:\/\/\/app\/(.+)$/.exec(url);
+	if (app) return app[1];
+	const control = /^file:\/\/\/opt\/nginxions-control\/(.+)$/.exec(url);
+	return control ? `nginxions/control/${control[1]}` : undefined;
+};
+
+/** the files of raw V8 coverage of the backend → Map(rel path → Map(line → hits)), merged (max of the hits) */
+export function stackHits(jsonFiles, base = BACKEND) {
+	const files = new Map();
+	for (const f of jsonFiles) {
+		let doc;
+		try {
+			doc = JSON.parse(readFileSync(f, "utf8"));
+		} catch {
+			continue;
+		}
+		for (const script of doc.result ?? []) {
+			const rel = sourceOf(script.url);
+			if (!rel || !counted(rel)) continue;
+			// read without a check before (a check then a read is a race: CodeQL js/file-system-race)
+			let source;
+			try {
+				source = readFileSync(join(base, rel), "utf8");
+			} catch {
+				continue;
+			}
+			const hits = v8LineHits(source, script);
+			const into = files.get(rel) ?? new Map();
+			for (const [n, h] of hits) into.set(n, Math.max(into.get(n) ?? 0, h));
+			files.set(rel, into);
+		}
+	}
+	return files;
+}
+
+/** lines of each file of ours and whether they ran: the code lines of the source, hit by the unit tests or the stack */
+export function mergeBackend({ unit, stack, base = BACKEND }) {
+	const sources = walk(join(base, OURS))
+		.map((p) => relative(base, p))
+		.filter(counted);
+	const perFile = [];
+	for (const rel of sources) {
+		const code = codeLines(readFileSync(join(base, rel), "utf8"));
+		const u = unit.get(rel);
+		const s = stack.get(rel);
+		// the lines node --test reports for the file when it has them, else the code lines of the source
+		const lines = u ? new Set(u.keys()) : code;
+		let hit = 0;
+		let hitUnit = 0;
+		for (const n of lines) {
+			const byUnit = (u?.get(n) ?? 0) > 0;
+			const byStack = (s?.get(n) ?? 0) > 0;
+			if (byUnit) hitUnit++;
+			if (byUnit || byStack) hit++;
+		}
+		perFile.push({
+			file: rel,
+			lines: lines.size,
+			hit,
+			hitUnit,
+			// the lines that count and whether a test ran them, for the lines a change added (addedCoverage)
+			ran: new Map([...lines].map((n) => [n, (u?.get(n) ?? 0) > 0 || (s?.get(n) ?? 0) > 0])),
+		});
+	}
+	const sum = (k) => perFile.reduce((a, f) => a + f[k], 0);
+	const total = sum("lines");
+	return {
+		perFile,
+		total,
+		all: total ? (sum("hit") / total) * 100 : 0,
+		unitOnly: total ? (sum("hitUnit") / total) * 100 : 0,
+	};
+}
+
+/**
+ * The lines a change added, from the files of a comparison of GitHub (GET /repos/{repo}/compare/{base}...{head}:
+ * .files[] with filename and patch): Map(path of the backend → Set of line numbers in the new file)
+ */
+export function addedLines(files) {
+	const out = new Map();
+	for (const f of files ?? []) {
+		const m = /^nginxions\/backend\/(.+)$/.exec(f.filename ?? "");
+		if (!m || !counted(m[1]) || !f.patch) continue;
+		const lines = new Set();
+		let n = 0;
+		for (const line of f.patch.split("\n")) {
+			const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+			if (hunk) {
+				n = Number(hunk[1]);
+				continue;
+			}
+			if (line.startsWith("+")) lines.add(n++);
+			else if (!line.startsWith("-") && !line.startsWith("\\")) n++;
+		}
+		out.set(m[1], lines);
+	}
+	return out;
+}
+
+/** of the lines a change added, those that count (code) and those a test ran */
+export function addedCoverage(perFile, added) {
+	const files = [];
+	for (const [file, lines] of added) {
+		const f = perFile.find((x) => x.file === file);
+		if (!f) continue;
+		const code = [...lines].filter((n) => f.ran.has(n));
+		if (!code.length) continue;
+		const ran = code.filter((n) => f.ran.get(n));
+		files.push({ file, lines: code.length, ran: ran.length, missed: code.filter((n) => !f.ran.get(n)) });
+	}
+	const lines = files.reduce((a, f) => a + f.lines, 0);
+	const ran = files.reduce((a, f) => a + f.ran, 0);
+	return { files, lines, ran, pct: lines ? (ran / lines) * 100 : null };
+}
+
+/** the lines a change adds to the backend: this share at least must run in a test (unit or of the stack) */
+export const ADDED_MIN = 80;
+/** fewer added lines of code than this: the share is not checked (a fix of two lines needs no test of its own) */
+export const ADDED_FLOOR = 10;
+
+const pct = (n) => (n == null ? "—" : `${n.toFixed(1)} %`);
+
+/** keeps only the scripts of ours in raw V8 coverage files (the rest, node_modules and Node, is most of their size) */
+export function trim(dir) {
+	for (const f of walk(dir).filter((x) => x.endsWith(".json"))) {
+		try {
+			const doc = JSON.parse(readFileSync(f, "utf8"));
+			doc.result = (doc.result ?? []).filter((s) => counted(sourceOf(s.url) ?? ""));
+			delete doc["source-map-cache"];
+			writeFileSync(f, JSON.stringify(doc));
+		} catch {}
+	}
+}
+
+if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === "--trim") {
+	trim(process.argv[3]);
+	process.exit(0);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+	const arg = (name, def) => {
+		const i = process.argv.indexOf(name);
+		return i > 0 ? process.argv[i + 1] : def;
+	};
+	const IN = arg("--in", "reports");
+	const OUT = arg("--out", join(IN, "coverage"));
+	const BASELINE = arg("--baseline", join(ROOT, ".github/coverage-baseline.json"));
+	const update = process.argv.includes("--update");
+	const files = walk(IN);
+
+	const parts = {};
+	let added;
+	const lcov = files.find((f) => f.endsWith("lcov-backend.info"));
+	const v8 = files.filter((f) => /coverage-stack[/\\](backend|control)[/\\].+\.json$/.test(f));
+	// the tests of the stack that gave coverage: reports/<artifact tests-<suite>>/coverage-stack/...
+	const suites = new Set(v8.map((f) => /tests-([a-z-]+)[/\\]/.exec(f)?.[1]).filter(Boolean));
+	if (lcov || v8.length) {
+		const merged = mergeBackend({ unit: lcov ? parseLcov(readFileSync(lcov, "utf8")) : new Map(), stack: stackHits(v8) });
+		if (lcov) parts["backend (unit)"] = merged.unitOnly;
+		const complete = STACK_SUITES.every((s) => suites.has(s));
+		if (lcov && v8.length) parts[complete ? "backend (unit + stack)" : "backend (unit + some tests of the stack)"] = merged.all;
+		// the lines this branch adds (--diff: the comparison of GitHub with the base branch): checked when the coverage
+		// is whole (unit tests and every test of the stack), else only reported
+		const diff = arg("--diff");
+		if (diff) {
+			let files = [];
+			try {
+				files = JSON.parse(readFileSync(diff, "utf8")).files ?? [];
+			} catch {}
+			added = addedCoverage(merged.perFile, addedLines(files));
+			added.checked = Boolean(lcov) && complete;
+		}
+		mkdirSync(OUT, { recursive: true });
+		writeFileSync(
+			join(OUT, "coverage-backend.tsv"),
+			`file\tlines\thit\thit by unit tests\n${merged.perFile.map((f) => `${f.file}\t${f.lines}\t${f.hit}\t${f.hitUnit}`).join("\n")}\n`,
+		);
+	}
+	const fe = files.find((f) => f.endsWith("coverage-frontend/coverage-summary.json"));
+	if (fe) parts.frontend = JSON.parse(readFileSync(fe, "utf8")).total.lines.pct;
+	for (const f of files.filter((x) => /coverage-go-([a-z-]+)\.txt$/.test(x))) {
+		const svc = /coverage-go-([a-z-]+)\.txt$/.exec(f)[1];
+		const total = /total:\s+\(statements\)\s+([\d.]+)%/.exec(readFileSync(f, "utf8"));
+		if (total) parts[`go/${svc}`] = Number(total[1]);
+	}
+
+	let baseline = {};
+	try {
+		baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
+	} catch {}
+	const failures = [];
+	const addedRows = [];
+	if (added?.lines) {
+		const low = added.lines >= ADDED_FLOOR && added.pct < ADDED_MIN;
+		if (low && added.checked) {
+			failures.push(`the lines of code this change adds: ${pct(added.pct)} ran in a test, at least ${ADDED_MIN} % are needed`);
+		}
+		addedRows.push(
+			"",
+			`Lines of code this change adds to the backend: ${added.lines}, run by a test: ${pct(added.pct)} (at least ${ADDED_MIN} % when ${ADDED_FLOOR} or more${added.checked ? "" : "; not checked: the coverage of this run is not whole"}).`,
+			"",
+			...added.files
+				.filter((f) => f.missed.length)
+				.map((f) => `- \`${f.file}\`: lines no test runs ${f.missed.slice(0, 20).join(", ")}${f.missed.length > 20 ? "…" : ""}`),
+		);
+	}
+	const rows = Object.entries(parts).map(([name, value]) => {
+		const base = typeof baseline[name] === "number" ? baseline[name] : undefined;
+		const drop = base != null && value < base - TOLERANCE;
+		if (drop) failures.push(`${name}: ${pct(value)}, the baseline is ${pct(base)}`);
+		return `| ${name} | ${pct(value)} | ${pct(base)} | ${drop ? "❌ fell" : base == null ? "—" : value > base + TOLERANCE ? "⬆ raise the baseline" : "✅"} |`;
+	});
+	const md = [
+		"## Coverage of the code by the tests",
+		"",
+		`Tests of the stack with coverage: ${[...suites].join(", ") || "none"}.`,
+		"",
+		"| part | lines | baseline | |",
+		"|---|---|---|---|",
+		...rows,
+		...addedRows,
+		"",
+		failures.length ? `**FAIL:** ${failures.join("; ")}` : "**OK**",
+		"",
+	].join("\n");
+	console.log(md);
+	mkdirSync(OUT, { recursive: true });
+	writeFileSync(join(OUT, "coverage.md"), md);
+	if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, md, { flag: "a" });
+	if (update) {
+		for (const [name, value] of Object.entries(parts)) {
+			if (name.includes("some tests")) continue;
+			if (baseline[name] == null || value > baseline[name]) baseline[name] = Math.floor(value * 10) / 10;
+		}
+		writeFileSync(BASELINE, `${JSON.stringify(baseline, null, "\t")}\n`);
+		console.log(`baseline updated: ${BASELINE}`);
+	}
+	process.exit(failures.length ? 1 : 0);
+}

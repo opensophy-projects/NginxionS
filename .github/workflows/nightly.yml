@@ -46,9 +46,12 @@ jobs:
         env:
           DURATION: ${{ inputs.duration || '60' }}
         run: scripts/test-soak.sh
-      # every group of smoke on one stack, one after the other: what the groups do to each other (CI runs them apart)
+      # every group of smoke on one stack, one after the other: what the groups do to each other (CI runs them apart);
+      # then the interface page by page and driven like a user on the state the groups left
       - name: closed-network test, every group on one stack
         if: always()
+        env:
+          GUI_E2E: "1"
         run: scripts/test-airgap.sh
       - name: failures of the parts of the stack
         if: always()

@@ -3,7 +3,8 @@
 // the bugs reported upstream are seen here (.github/workflows/upstream-issues.yml, hourly).
 //
 // - every open upstream issue gets one copy (pull requests are left out); its state follows upstream: closed when
-//   upstream closes it, reopened when upstream reopens it;
+//   upstream closes it, reopened when upstream reopens it; a copy closed here with a verdict (any label besides the
+//   two of upstream: duplicate, invalid, fix complete...) stays closed, what upstream does with the issue;
 // - a copy is found again by the marker <!-- upstream: owner/repo#N --> in its body, labels "upstream" and
 //   "upstream:<repo>";
 // - the text is upstream's, untrusted: @mentions are broken (no one upstream is notified from here), #N becomes
@@ -89,9 +90,12 @@ const all = async (token, path) => {
 	return out;
 };
 
+/** a copy closed here with a verdict of its own: a label that is not one of upstream */
+const decided = (copy) => (copy.labels ?? []).some((l) => l !== LABEL && !l.startsWith(`${LABEL}:`));
+
 /**
  * What to do: copies to create, copies to close or reopen.
- * @param {Map<string, {number: number, state: string}>} copies  "owner/repo#N" → our issue
+ * @param {Map<string, {number: number, state: string, labels?: string[]}>} copies  "owner/repo#N" → our issue
  * @param {{repo: string, issues: object[]}[]} upstream  open issues and those closed recently
  */
 export const plan = (copies, upstream) => {
@@ -106,7 +110,7 @@ export const plan = (copies, upstream) => {
 			if (!copy) {
 				if (issue.state === "open") create.push({ repo, issue });
 			} else if (issue.state === "closed" && copy.state === "open") close.push({ repo, issue, copy });
-			else if (issue.state === "open" && copy.state === "closed") reopen.push({ repo, issue, copy });
+			else if (issue.state === "open" && copy.state === "closed" && !decided(copy)) reopen.push({ repo, issue, copy });
 		}
 	}
 	// the oldest first: the copies get numbers in the order upstream opened them
@@ -126,7 +130,12 @@ const main = async () => {
 	if (target && token) {
 		for (const i of await all(token, `/repos/${target}/issues?labels=${LABEL}&state=all&per_page=100`)) {
 			const m = MARKER.exec(i.body ?? "");
-			if (m) copies.set(`${m[1]}#${m[2]}`, { number: i.number, state: i.state });
+			if (m)
+				copies.set(`${m[1]}#${m[2]}`, {
+					number: i.number,
+					state: i.state,
+					labels: (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name)),
+				});
 		}
 	}
 
