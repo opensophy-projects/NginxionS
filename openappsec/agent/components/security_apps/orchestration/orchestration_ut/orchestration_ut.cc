@@ -516,7 +516,7 @@ TEST_F(OrchestrationTest, register_config)
         "                \"value\": \"11\"\n"
         "            }\n"
         "        ],\n"
-        "        \"Default Check Point directory\": [\n"
+        "        \"Default opensophy directory\": [\n"
         "            {\n"
         "                \"context\": \"All()\",\n"
         "                \"value\": \"12\"\n"
@@ -565,7 +565,7 @@ TEST_F(OrchestrationTest, register_config)
     EXPECT_THAT(getConfiguration<string>("orchestration", "Configuration path"),            IsValue("9"));
     EXPECT_THAT(getConfiguration<string>("orchestration", "Policy file path"),              IsValue("10"));
     EXPECT_THAT(getConfiguration<string>("orchestration", "Configuration directory"),       IsValue("11"));
-    EXPECT_THAT(getConfiguration<string>("orchestration", "Default Check Point directory"), IsValue("12"));
+    EXPECT_THAT(getConfiguration<string>("orchestration", "Default opensophy directory"), IsValue("12"));
     EXPECT_THAT(getConfiguration<string>("orchestration", "Configuration file extension"),  IsValue("13"));
     EXPECT_THAT(getConfiguration<string>("orchestration", "Policy file extension"),         IsValue("14"));
     EXPECT_THAT(getConfiguration<string>("orchestration", "Temp file extension"),           IsValue("15"));
@@ -1419,7 +1419,7 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
 
     string manifest_err =
         "Critical Error: Agent/Gateway was not fully deployed on host 'hostname' "
-        "and is not enforcing a security policy. Retry installation or contact Check Point support.";
+        "and is not enforcing a security policy. Retry installation or contact opensophy support.";
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(manifest_err));
 
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())

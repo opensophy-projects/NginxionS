@@ -8,7 +8,7 @@
 описано в [ADR-0008](adr/0008-waf-policy.md).
 
 **Состояние (ноябрь 2026):** все поля v1beta2 работают (раздел 3). Движки, которые в open-appsec есть только в
-Premium или облаке Check Point, NginxionS выполняет своими средствами (раздел 8). Ниже — история фазы 11.
+Premium или облаке opensophy, NginxionS выполняет своими средствами (раздел 8). Ниже — история фазы 11.
 
 **Фаза 11 выполнена:**
 
@@ -33,7 +33,7 @@ open-appsec описывает локальную политику в двух �
 v1beta2 работает так:
 
 - часть полей агент читает, но в конфигурацию движков не передаёт;
-- часть движков есть только в Premium-версии или требует облака Check Point;
+- часть движков есть только в Premium-версии или требует облака opensophy;
 - некоторые сочетания полей молча теряются.
 
 В NPMplus с open-appsec-npm политика правилась сырым YAML без проверки. Такие поля просто не работали, и
@@ -105,10 +105,10 @@ NginxionS применяет все исключения в обоих синт�
 | `webAttacks.protections.csrfProtection`, `errorDisclosure`, `openRedirect` | ✅ | | всегда выключены |
 | `webAttacks.protections.nonValidHttpMethods` | ✅ | | не читалось |
 | `snortSignatures.files` | ✅ | Все файлы (A6), конвертер на Node.js | только первый файл |
-| `intrusionPrevention.*` | ✅ | Сигнатуры NginxionS из правил виртуальных патчей CrowdSec (раздел 8.1): все поля — режим, критичность, уверенность, влияние на скорость, год CVE, действия | сигнатуры только из облака Check Point |
+| `intrusionPrevention.*` | ✅ | Сигнатуры NginxionS из правил виртуальных патчей CrowdSec (раздел 8.1): все поля — режим, критичность, уверенность, влияние на скорость, год CVE, действия | сигнатуры только из облака opensophy |
 | `fileSecurity.overrideMode`, действия по уверенности, `largeFileInspection.*` | ✅ | ClamAV в nginx (раздел 8.4) | Premium |
 | `fileSecurity.minSeverityLevel`, `archiveInspection.*`, `unnamedFilesAction` | 🟢 | Критичность — по виду вредоносного ПО в имени сигнатуры ClamAV; архив распаковывается и проверяется только при `extractArchiveFiles`, до `scanMaxFileSize`; архив в zip-архиве и архив, который clamd не смог открыть, — по своим действиям; файл без имени — двоичная загрузка без имени (раздел 8.4) | Premium |
-| `fileSecurity.threatEmulationEnabled` | 🟢 | Вместо песочницы Check Point — углублённый статический анализ ClamAV: макросы Office, повреждённые исполняемые файлы и медиа, пересекающиеся разделы образов (раздел 8.4) | Premium |
+| `fileSecurity.threatEmulationEnabled` | 🟢 | Вместо песочницы opensophy — углублённый статический анализ ClamAV: макросы Office, повреждённые исполняемые файлы и медиа, пересекающиеся разделы образов (раздел 8.4) | Premium |
 | `schemaValidation.*` | ✅ | AppSec CrowdSec по файлам OpenAPI, `enforcementLevel` `fullSchema` или `endpointOnly` (раздел 8.3) | Premium |
 | `antiBot.*` | ✅ | Проверка браузера AppSec CrowdSec на `injectedUris`, обязательная пройденная проверка на `validatedUris` (раздел 8.2) | Premium |
 | `snortSignatures.configmap`, `schemaValidation.configmap` | ➖ | Kubernetes | |
@@ -180,8 +180,8 @@ NginxionS применяет все исключения в обоих синт�
 
 1. Работает: агент NginxionS применяет поле так, как описано в документации.
 2. Отклоняется: проверка политики (предпросмотр, импорт, API) возвращает ошибку с причиной. Сначала сюда
-   относились File Security, Schema Validation, IPS Check Point и Anti-Bot. Теперь их выполняет NginxionS
-   (раздел 8), и отклонять больше нечего: эмуляцию угроз (песочницу Check Point) заменяет углублённый статический
+   относились File Security, Schema Validation, IPS opensophy и Anti-Bot. Теперь их выполняет NginxionS
+   (раздел 8), и отклонять больше нечего: эмуляцию угроз (песочницу opensophy) заменяет углублённый статический
    анализ ClamAV.
 3. Kubernetes или облако (`configmap`, `appsecClassName`, `policyActivations`, `cloud`, `k8s-service`,
    `autoUpgrade`): допускаются при импорте и выбрасываются с предупреждением.
@@ -323,7 +323,7 @@ ML-анализ не повторяется: событие сохраняет �
 
 ## 8. Движки Premium в NginxionS
 
-В open-appsec IPS работает только с сигнатурами из облака Check Point, а Anti-Bot, Schema Validation и File
+В open-appsec IPS работает только с сигнатурами из облака opensophy, а Anti-Bot, Schema Validation и File
 Security есть только в Premium-версии. NginxionS выполняет их сам, на открытых компонентах стека, и не зависит от
 интернета. Поля практики остаются полями v1beta2: импорт и экспорт совместимы с open-appsec. В политике, которую
 получает агент, Anti-Bot, Schema Validation и File Security выключены (`waf/engines.js`, `forAgent`): их
@@ -331,7 +331,7 @@ Security есть только в Premium-версии. NginxionS выполня
 
 ### 8.1. IPS: сигнатуры NginxionS
 
-- Движок IPS есть в открытом коде агента, но загружал только зашифрованные сигнатуры Check Point. Теперь он
+- Движок IPS есть в открытом коде агента, но загружал только зашифрованные сигнатуры opensophy. Теперь он
   загружает открытые (`helper_open_source.cc`), а зашифрованные по-прежнему отклоняет.
 - Сигнатуры собираются из правил виртуальных патчей хаба CrowdSec (MIT): коллекции
   `appsec-virtual-patching` и `appsec-generic-rules`. Конвертер — `waf/ips/vpatch.js`, запуск —
@@ -430,7 +430,7 @@ Security есть только в Premium-версии. NginxionS выполня
 - Файл без имени (`unnamedFilesAction`) — загрузка двоичного типа, у которой нет имени: нет `filename` в
   `Content-Disposition`, путь не кончается именем файла (`/upload/report.pdf`), а в multipart — часть со своим
   `Content-Type`, но без `filename`. Текст, формы, JSON и XML файлами не считаются.
-- Эмуляция угроз (`threatEmulationEnabled`): песочницы Check Point нет, вместо неё — углублённый статический анализ
+- Эмуляция угроз (`threatEmulationEnabled`): песочницы opensophy нет, вместо неё — углублённый статический анализ
   clamd (`AlertOLE2Macros`, `AlertBrokenExecutables`, `AlertBrokenMedia`, `AlertPartitionIntersection`). clamd
   ищет это всегда, а nginx учитывает такие находки только у практик с эмуляцией: как находки высокой уверенности.
 

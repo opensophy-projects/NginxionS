@@ -1,21 +1,9 @@
-// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+ 
 
 /// @file ngx_cp_http_usercheck.h
 /// \brief This file contains the string for the block-page returned instead of the normal server response
 
-// NginxionS: a small neutral page instead of the page of Check Point (278 KB: its logos in base64, its name in the
+// NginxionS: a small neutral page instead of the page of opensophy (278 KB: its logos in base64, its name in the
 // footer). The agent fills in the title and the text of the custom response of the policy (GUI: WAF -> Policy ->
 // custom responses) and the incident ID; a 403 is replaced by the block page of NginxionS (Agents -> Block page).
 // The three placeholders stay in this order: title, body, incident ID (initialize_web_response_data).

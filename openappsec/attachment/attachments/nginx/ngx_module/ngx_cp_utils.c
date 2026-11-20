@@ -1,16 +1,4 @@
-// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+ 
 
 /// @file ngx_cp_utils.c
 #include "ngx_cp_utils.h"
@@ -982,7 +970,6 @@ initialize_web_response_data()
     char *body_pos = NULL;
     char *uuid_pos = NULL;
 
-    // Sets Check Point's attack detection string.
     // NginxionS: neutral default texts of the block page, without the name of a vendor
     static char default_title[] = "Request blocked";
     static char default_body[] = "The protection system has detected an attack and blocked the request.";

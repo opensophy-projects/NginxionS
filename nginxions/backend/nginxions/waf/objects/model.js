@@ -64,7 +64,6 @@ const withDefaults = (node, value) => {
 /** the schema has defaults that are not values (customResponse "403" is a name) */
 const fixups = {
 	log_trigger: (s) => {
-		// NginxionS reads the agent's log files: never the Check Point cloud, always stdout
 		s.logDestination = { ...s.logDestination, cloud: false };
 		if (!s.logDestination.stdout) s.logDestination.stdout = { format: "json" };
 		return s;
@@ -74,12 +73,6 @@ const fixups = {
 
 // ---------------------------------------------------------------- what the agent applies (docs/WAF-POLICY.md)
 
-/**
- * Engines of a threat prevention practice NginxionS does not run: none any more. The IPS has the signatures of
- * NginxionS (CrowdSec virtual patching rules, waf/ips/vpatch.js) in place of the ones of the Check Point cloud;
- * antiBot and schemaValidation run in AppSec of CrowdSec (waf/engines.js), fileSecurity in nginx with ClamAV
- * (waf/files.js). Kept for policies saved before, which name an engine (a warning, policy.js).
- */
 export const UNSUPPORTED_ENGINES = [];
 /** a name of an OpenAPI file of schemaValidation (waf/schemas.js) */
 const SCHEMA_FILE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\.(ya?ml|json)$/;
@@ -106,7 +99,7 @@ const unsupported = (kind, spec, lenient) => {
 				spec[engine].overrideMode = "inactive";
 				dropped.push(`/${engine}`);
 			} else {
-				errors.push(`/${engine}: not in the agent of NginxionS (Premium edition or the Check Point cloud)`);
+				errors.push(`/${engine}: not in the agent of NginxionS (Premium edition or the opensophy)`);
 			}
 		}
 		// antiBot: paths ({uri} as in v1beta2; a plain string is taken too)
@@ -207,7 +200,6 @@ export const normalize = (kind, input, { lenient = false } = {}) => {
 	const { errors, dropped } = unsupported(kind, spec, lenient);
 	if (errors.length) return { errors };
 	if (appsecClassName !== undefined) dropped.push("/appsecClassName");
-	// NginxionS reads the logs of the agent: never to the Check Point cloud (fixups)
 	if (kind === "log_trigger" && rest.logDestination?.cloud === true) dropped.push("/logDestination/cloud");
 	return dropped.length ? { spec, dropped } : { spec };
 };

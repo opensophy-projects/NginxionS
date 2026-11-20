@@ -45,7 +45,7 @@ cp_exec()
 
 run_installation()
 {
-    cp_print "Starting installation of Check Point Cache service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting installation of opensophy Cache service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     cp_exec "${WATCHDOG_PATH} --un-register ${CACHE_SERVICE_PATH}/cp-nano-agent-cache"
     cp_exec "mkdir -p ${CACHE_SERVICE_PATH}"
     cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano"
@@ -67,7 +67,7 @@ run_installation()
 
 usage()
 {
-    echo "Check Point: available flags are"
+    echo "opensophy: available flags are"
     echo "--install           : install agent inteligence Service"
     echo "--uninstall         : remove agent inteligenceService"
     echo "--pre_install_test  : run Pre-installation test for agent inteligence Service install package"
@@ -77,29 +77,29 @@ usage()
 
 run_uninstall()
 {
-    cp_print "Starting uninstall of Check Point Cache service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting uninstall of opensophy Cache service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
     cp_exec "${WATCHDOG_PATH} --un-register ${CACHE_SERVICE_PATH}/cp-nano-agent-cache"
     cp_exec "rm -rf ${CACHE_SERVICE_PATH}/"
     cp_exec "rm -rf ${CONF_PATH}/redis.conf"
 
-    cp_print "Check Point Cache service was removed successfully\n" $FORCE_STDOUT
+    cp_print "opensophy Cache service was removed successfully\n" $FORCE_STDOUT
 }
 
 run_pre_install_test()
 {
-    cp_print "Successfully finished pre-installation test for Check Point Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished pre-installation test for opensophy Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 }
 
 run_post_install_test()
 {
     if [ ! -d ${CACHE_SERVICE_PATH} ]; then
-        cp_print "Failed post-installation test for Check Point Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+        cp_print "Failed post-installation test for opensophy Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
         exit 1
     fi
 
-    cp_print "Successfully finished post-installation test for Check Point Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished post-installation test for opensophy Cache service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 }
 

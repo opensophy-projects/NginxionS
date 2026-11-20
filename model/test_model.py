@@ -108,7 +108,7 @@ class TrainingCycleTest(unittest.TestCase):
         self.cycle(linear=False)
 
     def test_cycle_from_a_linear_base(self):
-        """the base model of the image is linear (the advanced model of Check Point): the training starts from it"""
+        """the base model of the image is linear (the advanced model): the training starts from it"""
         doc = self.cycle(linear=True)
         entries = Model.from_scores(doc["waap_scores"]).entries
         # a feature the training part never shows keeps the base model's weight
