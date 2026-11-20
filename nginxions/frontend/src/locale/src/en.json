@@ -2468,6 +2468,9 @@
 	"nginxions.events.newer": {
 		"defaultMessage": "Newer"
 	},
+	"nginxions.events.node": {
+		"defaultMessage": "Node"
+	},
 	"nginxions.events.older": {
 		"defaultMessage": "Older"
 	},
@@ -4342,6 +4345,9 @@
 	},
 	"nginxions.nodes.delete.confirm": {
 		"defaultMessage": "Delete the node {name} from the list?"
+	},
+	"nginxions.nodes.events": {
+		"defaultMessage": "Events"
 	},
 	"nginxions.nodes.hint": {
 		"defaultMessage": "Servers of NginxionS managed from this one. Add a node to get its one-time join code, then enter it on the new server in «This server»."

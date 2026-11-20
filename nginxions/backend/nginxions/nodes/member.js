@@ -154,6 +154,48 @@ const ownInfo = async (state) => {
 };
 
 // ------------------------------------------------------------------------------------------------ heartbeat
+/** events of this server sent per request, and the most per heartbeat (a long outage catches up step by step) */
+const EVENTS_BATCH = 500;
+const EVENTS_PER_BEAT = 5000;
+
+/** the id of the last event of this server: where sending starts (no history before the join) */
+const lastEventId = async () => {
+	const row = await db()("nginxions_security_event").where({ node_id: "local" }).max({ id: "id" }).first();
+	return Number(row?.id ?? 0);
+};
+
+/**
+ * The security events of this server since the last sent one go to the manager (step 15.3). A manager down keeps the
+ * cursor where it is: nothing is lost, the next heartbeats send it.
+ * @returns {Promise<object>} what changes in the state
+ */
+export const forwardEvents = async (state) => {
+	let cursor = Number(state.events_cursor ?? 0);
+	let sent = 0;
+	try {
+		while (sent < EVENTS_PER_BEAT) {
+			const rows = await db()("nginxions_security_event")
+				.where({ node_id: "local" })
+				.where("id", ">", cursor)
+				.orderBy("id")
+				.limit(EVENTS_BATCH);
+			if (!rows.length) break;
+			const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/events", {
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				body: { events: rows.map(({ id: _id, node_id: _node, ...event }) => event) },
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the events`);
+			cursor = Number(rows.at(-1).id);
+			sent += rows.length;
+			if (rows.length < EVENTS_BATCH) break;
+		}
+		return { events_cursor: cursor, events_error: "" };
+	} catch (err) {
+		return { events_cursor: cursor, events_error: String(err.message).slice(0, 300) };
+	}
+};
+
 /** the package applied last, or none (no managed rows) */
 const lastContent = async () => {
 	try {
@@ -227,6 +269,7 @@ export const beat = async () => {
 			if (version && version !== next.applied_version && version !== next.failed_version) {
 				next = { ...next, ...(await sync(next)) };
 			}
+			next = { ...next, ...(await forwardEvents(next)) };
 			await writeState(next);
 		} else if (answer.status === 401 || answer.status === 403) {
 			await writeState({ ...state, disabled: true, last_error: "disabled on the manager" });
@@ -298,6 +341,7 @@ const internalMember = {
 			cert_pem: answer.body.cert_pem,
 			chain_pem: answer.body.chain_pem,
 			signing_key: answer.body.signing_key || "",
+			events_cursor: await lastEventId(),
 			joined_on: now,
 			last_ok_on: now,
 			last_error: "",

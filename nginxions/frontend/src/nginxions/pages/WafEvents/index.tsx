@@ -410,6 +410,7 @@ const FIELD_LABEL: Record<ListField, string> = {
 	type: "nginxions.events.attack-type",
 	status: "nginxions.traffic.filter.status",
 	client: "nginxions.traffic.filter.client",
+	node: "nginxions.events.node",
 };
 
 function ActiveFilters({ filters, onChange }: { filters: EventFilters; onChange: (f: EventFilters) => void }) {
