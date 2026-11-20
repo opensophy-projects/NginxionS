@@ -972,6 +972,22 @@
 			"where": "deploy/test/gui-e2e.mjs",
 			"reason": "a test, not product code: it asks the default site of the test stack over HTTPS by its address in the closed network, where NginxionS answers with its placeholder certificate; NODE_TLS_REJECT_UNAUTHORIZED is not set, one request skips the check",
 			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/disabling-certificate-validation",
+			"where": "nginxions/backend/nginxions/nodes/member.js",
+			"reason": "the check of the certificate of the manager is the pin, not the CAs of the system (panels of NginxionS have a certificate of their own, often self-signed): the TLS socket is opened without the CA check, its SHA-256 fingerprint is compared with the one pinned at the join on secureConnect and the socket is closed before anything (join code, token) is written when it differs (docs/adr/0012-nodes.md, point 4; test: another certificate on the address of the manager, the node sends nothing)",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification",
+			"where": "nginxions/backend/nginxions/nodes/member.js",
+			"reason": "the check of the certificate of the manager is the pin, not the CAs of the system (panels of NginxionS have a certificate of their own, often self-signed): the TLS socket is opened without the CA check, its SHA-256 fingerprint is compared with the one pinned at the join on secureConnect and the socket is closed before anything (join code, token) is written when it differs (docs/adr/0012-nodes.md, point 4; test: another certificate on the address of the manager, the node sends nothing)",
+			"until": "2027-05-01"
 		}
 	]
 }
