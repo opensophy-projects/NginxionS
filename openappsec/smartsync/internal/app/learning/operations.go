@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -317,6 +318,10 @@ func (lc *LearnCore) processData(
 		if err != nil {
 			return false, nil, errors.Wrapf(err, "failed to get file: %v", file)
 		}
+		// NginxionS: the node the data came from (the path segment after the window)
+		if nodeAware, ok := handler.(models.NodeAwareCollector); ok {
+			nodeAware.SetDataNode(nodeOfFile(file))
+		}
 		handler.MergeData(data)
 	}
 
@@ -386,4 +391,16 @@ func (lc *LearnCore) ReadS3Files(ctx context.Context, ids models.SyncID) ([]byte
 	}
 
 	return outJSON, nil
+}
+
+// windowNode is the segment after the window in the path of the data of an agent: the id of the node on a manager of
+// NginxionS (its relay puts it there), the id of the agent for the agent of the manager itself
+var windowNode = regexp.MustCompile(`/window_[0-9]+(?:_[0-9]+)?/([^/]+)/`)
+
+// nodeOfFile is the node the data of a file came from, "" when its path has none (NginxionS)
+func nodeOfFile(file string) string {
+	if m := windowNode.FindStringSubmatch(file); m != nil {
+		return m[1]
+	}
+	return ""
 }
