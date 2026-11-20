@@ -19,6 +19,8 @@ import { bootstrap as bootstrapGeo } from "./nginxions/geo/index.js";
 import { start as startEventIngest } from "./nginxions/events/ingest.js";
 import { start as startLearning } from "./nginxions/learning/index.js";
 import { start as startLearningSnapshots } from "./nginxions/learning/snapshots.js";
+// NginxionS: this server as a node of a manager (docs/adr/0012-nodes.md): its heartbeat
+import { start as startClusterMember } from "./nginxions/nodes/member.js";
 // NginxionS: findings of File Security of the WAF policy (ClamAV) → security events
 import { startFilesLog } from "./nginxions/waf/files.js";
 import { start as startNotifications } from "./nginxions/notifications/index.js";
@@ -59,6 +61,7 @@ async function appStart() {
 			.then(startFilesLog)
 			.then(startWafTrials)
 			.then(startNotifications)
+			.then(startClusterMember)
 			.then(getCompiledSchema)
 			.then(() => {
 				if (process.env.TRUST_CLOUDFLARE === "false") {
