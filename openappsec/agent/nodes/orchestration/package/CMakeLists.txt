@@ -1,7 +1,7 @@
 add_subdirectory(cpnano_debug)
 add_subdirectory(cpnano_json)
 
-install(FILES EULA.txt DESTINATION ./orchestration/EULA.txt PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+# NginxionS: no EULA.txt in the package of the agent
 install(FILES Licenses-for-Third-Party-Components.txt DESTINATION ./orchestration/Licenses-for-Third-Party-Components.txt PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 
 install(FILES orchestration_package.sh DESTINATION ./orchestration/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
