@@ -292,6 +292,18 @@ for _ in $(seq 1 30); do
 done
 [ -n "$applied" ] || fail "the package of the node was not applied: $nodes_now"
 echo "$nodes_now" | grep -q '"package_error":""' || fail "the package of the node has an error: $nodes_now"
+step "Nodes: an event of the node (an mTLS refusal after the join) comes to the manager with the id of the node"
+node_uid=$(echo "$node_code" | cut -d. -f1)
+forwarded=""
+for i in $(seq 1 45); do
+  # refusals of one source and host within a minute are one event: a refusal merged into one from before the join
+  # is not sent, the next minute starts a new event (90 s of attempts)
+  curl -sS -k --max-time 10 $TLS_TO -o /dev/null "$HTTPS_MTLS/smoke-node-$i" || true
+  $CURL "$ADMIN/api/nginxions/events?kind=all&period=1h&node=$node_uid&limit=5" | json | grep -q '"kind":"mtls"' \
+    && { forwarded=1; break; }
+  sleep 2
+done
+[ -n "$forwarded" ] || fail "no event of the node on the manager: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
 # the host of this server is still the one serving mtls.local (one row, not a copy)
 expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
 $CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"

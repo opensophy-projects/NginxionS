@@ -11,6 +11,7 @@ import errs from "../../lib/error.js";
 import internalPki, { SYSTEM } from "../pki/index.js";
 import { readCsr } from "../pki/ops.js";
 import { hostIdsOf, packageOf, signingKey } from "./package.js";
+import { EVENT_TABLE, store } from "../events/store.js";
 import { parseCert } from "../pki/x509.js";
 import {
 	CODE_HOURS,
@@ -97,6 +98,15 @@ const nodeOfToken = async (token) => {
 		.where({ token_hash: hash(token) })
 		.first();
 	return row && row.status === "active" && sameHash(token, row.token_hash) ? row : null;
+};
+
+/** at most this many events per request of a node (it sends the rest with the next ones) */
+export const MAX_EVENTS = 500;
+let eventColumns = null;
+/** the columns of the events a node may send: those of the table, never id (ours) or node_id (its token says) */
+const columnsOfEvents = async () => {
+	eventColumns ??= Object.keys(await db()(EVENT_TABLE).columnInfo()).filter((c) => !["id", "node_id"].includes(c));
+	return eventColumns;
 };
 
 const internalNodes = {
@@ -284,6 +294,29 @@ const internalNodes = {
 			package_version: pkg.version,
 			signing_key: (await signingKey()).publicKeyPem,
 		};
+	},
+
+	/**
+	 * Without login: security events of a node (step 15.3), stored as events of this server with the id of the node,
+	 * so that Events, Analytics and notifications see them.
+	 * @returns {Promise<{stored: number}|null>} null: unknown or disabled node
+	 */
+	events: async (token, rows) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		if (!Array.isArray(rows)) throw new errs.ValidationError("events: a list");
+		if (rows.length > MAX_EVENTS) throw new errs.ValidationError(`events: at most ${MAX_EVENTS} at once`);
+		const columns = await columnsOfEvents();
+		const events = [];
+		for (const event of rows) {
+			if (!event || typeof event !== "object") continue;
+			const time = new Date(event.time);
+			if (Number.isNaN(time.getTime()) || typeof event.kind !== "string") continue;
+			const clean = Object.fromEntries(columns.filter((c) => event[c] !== undefined).map((c) => [c, event[c]]));
+			events.push({ ...clean, time, node_id: row.uid });
+		}
+		if (events.length) await store({ events, telemetry: [], cursors: [] });
+		return { stored: events.length };
 	},
 
 	/** Without login: the signed package of the node with this token; null for an unknown or disabled node */
