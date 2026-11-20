@@ -10,6 +10,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { hostname } from "node:os";
 import path from "node:path";
+import { isIP } from "node:net";
 import tls from "node:tls";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
@@ -47,7 +48,7 @@ export const managerRequest = (managerUrl, urlPath, { method = "POST", body, tok
 		const socket = tls.connect({
 			host: url.hostname,
 			port,
-			servername: tls.isIP?.(url.hostname) ? undefined : url.hostname,
+			servername: isIP(url.hostname) ? undefined : url.hostname,
 			// the trust is the pin (or the first connection), not the CAs of the system: panels of NginxionS often
 			// have a certificate of their own
 			rejectUnauthorized: false,
