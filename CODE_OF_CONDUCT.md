@@ -167,7 +167,7 @@ flowchart LR
 - **`.github/`**
   - `workflows/ci.yml` — CI: быстрые проверки на каждый push; полный прогон (сборка образов, закрытый контур, скан
     образов, DAST, отчёт безопасности, публикация на Docker Hub) на `work`, тегах, PR, `security/**`, `[full]`
-  - `workflows/nightly.yml` — каждую ночь: долгий фаззинг парсеров (`fuzz.test.mjs`, Lua File Security), опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке, отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
+  - `workflows/nightly.yml` — каждую ночь: долгий фаззинг парсеров (`fuzz.test.mjs`, Lua File Security), опубликованный `develop` под длительной нагрузкой (`test-soak.sh`), отказы частей стека (`test-chaos.sh`), все группы smoke на одном стеке и интерфейс глазами пользователя (`gui-e2e.mjs`), отчёт о флейках последних прогонов CI (`flaky-report.mjs`)
   - `workflows/security-weekly.yml` — каждую неделю: ветка `security/<дата>` от `work`, полный CI на ней, issue с
     отчётом, удаление веток старше 8 недель
   - `workflows/upstream-issues.yml` — каждый час: issue openappsec (5 репозиториев агента) копируются сюда как issue, их закрытие и открытие повторяется (`scripts/upstream-issues.mjs`)
@@ -176,6 +176,7 @@ flowchart LR
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
     в еженедельном прогоне — ещё и опубликованные образы (`docs/DEVSECOPS.md`)
   - `actionlint.yaml` — настройки actionlint (метки раннеров)
+  - `coverage-baseline.json` — покрытие кода тестами, ниже которого CI не опускается (`scripts/coverage-report.mjs`)
   - **`security/`** — настройки сканеров
     - `tools.env` — образы и версии всех сканеров, закреплённые по digest
     - `semgrep.yml` — правила Semgrep для NginxionS: таймауты запросов, shell, сырой HTML, SQL из шаблонов; из наших ошибок — регулярные выражения из переменных, секреты в логах, shell из Lua nginx, сокет Docker и privileged в compose, небезопасные строки C в агенте
@@ -208,6 +209,7 @@ flowchart LR
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
   - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
+  - `gui-e2e.mjs` — интерфейс глазами пользователя (Playwright, тест стека `gui`): каждое действие в GUI (хосты, списки доступа, WAF, баны CrowdSec, редиректы, стримы, сайт по умолчанию, страница блокировки, PKI и mTLS с выпуском и отзывом сертификата доступа, пользователи и роли) проверяется по его результату на сайтах и в API, отчёт в `reports/gui`
   - `upgrade-check.sh` — данные теста обновления (`seed`) и их проверка после обновления (`verify`)
   - `waf-score-setup.sh` — подготовка стека для оценки WAF: админ, хост `test.local` под WAF в режиме блокировки
   - `log-allowlist.tsv` — известные ошибки и предупреждения тестового стека, каждая с причиной, почему это не баг (`scripts/audit-logs.mjs`)
@@ -256,7 +258,7 @@ flowchart LR
 
 - `build-images.sh` — локальная сборка всех образов (тег `local/<имя>:dev`)
 - `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh` (все группы или `SMOKE_GROUPS`), затем проверки после него
-- `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `waf-score`, `upgrade`, `chaos`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
+- `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `gui`, `waf-score`, `upgrade`, `chaos`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
 - `ci-level.mjs` (+ `ci-level.test.mjs`) — глубина прогона CI по событию, сообщению коммита и изменённым файлам: `fast`/`full`/`extended`, какие тесты стека (`[smoke:waf]`, `[dast]`…), нужен ли CodeQL C++ и Go (инкрементальный скан)
 - `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
 - `flaky-report.mjs` (+ тест) — флейки smoke: по `steps.json` последних прогонов CI (ночной workflow) — какие шаги падали, какие падали и проходили на одном коммите, самые долгие
@@ -281,6 +283,7 @@ flowchart LR
 - `check-runtime.sh` — проверка работающих контейнеров стека (расширенный прогон): привилегии, capabilities,
   пространства имён хоста, сокет Docker, root, запись в корень
 - `security-report.mjs` — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
+- `coverage-report.mjs` (+ `coverage-report.test.mjs`) — покрытие кода тестами: unit-тесты и то, что backend выполнил в тестах стека (V8 coverage), вместе; «храповик» по `.github/coverage-baseline.json`
 - `seccomp-profile.mjs` — `deploy/seccomp/nginxions.json` из штатного профиля seccomp Docker: `socket()` IPv4/IPv6 без SCTP и seqpacket
 - `upstream-issues.mjs` — копии issue репозиториев агента (openappsec/openappsec, attachment, smartsync-shared-files, smartsync-tuning, smartsync) в issue этого репозитория с меткой `upstream`; копия закрывается и открывается вместе с исходной
 - `sarif-accepted.mjs` — убирает из SARIF принятые риски и подавленные в коде находки перед загрузкой в Code scanning
@@ -331,6 +334,7 @@ flowchart LR
   - `usr/local/nginx/conf/conf.d/nginxions-block-page.conf` — страница блокировки NginxionS для отказов 403
   - `usr/local/nginx/conf/conf.d/nginxions-crowdsec-hub.conf` — локальная раздача снимка hub CrowdSec
   - `usr/local/nginx/conf/conf.d/nginxions-geo.conf` — страны по GeoIP (переписывается backend при загрузке базы)
+  - `usr/local/nginx/conf/conf.d/nginxions-methods.conf` — отладочные методы TRACK, DEBUG и TRACE получают 405 на всех хостах и в интерфейсе (DAST: Proxy Disclosure)
   - `usr/local/nginx/conf/conf.d/nginxions-mtls-log.conf` — лог отказов mTLS
   - `usr/local/nginx/conf/conf.d/nginxions-ocsp.conf` — проверка клиентских сертификатов через OCSP NginxionS
   - `usr/local/nginx/html/nginxions-error.html` — страница ошибок nginx в дизайне NginxionS

@@ -2,6 +2,8 @@
 
 // NginxionS: the socket of a backend that crashed (see app.listen below)
 import { rmSync } from "node:fs";
+// NginxionS: the coverage of the tests of the stack (see SIGUSR2 below)
+import { takeCoverage } from "node:v8";
 import app from "./app.js";
 import internalNginx from "./internal/nginx.js";
 import internalCertificate from "./internal/certificate.js";
@@ -32,6 +34,12 @@ import setup from "./setup.js";
 process.on("unhandledRejection", (err) => {
 	logger.error(`Unhandled rejection: ${err?.message || err}`);
 });
+
+// NginxionS: the coverage of the tests of the stack (scripts/test-airgap.sh): with NODE_V8_COVERAGE set (only in the test
+// overlay deploy/test/compose.airgap.yaml), SIGUSR2 writes what the backend ran so far; the backend keeps running
+if (process.env.NODE_V8_COVERAGE) {
+	process.on("SIGUSR2", () => takeCoverage());
+}
 
 async function appStart() {
 	return (

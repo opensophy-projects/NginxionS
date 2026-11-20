@@ -60,6 +60,19 @@ test("the copy follows upstream: closed, reopened", () => {
 	);
 });
 
+test("a copy closed here with a verdict stays closed while upstream keeps the issue open", () => {
+	const copies = new Map([
+		["openappsec/openappsec#7", { number: 30, state: "closed", labels: ["upstream", "upstream:openappsec", "duplicate"] }],
+		["openappsec/openappsec#8", { number: 31, state: "closed", labels: ["upstream", "upstream:openappsec"] }],
+	]);
+	const { create, reopen } = plan(copies, [{ repo: "openappsec/openappsec", issues: [issue(7, "open"), issue(8, "open")] }]);
+	assert.equal(create.length, 0);
+	assert.deepEqual(
+		reopen.map((c) => c.copy.number),
+		[31],
+	);
+});
+
 test("the same number in two repositories is two issues; the oldest is created first", () => {
 	const { create } = plan(new Map(), [
 		{ repo: "openappsec/smartsync", issues: [issue(7, "open")] },

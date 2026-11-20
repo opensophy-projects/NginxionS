@@ -123,3 +123,17 @@ curl -sS --max-time 10 -H 'Host: basic.local' "$HTTP/" | grep -q 'Sign-in requir
 want "$(host_code basic.local -u alice:wonderland1)" 200 "Basic Auth with the password"
 want "$(host_code ip-allow.local)" 200 "IP list, the allowed address"
 want "$(host_code ip-deny.local)" 403 "IP list, a refused address"
+# a login without a password, a rule without an address: 400, not 500 (DAST, schemathesis)
+for body in '{"name": "no password", "items": [{"username": "bob"}]}' \
+  '{"name": "no address", "clients": [{"directive": "allow"}]}'; do
+  code=$(curl -sS -k -b $JAR -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+    "$ADMIN/api/nginx/access-lists" -d "$body")
+  [ "$code" = 400 ] || fail "access list $body: expected 400, got $code"
+done
+
+step "debugging methods: TRACK, DEBUG and TRACE get 405 on a host and on the interface (DAST: Proxy Disclosure)"
+for m in TRACK DEBUG TRACE; do
+  want "$(host_code basic.local -X $m -u alice:wonderland1)" 405 "$m on a host"
+  code=$(curl -sS -k -o /dev/null -w '%{http_code}' --max-time 10 -X $m "$ADMIN/api/")
+  [ "$code" = 405 ] || fail "$m on the interface: expected 405, got $code"
+done
