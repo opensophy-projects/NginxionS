@@ -1053,7 +1053,7 @@
 		"defaultMessage": "Например: напишите на security@example.com"
 	},
 	"nginxions.block-page.description": {
-		"defaultMessage": "Что видит посетитель, когда запрос отклонён: open-appsec, баунсером CrowdSec или списком доступа. Заменяет страницу агента с текстом Check Point."
+		"defaultMessage": "Что видит посетитель, когда запрос отклонён: open-appsec, баунсером CrowdSec или списком доступа. Заменяет страницу агента с текстом opensophy."
 	},
 	"nginxions.block-page.details": {
 		"defaultMessage": "Показывать ID запроса, IP, хост и время (для обращения к администратору)"
@@ -5838,7 +5838,7 @@
 		"defaultMessage": "Режим"
 	},
 	"nginxions.policy.f.fileSecurity.threatEmulationEnabled": {
-		"defaultMessage": "Эмуляция угроз: углублённый статический анализ ClamAV (макросы Office, повреждённые исполняемые файлы и медиа) вместо песочницы Check Point"
+		"defaultMessage": "Эмуляция угроз: углублённый статический анализ ClamAV (макросы Office, повреждённые исполняемые файлы и медиа) вместо песочницы opensophy"
 	},
 	"nginxions.policy.f.fileSecurity.unnamedFilesAction": {
 		"defaultMessage": "Действие для файла без имени (двоичная загрузка без имени в Content-Disposition или пути)"
@@ -6018,7 +6018,7 @@
 		"defaultMessage": "Новых объектов: {count}"
 	},
 	"nginxions.policy.import.dropped": {
-		"defaultMessage": "Не импортируется (Kubernetes, облако Check Point, движки Premium-версии, лишние практики правила):"
+		"defaultMessage": "Не импортируется (Kubernetes, облако opensophy, движки Premium-версии, лишние практики правила):"
 	},
 	"nginxions.policy.import.file": {
 		"defaultMessage": "Файл local_policy.yaml"
@@ -8304,10 +8304,10 @@
 		"defaultMessage": "Расширенная ML-модель"
 	},
 	"nginxions.waf.model.basic": {
-		"defaultMessage": "Встроенная модель: продвинутая модель Check Point (V2.0)"
+		"defaultMessage": "Встроенная модель: продвинутая модель opensophy (V2.0)"
 	},
 	"nginxions.waf.model.description": {
-		"defaultMessage": "В NginxionS встроена продвинутая модель Check Point (Advanced model, V2.0). Загруженная модель (open-appsec-advanced-model.tgz, например обученная NginxionS, см. docs/MODEL.md) заменяет её: распаковывается при старте агента; после загрузки агент перезапускается."
+		"defaultMessage": "В NginxionS встроена продвинутая модель opensophy (Advanced model, V2.0). Загруженная модель (open-appsec-advanced-model.tgz, например обученная NginxionS, см. docs/MODEL.md) заменяет её: распаковывается при старте агента; после загрузки агент перезапускается."
 	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Загружена: {size}, {date}"
@@ -8316,7 +8316,7 @@
 		"defaultMessage": "Удалить модель"
 	},
 	"nginxions.waf.model.remove-warning": {
-		"defaultMessage": "Агент перезапустится и вернётся к встроенной модели образа (продвинутой модели Check Point)."
+		"defaultMessage": "Агент перезапустится и вернётся к встроенной модели образа (продвинутой модели opensophy)."
 	},
 	"nginxions.waf.model.removed": {
 		"defaultMessage": "Модель удалена, агент перезапускается"

@@ -1,6 +1,5 @@
 #!/bin/sh
 
-# Copyright Check Point Software Technologies LTD
 FILESYSTEM_PATH="/etc/cp"
 LOG_FILE_PATH="/var/log"
 SMB_LOG_FILE_PATH="/storage"
@@ -432,8 +431,6 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
         fi
     fi
     if [ $var_hybrid_mode = true ] && [ -z "$var_fog_address" ]; then
-        # NginxionS: the agent of NginxionS has no cloud; the address is a closed local port it never connects to
-        # (it was the Fog of Check Point)
         var_fog_address="http://127.0.0.1:1"
     fi
 

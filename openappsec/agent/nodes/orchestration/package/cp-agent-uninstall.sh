@@ -127,7 +127,7 @@ if [ -f /pfrm2.0/bin/cposd ]; then
 fi
 
 INSTALLATION_TIME=$(date)
-cp_print "Uninstalling Check Point Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
+cp_print "Uninstalling opensophy Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
 uninstall_services
 ${FILESYSTEM_PATH}/watchdog/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${ORCHESTRATION_NAME}/cp-nano-orchestration $var_arch_flag
 init_type="$INIT_D_PATH/nano_agent.init"

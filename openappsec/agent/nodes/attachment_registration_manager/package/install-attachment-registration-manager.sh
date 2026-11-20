@@ -66,7 +66,7 @@ set_configuration()
 
 run_installation()
 {
-    cp_print "Starting installation of Check Point ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting installation of opensophy ${NANO_SERVICE_NAME} Nano service [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     
     cp_exec "/etc/cp/watchdog/cp-nano-watchdog --un-register ${NANO_SERVICE_BIN_PATH}"
     
@@ -100,7 +100,7 @@ run_installation()
 
 usage()
 {
-    echo "Check Point: available flags are"
+    echo "opensophy: available flags are"
     echo "--install           : install ${NANO_SERVICE_NAME} Nano Service"
     echo "--uninstall         : remove ${NANO_SERVICE_NAME} Nano Service"
     echo "--pre_install_test  : run Pre-installation test for ${NANO_SERVICE_NAME} Nano Service install package"
@@ -119,22 +119,22 @@ run_uninstall()
 
 run_pre_install_test()
 {
-    cp_print "Starting Pre-installation test of Check Point ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting Pre-installation test of opensophy ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
-    cp_print "Successfully finished pre-installation test for Check Point ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished pre-installation test for opensophy ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 }
 
 run_post_install_test()
 {
-    cp_print "Starting Post-installation test of Check Point ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Starting Post-installation test of opensophy ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
 
     if ! cat /etc/cp/watchdog/wd.services | grep -q ${NANO_SERVICE_BIN_PATH}; then
     	    cp_print "Failed to register ${NANO_SERVICE_NAME} Nano service to the watchdog\n" $FORCE_STDOUT
     	    exit 255
     fi
 
-    cp_print "Successfully finished post-installation test for Check Point ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
+    cp_print "Successfully finished post-installation test for opensophy ${NANO_SERVICE_NAME} Nano service installation package [$INSTALLATION_TIME]\n" $FORCE_STDOUT
     exit 0
 
 }

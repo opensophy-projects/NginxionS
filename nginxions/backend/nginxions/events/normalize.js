@@ -68,7 +68,6 @@ export const classify = (raw, nodeId = "local") => {
 	if (!time) return null;
 	const origin = raw.eventSource || {};
 	const data = raw.eventData || {};
-	// the orchestration's reminder (every 30 s) to define an agent profile in the Check Point cloud
 	if (origin.source === "fog_communication") return null;
 	const name = str(raw.eventName, 200);
 	const pick = (key) => data[key] ?? origin[key];

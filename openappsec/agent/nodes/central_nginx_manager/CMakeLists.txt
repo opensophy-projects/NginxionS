@@ -30,5 +30,5 @@ gen_package(
 	install-cp-nano-central-nginx-manager.sh
 	central_nginx_manager
 	./install-cp-nano-central-nginx-manager.sh
-	Check Point Central NGINX Manager Nano Service Version ${PACKAGE_VERSION} Install Package
+	opensophy Central NGINX Manager Nano Service Version ${PACKAGE_VERSION} Install Package
 )

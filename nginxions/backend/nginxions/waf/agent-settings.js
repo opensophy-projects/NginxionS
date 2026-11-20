@@ -159,7 +159,6 @@ const internalWafAgent = {
 	},
 
 	/**
-	 * Removes the uploaded model: at its next start the agent keeps the model of the image (the advanced model of Check Point).
 	 * @param {Access}  access
 	 * @param {boolean} [apply]  restart the agent now
 	 */

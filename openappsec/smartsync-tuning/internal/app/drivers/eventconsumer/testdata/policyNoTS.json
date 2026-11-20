@@ -294,7 +294,7 @@
                   "detailsLevel": "Block Page",
                   "blockPage": {
                     "messageTitle": "Web Request Blocked",
-                    "messageBody": "Check Point Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
+                    "messageBody": "openappsec Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
                     "httpCode": 400
                   }
                 },
@@ -448,7 +448,7 @@
             "context": "Any(All(Any(EqualHost(192.168.52.215)),EqualListeningPort(8000)), All(Any(EqualHost(192.168.52.212)),EqualListeningPort(8000)))",
             "response code": 400,
             "response title": "Web Request Blocked",
-            "response body": "Check Point Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
+            "response body": "openappsec Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
             "details level": "block page"
           },
           {
@@ -527,7 +527,7 @@
             "triggerType": "webUserResponse",
             "details level": "Block Page",
             "response code": 400,
-            "response body": "Check Point Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
+            "response body": "openappsec Infinity Next Blocked this request as it was found to be unauthorized or malicious.",
             "response title": "Web Request Blocked"
           },
           {

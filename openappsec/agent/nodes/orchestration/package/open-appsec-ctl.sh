@@ -841,7 +841,7 @@ run_health_check() # Initials - rhc
     fi
 
     rhc_health_check_tmp_file_path=$(get_profile_setting agent.healthCheckOnDemandOutputTmpFile ${DEFAULT_HEALTH_CHECK_TMP_FILE_PATH})
-    echo "---- Check Point extended health check status ----"
+    echo "---- opensophy extended health check status ----"
     cat "${rhc_health_check_tmp_file_path}"
     printf "\n"
     rm -rf "${rhc_health_check_tmp_file_path}"
@@ -917,7 +917,7 @@ print_single_service_status() # Initials - psss
         psss_mod_version=""
         psss_test=$(ls ${FILESYSTEM_PATH}/accessControl/cp-nano-netfilter-attachment-module.ko 2>/dev/null | wc -l)
         if [ "$psss_test" -gt 0 ]; then
-            echo '---- Check Point Netfilter Attachment kernel module ----'
+            echo '---- opensophy Netfilter Attachment kernel module ----'
             psss_mod_version=$(modinfo ${FILESYSTEM_PATH}/accessControl/cp-nano-netfilter-attachment-module.ko | sed 's/GPL/TBD/g' | grep -e ^version: | cut -d':' -f2)
             printf "Version: "
             echo "$psss_mod_version"
@@ -930,7 +930,7 @@ print_single_service_status() # Initials - psss
         fi
 
         if [ "$(ls ${FILESYSTEM_PATH}/accessControl/cp-nano-connection-table-module.ko 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo '---- Check Point Connection Table kernel module ----'
+            echo '---- opensophy Connection Table kernel module ----'
             psss_mod_version=$(modinfo ${FILESYSTEM_PATH}/accessControl/cp-nano-connection-table-module.ko | sed 's/GPL/TBD/g' | grep -e ^version: | cut -d':' -f2)
             printf "Version: "
             echo "$psss_mod_version"
@@ -943,7 +943,7 @@ print_single_service_status() # Initials - psss
         fi
 
         if [ "$(ls ${FILESYSTEM_PATH}/accessControl/cp-nano-access-control-module.ko 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo '---- Check Point Access Control kernel module ----'
+            echo '---- opensophy Access Control kernel module ----'
             psss_mod_version=$(modinfo ${FILESYSTEM_PATH}/accessControl/cp-nano-access-control-module.ko | sed 's/GPL/TBD/g' | grep -e ^version: | cut -d':' -f2)
             printf "Version: "
             echo "$psss_mod_version"
@@ -1390,7 +1390,7 @@ run_ai() # Initials - ra
             fi
         fi
 
-        echo "---- Uploading agent information to Check Point ----"
+        echo "---- Uploading agent information to CP ----"
         sleep 1
 
         upload_ai "$ra_cp_info_path" "$ra_token" "$ra_fog_address" "$ra_tenant_id" "$ra_agent_id" "$ra_current_time" "$ra_file_dir"

@@ -94,5 +94,5 @@ gen_package(
 	install-cp-nano-service-http-transaction-handler.sh
 	http_transaction_handler_service
 	./install-http-transaction-handler.sh
-	Check Point HTTP Transaction Handler Nano Service Version ${PACKAGE_VERSION} Install Package
+	opensophy HTTP Transaction Handler Nano Service Version ${PACKAGE_VERSION} Install Package
 )

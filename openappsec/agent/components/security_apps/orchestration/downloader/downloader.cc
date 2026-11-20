@@ -1,15 +1,4 @@
-// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
-
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+ 
 
 #include "downloader.h"
 
@@ -320,7 +309,7 @@ Downloader::Impl::downloadCertificatesFromFog(const vector<string> &certificate_
     return file_path;
 }
 
-// NginxionS: a host of the cloud of open-appsec (Check Point)
+// NginxionS: a host of the cloud of open-appsec (opensophy)
 static bool
 isCloudHost(string host)
 {
@@ -372,7 +361,7 @@ Downloader::Impl::downloadFileFromURL(
     URLParser parsed_url(new_url);
     Maybe<string> base_url = parsed_url.getBaseURL();
     if (!base_url.ok()) return base_url;
-    // NginxionS: the agent of NginxionS has no cloud: nothing is downloaded from a host of open-appsec (Check Point)
+    // NginxionS: the agent of NginxionS has no cloud: nothing is downloaded from a host of open-appsec (opensophy)
     if (parsed_url.getProtocol() != URLProtocol::LOCAL_FILE && isCloudHost(base_url.unpack())) {
         return genError("NginxionS: the agent has no cloud, no download from " + base_url.unpack());
     }

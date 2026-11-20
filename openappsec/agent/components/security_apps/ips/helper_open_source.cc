@@ -7,7 +7,7 @@ using namespace std;
 namespace IPSHelper
 {
 
-// NginxionS: the IPS loads its signatures (IPSSignaturesResource, RuleSelector): they came only from the Check Point
+// NginxionS: the IPS loads its signatures (IPSSignaturesResource, RuleSelector): they came only from the opensophy
 // cloud and obfuscated, so the open source agent left them out; NginxionS gives plain ones (ips-protections.json of its
 // image, in the local policy). An obfuscated one still fails to load (deobfuscateString below).
 bool has_deobfuscation = true;

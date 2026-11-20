@@ -86,7 +86,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
     [ "$i" = 30 ] && fail "no block page of NginxionS: $(echo "$page" | head -c 300)"
     sleep 2
   done
-  echo "$page" | grep -q 'Check Point' && fail "the page of the agent is shown"
+  echo "$page" | grep -q 'opensophy' && fail "the page of the agent is shown"
   echo "$page" | grep -q '{{ip}}' && fail "the details of the request are not filled in"
 
   # events of the agent's security log, newest first. The attack is repeated while waiting: the agent
@@ -358,8 +358,6 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   wait_status "$SQLI" 403 "SQLi is not blocked once the exceptions of x-nginxions are gone"
 
   step "WAF -> Policy: the IPS of a practice blocks a known vulnerability (signatures of NginxionS, CrowdSec virtual patching)"
-  # PHPUnit eval-stdin.php (CVE-2017-9841, vpatch-CVE-2017-9841): a plain GET, no payload the ML model of the WAF reads as
-  # an attack; the IPS of the agent had no signatures without the Check Point cloud
   PHPUNIT=/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php
   wait_status_stable "$PHPUNIT" 200 "the path of PHPUnit is blocked without the IPS"
   ips=$(post_json POST /objects '{"kind": "threat_prevention", "name": "smoke-ips",
@@ -467,8 +465,8 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   done
   echo "$body" | grep -q "Smoke text of the page" || fail "the text of the custom response is not on the page"
   echo "$body" | grep -q "Incident Id" || fail "the incident ID is not on the page"
-  echo "$body" | grep -qi "check point\|openappsec" && fail "the page names a vendor: $(echo "$body" | head -c 300)"
-  [ "${#body}" -lt 4000 ] || fail "the page of the WAF is ${#body} bytes (the page of Check Point was 278 KB)"
+  echo "$body" | grep -qi "opensophy\|openappsec" && fail "the page names a vendor: $(echo "$body" | head -c 300)"
+  [ "${#body}" -lt 4000 ] || fail "the page of the WAF is ${#body} bytes (the page of opensophy was 278 KB)"
   host_objects null
   wait_status "$SQLI" 403 "SQLi is not answered with 403 again"
 

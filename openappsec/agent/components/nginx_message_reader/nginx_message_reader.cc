@@ -500,7 +500,7 @@ private:
             case '5': {
                 event_name = "AppSec Gateway reverse proxy error - Request dropped. "
                     "Please verify the reverse proxy configuration of your relevant assets. "
-                    "If the issue persists please contact Check Point Support";
+                    "If the issue persists please contact opensophy Support";
                 break;
             }
             default: {
@@ -1248,7 +1248,7 @@ private:
             {"400", "Check request syntax and format; validate client input and HTTP headers"},
             {"401", "Verify authentication credentials and configuration"},
             {"403", "If this is a valid WAF block, no action is required; otherwise,"
-                    " contact Check Point Support"},
+                    " contact opensophy Support"},
             {"404", "Validate the requested asset URI"},
             {"405", "Ensure allowed HTTP methods are configured correctly"},
             {"408", "Adjust `client_header_timeout` and `client_body_timeout`"
@@ -1267,14 +1267,14 @@ private:
             {"495", "Confirm client SSL certificates are valid and properly configured"},
             {"496", "Configure SSL client certificate requirements correctly"},
             {"497", "Enforce HTTPS for secure endpoints"},
-            {"500", "Contact Check Point Support"},
+            {"500", "Contact opensophy Support"},
             {"501", "Ensure requested features are supported and configured correctly"},
             {"502", "Verify upstream server connectivity and health; check proxy configuration"},
             {"503", "Assess server capacity and load balancing; verify upstream availability"},
             {"504", "Increase `proxy_connect_timeout` and `proxy_read_timeout`"
                     " in the asset advanced nginx configuration"},
             {"505", "Ensure HTTP version compatibility between client and server"},
-            {"507", "Contact Check Point Support"}
+            {"507", "Contact opensophy Support"}
         };
 
         auto it = status_remediations.find(status_code);
