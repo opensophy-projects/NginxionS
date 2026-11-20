@@ -28,7 +28,12 @@ describe("rules of notifications on PostgreSQL", { skip: !postgres && "no Postgr
 				eventName: "Web Request",
 				eventSeverity: "Critical",
 				eventSource: { serviceName: "HTTP Transaction Handler", assetName: host },
-				eventData: { securityAction: "Prevent", waapIncidentType: "SQL Injection", sourceIP: ip, httpHostName: host },
+				eventData: {
+					securityAction: "Prevent",
+					waapIncidentType: "SQL Injection",
+					sourceIP: ip,
+					httpHostName: host,
+				},
 			}).row;
 		await store({
 			events: [
@@ -139,7 +144,8 @@ describe("rules of notifications on PostgreSQL", { skip: !postgres && "no Postgr
 	});
 
 	test("trials of blocking: an ended one that waits for a decision, with its report", async () => {
-		const id = (await knex("proxy_host").whereRaw("domain_names::text like ?", ["%fine.example.com%"]).first("id")).id;
+		const id = (await knex("proxy_host").whereRaw("domain_names::text like ?", ["%fine.example.com%"]).first("id"))
+			.id;
 		await knex("nginxions_waf_trial").insert([
 			{
 				proxy_host_id: id,
