@@ -14,7 +14,7 @@
 //
 //   node scripts/coverage-report.mjs --in reports [--baseline .github/coverage-baseline.json] [--update] [--out dir]
 //   node scripts/coverage-report.mjs --trim reports/coverage-stack/backend    (keeps only our scripts: smaller files)
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -26,8 +26,13 @@ const TOLERANCE = 0.5;
 export const STACK_SUITES = ["smoke-waf", "smoke-crowdsec", "smoke-core", "gui"];
 
 const walk = (dir, out = []) => {
-	if (!existsSync(dir)) return out;
-	for (const name of readdirSync(dir)) {
+	let names;
+	try {
+		names = readdirSync(dir);
+	} catch {
+		return out;
+	}
+	for (const name of names) {
 		const p = join(dir, name);
 		if (statSync(p).isDirectory()) walk(p, out);
 		else out.push(p);
@@ -124,9 +129,14 @@ export function stackHits(jsonFiles, base = BACKEND) {
 			// the backend is /app in the image (nginxions/Dockerfile)
 			const m = /^file:\/\/\/app\/(.+)$/.exec(script.url ?? "");
 			if (!m || !counted(m[1])) continue;
-			const local = join(base, m[1]);
-			if (!existsSync(local)) continue;
-			const hits = v8LineHits(readFileSync(local, "utf8"), script);
+			// read without a check before (a check then a read is a race: CodeQL js/file-system-race)
+			let source;
+			try {
+				source = readFileSync(join(base, m[1]), "utf8");
+			} catch {
+				continue;
+			}
+			const hits = v8LineHits(source, script);
 			const into = files.get(m[1]) ?? new Map();
 			for (const [n, h] of hits) into.set(n, Math.max(into.get(n) ?? 0, h));
 			files.set(m[1], into);
@@ -221,7 +231,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		if (total) parts[`go/${svc}`] = Number(total[1]);
 	}
 
-	const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : {};
+	let baseline = {};
+	try {
+		baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
+	} catch {}
 	const failures = [];
 	const rows = Object.entries(parts).map(([name, value]) => {
 		const base = typeof baseline[name] === "number" ? baseline[name] : undefined;
