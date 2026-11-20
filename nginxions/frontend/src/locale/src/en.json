@@ -1334,6 +1334,18 @@
 	"nginxions.cluster.last-ok": {
 		"defaultMessage": "Last contact"
 	},
+	"nginxions.cluster.learning": {
+		"defaultMessage": "Learning"
+	},
+	"nginxions.cluster.learning-hint": {
+		"defaultMessage": "The agent of this server sends what it learns to the manager and takes back what all the servers learned together. Without the manager it keeps protecting with what it has."
+	},
+	"nginxions.cluster.learning-ok": {
+		"defaultMessage": "together with the other servers, through the manager (last answer {time})"
+	},
+	"nginxions.cluster.learning-waiting": {
+		"defaultMessage": "through the manager: no request of the agent yet (it starts after the restart of the agent)"
+	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Disconnect"
 	},

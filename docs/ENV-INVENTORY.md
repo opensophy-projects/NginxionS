@@ -57,7 +57,8 @@
 | `user_email` | не задаётся | NginxionS фиксирует | 0 ✅ |
 | `autoPolicyLoad` | `true` (агент сам применяет `local_policy.yaml`, который генерирует NginxionS) | NginxionS фиксирует | 0 ✅ |
 | `nginxproxymanager` | не задаётся (только помечает отчёт агента в облако) | NginxionS фиксирует | 1 ✅ |
-| `SHARED_STORAGE_HOST`, `TUNING_HOST` | `127.0.0.1:7811`, `127.0.0.1:7813` (сервисы в том же контейнере; порт — изменение NginxionS в агенте) | Bootstrap | 0 ✅ |
+| `SHARED_STORAGE_HOST`, `TUNING_HOST` | `127.0.0.1:7811`, `127.0.0.1:7813` (сервисы в том же контейнере; порт — изменение NginxionS в агенте); на узле хранилище — ретранслятор `127.0.0.1:7817` к управляющему серверу | Bootstrap; на узле — `nginxions-entry.sh` по роли сервера | 0 ✅ |
+| `LEARNING_HOST` | не задаётся у самостоятельного сервера; `127.0.0.1:7815` (smartsync) у управляющего с узлами; `127.0.0.1:7818` (ретранслятор) у узла | Роль сервера: NginxionS пишет её в `nginxions-agent.env`, когда подключает узлы (ADR-0012, п. 5c) | 15 ✅ |
 | `https_proxy` | не задаётся | GUI (Система → Внешние сервисы), только если администратор включит онлайн-функции | 4 |
 | `CROWDSEC_ENABLED`, `CROWDSEC_MODE`, `CROWDSEC_API_URL`, `CROWDSEC_AUTH_METHOD`, `CROWDSEC_AUTH_DATA` (встроенная интеграция агента) | выключено; LAPI `crowdsec:8080`, ключ bouncer `appsec` от `nginxions-init` | GUI (Агенты → Агент open-appsec → «Репутация IP из CrowdSec»); `nginxions-entry.sh` образа агента выставляет их из `nginxions-agent.env` | 1 ✅ |
 | Advanced ML-модель | файл `/advanced-model/open-appsec-advanced-model.tgz` (том `appsec-model`) | Загрузка файла в GUI (Агенты → Агент open-appsec) | 1 ✅ |
@@ -73,8 +74,9 @@
 | tuning (в `openappsec`) | `QUERY_DB_HOST`, `QUERY_DB_USER` | `postgres`, роль `appsec` (CREATEDB) | Bootstrap |
 | tuning (в `openappsec`) | `QUERY_DB_PASSWORD` | `QUERY_DB_PASSWORD_FILE`, читает `nginxions-openappsec.sh`, секрет от `nginxions-init` | Bootstrap (секрет) ✅ |
 | tuning, shared storage (в `openappsec`) | `SERVER_PORT`, `SHARED_STORAGE_HOST` | 7813 и 7811 на 127.0.0.1 (задаёт `nginxions-openappsec.sh`) | Bootstrap |
+| smartsync (в `openappsec`) | `APPSEC_MODE`, `SERVER_PORT`, `SHARED_STORAGE_HOST`, `FLOCK_ROOT` | standalone, 7815 на 127.0.0.1, хранилище 7811, `/tmp/nginxions-smartsync/` (задаёт `nginxions-openappsec.sh`; запускается, когда у сервера есть узлы) | Bootstrap |
 
-`appsec-smartsync` (централизованное обучение нескольких агентов) убран из стека: в локальном режиме без регистрации у агента нет Fog-токена, поэтому выгрузка `CentralizedData` в него падала с «Access token is missing», и сервис простаивал. Агент учится локально; разметку NginxionS он читает из `tuning/decisions.data` shared-storage напрямую. Подробно — `docs/adr/0011-learning.md`.
+smartsync (общее обучение нескольких агентов) работает в контейнере `openappsec` управляющего сервера, когда к нему подключены узлы: агент NginxionS шлёт запросы к локальным сервисам без токена облака, а smartsync в режиме standalone не нужны Kafka и Redis. Самостоятельный сервер учится локально, как раньше; разметку NginxionS агент читает из `tuning/decisions.data` shared storage. Подробно — `docs/adr/0011-learning.md` и `docs/adr/0012-nodes.md` (п. 5c).
 
 ## CrowdSec (`crowdsec`, официальный образ `crowdsecurity/crowdsec`)
 

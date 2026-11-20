@@ -115,8 +115,9 @@ services:
       # host:port in this namespace (our change in openappsec/agent: the agent asks them on port 80, which is nginx's)
       SHARED_STORAGE_HOST: 127.0.0.1:7811
       TUNING_HOST: 127.0.0.1:7813
-      # No LEARNING_HOST: central learning (smartsync, several agents) is not in the stack. NginxionS
-      # learns locally; see docs/adr/0011-learning.md.
+      # LEARNING_HOST (smartsync) and, on a node, the storage of its manager: set at the start of the agent from the
+      # role of this server (deploy/openappsec/agent/nginxions-entry.sh, docs/adr/0012-nodes.md 5c); alone it learns
+      # locally (docs/adr/0011-learning.md).
       # security events also go to the local tuning service (its Postgres DB feeds learning and
       # tuning suggestions); NginxionS keeps its own copy from the log files (nginxions/backend/nginxions/events)
       LOCAL_TUNING_ENABLED: "true"

@@ -4,8 +4,8 @@
 import { IconCopy, IconKey, IconPlugConnected, IconPlus, IconServer, IconTrash, IconUnlink } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { getProxyHosts, type ProxyHost } from "src/api/backend";
 import Alert from "react-bootstrap/Alert";
+import { getProxyHosts, type ProxyHost } from "src/api/backend";
 import { Button, HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
@@ -506,6 +506,31 @@ function MemberCard() {
 							{data.last_ok_on ? formatDateTime(data.last_ok_on, locale) : "—"}
 							{data.last_error && <div className="text-danger small">{data.last_error}</div>}
 						</dd>
+						{data.learning && (
+							<>
+								<dt className="col-md-3">
+									<T id="nginxions.cluster.learning" />
+								</dt>
+								<dd className="col-md-9">
+									{data.learning.last_ok_on ? (
+										<T
+											id="nginxions.cluster.learning-ok"
+											data={{ time: formatDateTime(data.learning.last_ok_on, locale) }}
+										/>
+									) : (
+										<span className="text-secondary">
+											<T id="nginxions.cluster.learning-waiting" />
+										</span>
+									)}
+									{data.learning.last_error && (
+										<div className="text-danger small">{data.learning.last_error}</div>
+									)}
+									<div className="form-hint">
+										<T id="nginxions.cluster.learning-hint" />
+									</div>
+								</dd>
+							</>
+						)}
 					</dl>
 					{manage && (
 						<Button size="sm" actionType="danger" className="mt-3" onClick={onLeave}>
