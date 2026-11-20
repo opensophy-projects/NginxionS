@@ -28,6 +28,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	before(async () => {
 		process.env.NGINXIONS_SECRET_KEY_FILE = path.join(dir, "secret.key");
 		process.env.NGINXIONS_MEMBER_FILE = path.join(dir, "cluster", "member.json");
+		// the signing key of the manager (step 15.2): never /data of the machine running the tests
+		process.env.NGINXIONS_SIGNING_KEY_FILE = path.join(dir, "manager-signing.key");
 		knex = await freshDatabase("nodes");
 		// the routes load the PKI in its order (it has a cycle with mTLS when imported alone)
 		await import("../routes.js");
@@ -59,6 +61,15 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 					raw += d;
 				});
 				req.on("end", async () => {
+					// an error of the manager is an answer (500 with its message), never a request left without one
+					try {
+						await answerOf(raw);
+					} catch (err) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: { code: 500, message: String(err.message) } }));
+					}
+				});
+				const answerOf = async (raw) => {
 					const body = JSON.parse(raw || "{}");
 					let answer = null;
 					if (req.url === "/api/nginxions/nodes/register")
@@ -78,7 +89,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 					}
 					res.writeHead(answer ? 200 : 401, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(answer ?? { error: { code: 401, message: "Unknown" } }));
-				});
+				};
 			},
 		);
 		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
