@@ -7,7 +7,7 @@ Input (from scripts/train-model.sh):
   samples.jsonl    the requests with labels and train/test split (model/datasets.py)
   dump/*.jsonl     what the agent with the stock model found in each value of each request
   verdicts.jsonl   what the agent with the stock model decided (model/replay.py)
-  waap.data        the model of the image (the model opensophy, openappsec/agent/components/security_apps/waap/resources/waap.data):
+  waap.data        the model of the image (openappsec/agent/components/security_apps/waap/resources/waap.data):
                    signatures stay, the scores are trained; a linear base model is where the training starts (its
                    weights are the prior of L2, a feature the training part never shows keeps its weight)
 
@@ -198,7 +198,7 @@ def main(argv=None):
     ap.add_argument("--dump", required=True, help="directory of the feature dump of the stock model's run")
     ap.add_argument("--verdicts", required=True, help="verdicts of the stock model's run")
     ap.add_argument("--base", required=True, help="waap.data of the image (the model of the image: the advanced "
-                    "model of opensophy; a linear base model is the start of the training)")
+                    "model of the image; a linear base model is the start of the training)")
     ap.add_argument("--l2", type=float, default=1.0, help="L2 regularization (default 1.0)")
     ap.add_argument("--name", default=datetime.date.today().isoformat(), help="model version suffix")
     ap.add_argument("--out", required=True, help="output directory")

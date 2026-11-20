@@ -2,7 +2,7 @@
 
 /// \file ips_signatures.h
 /// \brief Declaration of classes IPSSignatureSubTypes, IPSSignaturesPerContext, IPSSignatures, SnortSignatures, and
-/// related functions. \author opensophy Software Technologies Ltd. \date 2022
+/// related functions.
 
 #ifndef __IPS_SIGNATURES_H__
 #define __IPS_SIGNATURES_H__

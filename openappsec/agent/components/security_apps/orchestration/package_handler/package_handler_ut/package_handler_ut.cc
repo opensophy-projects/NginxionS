@@ -27,7 +27,7 @@ public:
     {
         setConfiguration<string>(package_dir, "orchestration", "Packages directory");
         setConfiguration<string>(backup_ext, "orchestration", "Backup file extension");
-        setConfiguration<string>("/tmp", "orchestration", "Default opensophy directory");
+        setConfiguration<string>("/tmp", "orchestration", "Default agent directory");
 
         writeFile("#!/bin/bash\necho \"bb\"\nexit 1", "/tmp/bad.sh");
         writeFile("#!/bin/bash\necho \"bb\"", "/tmp/packages/good/good");
@@ -120,7 +120,7 @@ TEST_F(PackageHandlerTest, useAdditionalFlags)
     preload();
     registerExpectedConfiguration<string>("orchestration", "Packages directory");
     registerExpectedConfiguration<string>("orchestration", "Backup file extension");
-    registerExpectedConfiguration<string>("orchestration", "Default opensophy directory");
+    registerExpectedConfiguration<string>("orchestration", "Default agent directory");
 
     string config_json =
         "{\n"
@@ -135,7 +135,7 @@ TEST_F(PackageHandlerTest, useAdditionalFlags)
         "        ],\n"
         "        \"Packages directory\": [ { \"value\": \"" + package_dir + "\"}],\n"
         "        \"Backup file extension\": [ { \"value\": \"" + backup_ext + "\"}],\n"
-        "        \"Default opensophy directory\": [ { \"value\": \"/tmp\"}]"
+        "        \"Default agent directory\": [ { \"value\": \"/tmp\"}]"
         "    }\n"
         "}";
     istringstream string_stream(config_json);

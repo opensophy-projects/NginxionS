@@ -37,7 +37,7 @@ ManifestHandler::init()
     default_dir = getConfigurationWithDefault<string>(
         getFilesystemPathConfig(),
         "orchestration",
-        "Default opensophy directory"
+        "Default agent directory"
     );
 }
 
@@ -157,12 +157,12 @@ ManifestHandler::downloadPackages(const map<string, Package> &new_packages_to_do
                 install_error =
                     "Critical Error: Agent/Gateway was not fully deployed " +
                     err_hostname +
-                    " and is not enforcing a security policy. Retry installation or contact opensophy support.";
+                    " and is not enforcing a security policy. Retry installation or contact support.";
             } else {
                 install_error =
                     "Warning: Agent/Gateway " +
                     err_hostname +
-                    " software update failed. Agent is running previous software. Contact opensophy support.";
+                    " software update failed. Agent is running previous software. Contact support.";
             }
 
             UpdatesProcessEvent(
@@ -218,7 +218,7 @@ ManifestHandler::installPackage(
             string install_error =
                 "Warning: Agent/Gateway " +
                 err_hostname +
-                " software update failed. Agent is running previous software. Contact opensophy support.";
+                " software update failed. Agent is running previous software. Contact support.";
             if (orchestration_status->getManifestError().find("Gateway was not fully deployed") == string::npos) {
                 UpdatesProcessEvent(
                     UpdatesProcessResult::FAILED,
@@ -279,12 +279,12 @@ ManifestHandler::installPackage(
             install_error =
                 "Critical Error: Agent/Gateway was not fully deployed " +
                 err_hostname +
-                " and is not enforcing a security policy. Retry installation or contact opensophy support.";
+                " and is not enforcing a security policy. Retry installation or contact support.";
         } else {
             install_error =
                 "Warning: Agent/Gateway " +
                 err_hostname +
-                " software update failed. Agent is running previous software. Contact opensophy support.";
+                " software update failed. Agent is running previous software. Contact support.";
         }
         corrupted_packages.insert(make_pair(package_name, package));
         dbgWarning(D_ORCHESTRATOR) << "Failed to install package. Package: " << package_name;

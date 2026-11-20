@@ -10,5 +10,5 @@ gen_package(
 	install-cp-nano-nginx-attachment.sh
 	nginx_attachment
 	./install-nginx-attachment.sh
-	opensophy Attachment Registration Manager Nano Service Version ${PACKAGE_VERSION} Install Package
+	Attachment Registration Manager Nano Service Version ${PACKAGE_VERSION} Install Package
 )

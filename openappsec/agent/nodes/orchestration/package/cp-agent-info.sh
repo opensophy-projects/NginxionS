@@ -179,7 +179,7 @@ do
     shift
 done
 
-cp_print "---- Starting to collect opensophy Nano Agent data ----"
+cp_print "---- Starting to collect Nano Agent data ----"
 mkdir -p "$CP_INFO_DIR"
 mkdir -p "$CP_UNSPLITED_DIR"
 checkNginx

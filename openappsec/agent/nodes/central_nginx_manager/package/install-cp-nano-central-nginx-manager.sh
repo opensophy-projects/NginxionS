@@ -68,7 +68,7 @@ get_nginx_conf_path()
 
 run_installation()
 {
-    cp_print "Starting installation of opensophy Central NGINX Manager [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
+    cp_print "Starting installation of Central NGINX Manager [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
     cp_exec "${WATCHDOG_PATH} --un-register ${SERVICE_PATH}/cp-nano-central-nginx-manager"
     cp_exec "mkdir -p ${SERVICE_PATH}"
     cp_exec "mkdir -p ${SERVICE_PATH}/certs"
@@ -91,7 +91,7 @@ run_installation()
 
 usage()
 {
-    echo "opensophy: available flags are"
+    echo "Available flags are"
     echo "--install           : install central nginx manager"
     echo "--uninstall         : remove central nginx manager"
     echo "--pre_install_test  : run Pre-installation test for central nginx manager install package"
@@ -101,7 +101,7 @@ usage()
 
 run_uninstall()
 {
-    cp_print "Starting uninstall of opensophy Central NGINX Manager service [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
+    cp_print "Starting uninstall of Central NGINX Manager service [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
 
     cp_exec "${WATCHDOG_PATH} --un-register ${SERVICE_PATH}/cp-nano-central-nginx-manager"
     cp_exec "rm -rf ${SERVICE_PATH}/"
@@ -121,25 +121,25 @@ run_uninstall()
     fi
 
     if [ -f "${NGINX_CONF_PATH}.orig" ]; then
-        cp_print "Original (pre opensophy Nano Agent deployment) NGINX configuration file can be found at: ${NGINX_CONF_PATH}.orig" ${FORCE_STDOUT}
+        cp_print "Original (pre Nano Agent deployment) NGINX configuration file can be found at: ${NGINX_CONF_PATH}.orig" ${FORCE_STDOUT}
     fi
-    cp_print "opensophy Central NGINX Manager service was removed successfully\n" ${FORCE_STDOUT}
+    cp_print "Central NGINX Manager service was removed successfully\n" ${FORCE_STDOUT}
 }
 
 run_pre_install_test()
 {
-    cp_print "Successfully finished pre-installation test for opensophy Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
+    cp_print "Successfully finished pre-installation test for Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
     exit 0
 }
 
 run_post_install_test()
 {
     if [ ! -d ${SERVICE_PATH} ]; then
-        cp_print "Failed post-installation test for opensophy Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
+        cp_print "Failed post-installation test for Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
         exit 1
     fi
 
-    cp_print "Successfully finished post-installation test for opensophy Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
+    cp_print "Successfully finished post-installation test for Central NGINX Manager service installation package [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
     exit 0
 }
 
