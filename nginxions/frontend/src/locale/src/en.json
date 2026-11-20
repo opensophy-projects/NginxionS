@@ -260,6 +260,9 @@
 	"certificates.request.title": {
 		"defaultMessage": "Request a new Certificate"
 	},
+	"cluster": {
+		"defaultMessage": "Connection to a manager"
+	},
 	"column.access": {
 		"defaultMessage": "Access"
 	},
@@ -1309,6 +1312,48 @@
 	},
 	"nginxions.certs.used.yes": {
 		"defaultMessage": "Used by hosts"
+	},
+	"nginxions.cluster.code": {
+		"defaultMessage": "Join code"
+	},
+	"nginxions.cluster.disabled": {
+		"defaultMessage": "The manager disabled this node. It keeps protecting its sites on its own; disconnect it to connect again with a new code."
+	},
+	"nginxions.cluster.fingerprint": {
+		"defaultMessage": "Certificate of the manager (SHA-256)"
+	},
+	"nginxions.cluster.hint": {
+		"defaultMessage": "Connect this server to a manager: it will be managed from there and keep protecting its sites if the manager is unreachable."
+	},
+	"nginxions.cluster.join": {
+		"defaultMessage": "Connect"
+	},
+	"nginxions.cluster.joined": {
+		"defaultMessage": "Connected to the manager"
+	},
+	"nginxions.cluster.last-ok": {
+		"defaultMessage": "Last contact"
+	},
+	"nginxions.cluster.leave": {
+		"defaultMessage": "Disconnect"
+	},
+	"nginxions.cluster.leave.confirm": {
+		"defaultMessage": "Disconnect this server from its manager? Disable it on the manager too."
+	},
+	"nginxions.cluster.manager": {
+		"defaultMessage": "Address of the manager"
+	},
+	"nginxions.cluster.manager.placeholder": {
+		"defaultMessage": "https://manager.example.com:81"
+	},
+	"nginxions.cluster.node": {
+		"defaultMessage": "This node"
+	},
+	"nginxions.cluster.standalone": {
+		"defaultMessage": "This server works on its own."
+	},
+	"nginxions.cluster.this-server": {
+		"defaultMessage": "This server"
 	},
 	"nginxions.code.applied": {
 		"defaultMessage": "Applied"
@@ -4271,6 +4316,120 @@
 	"nginxions.nav.user-menu": {
 		"defaultMessage": "User menu"
 	},
+	"nginxions.nodes": {
+		"defaultMessage": "Nodes"
+	},
+	"nginxions.nodes.add": {
+		"defaultMessage": "Add node"
+	},
+	"nginxions.nodes.code.how": {
+		"defaultMessage": "On the new server open «Agents → Nodes → This server», enter the address {address} and this code. The code is valid until {time} and works once."
+	},
+	"nginxions.nodes.code.title": {
+		"defaultMessage": "Join code of the node {name}: shown once"
+	},
+	"nginxions.nodes.code.until": {
+		"defaultMessage": "code valid until {time}"
+	},
+	"nginxions.nodes.copied": {
+		"defaultMessage": "Copied"
+	},
+	"nginxions.nodes.copy": {
+		"defaultMessage": "Copy"
+	},
+	"nginxions.nodes.delete": {
+		"defaultMessage": "Delete"
+	},
+	"nginxions.nodes.delete.confirm": {
+		"defaultMessage": "Delete the node {name} from the list?"
+	},
+	"nginxions.nodes.hint": {
+		"defaultMessage": "Servers of NginxionS managed from this one. Add a node to get its one-time join code, then enter it on the new server in «This server»."
+	},
+	"nginxions.nodes.hosts": {
+		"defaultMessage": "{count, plural, one {# host} other {# hosts}}"
+	},
+	"nginxions.nodes.hosts.button": {
+		"defaultMessage": "Hosts ({count})"
+	},
+	"nginxions.nodes.hosts.hint": {
+		"defaultMessage": "The ticked hosts go to the node with their certificates, access lists and WAF modes; it applies them within a minute. ACME certificates stay here: their renewal is on this server."
+	},
+	"nginxions.nodes.hosts.none": {
+		"defaultMessage": "This server has no proxy hosts yet."
+	},
+	"nginxions.nodes.hosts.saved": {
+		"defaultMessage": "Hosts of {name} saved"
+	},
+	"nginxions.nodes.hosts.title": {
+		"defaultMessage": "Hosts of the node"
+	},
+	"nginxions.nodes.labels": {
+		"defaultMessage": "Labels"
+	},
+	"nginxions.nodes.labels.placeholder": {
+		"defaultMessage": "eu edge (space or comma)"
+	},
+	"nginxions.nodes.last-seen": {
+		"defaultMessage": "Last contact"
+	},
+	"nginxions.nodes.name": {
+		"defaultMessage": "Name"
+	},
+	"nginxions.nodes.name.placeholder": {
+		"defaultMessage": "edge-1, Frankfurt…"
+	},
+	"nginxions.nodes.new-code": {
+		"defaultMessage": "New code"
+	},
+	"nginxions.nodes.none": {
+		"defaultMessage": "No nodes yet: this server works on its own."
+	},
+	"nginxions.nodes.package": {
+		"defaultMessage": "Configuration"
+	},
+	"nginxions.nodes.package.applied": {
+		"defaultMessage": "Applied"
+	},
+	"nginxions.nodes.package.error": {
+		"defaultMessage": "Not applied: {error}"
+	},
+	"nginxions.nodes.package.skipped": {
+		"defaultMessage": "{count, plural, one {# item left out} other {# items left out}}"
+	},
+	"nginxions.nodes.package.waiting": {
+		"defaultMessage": "Waits for the node"
+	},
+	"nginxions.nodes.revoke": {
+		"defaultMessage": "Disable"
+	},
+	"nginxions.nodes.revoke.confirm": {
+		"defaultMessage": "Disable the node {name}? Its certificate is revoked and it stops being managed from here. It keeps protecting its sites on its own."
+	},
+	"nginxions.nodes.server": {
+		"defaultMessage": "Server"
+	},
+	"nginxions.nodes.state": {
+		"defaultMessage": "State"
+	},
+	"nginxions.nodes.state.expired": {
+		"defaultMessage": "Code expired"
+	},
+	"nginxions.nodes.state.offline": {
+		"defaultMessage": "Offline"
+	},
+	"nginxions.nodes.state.online": {
+		"defaultMessage": "Online"
+	},
+	"nginxions.nodes.state.pending": {
+		"defaultMessage": "Waits for connection"
+	},
+	"nginxions.nodes.state.revoked": {
+		"defaultMessage": "Disabled"
+	},
+	"nginxions.nodes.version": {
+		"defaultMessage": "version {version}"
+	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Problem"
 	},
@@ -6503,6 +6662,12 @@
 	"nginxions.rbac.resource.dead_hosts.desc": {
 		"defaultMessage": "Domains that answer 404"
 	},
+	"nginxions.rbac.resource.nodes": {
+		"defaultMessage": "Nodes"
+	},
+	"nginxions.rbac.resource.nodes.desc": {
+		"defaultMessage": "Servers of NginxionS managed from this one: add, disable"
+	},
 	"nginxions.rbac.resource.notifications": {
 		"defaultMessage": "Notifications"
 	},
@@ -8221,6 +8386,9 @@
 	},
 	"no-tls": {
 		"defaultMessage": "No TLS"
+	},
+	"node": {
+		"defaultMessage": "Node"
 	},
 	"notfound.action": {
 		"defaultMessage": "Take me home"
