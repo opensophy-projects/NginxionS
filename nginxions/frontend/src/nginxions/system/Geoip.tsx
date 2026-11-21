@@ -6,10 +6,10 @@ import Alert from "react-bootstrap/Alert";
 import * as api from "src/api/backend/base";
 import { T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
-import { t } from "../crowdsec/labels";
-import { dateTime } from "../ui/time";
 import { isNotJson, notJsonError } from "../apiErrors";
+import { t } from "../crowdsec/labels";
 import { FileButton } from "../ui/FileButton";
+import { dateTime } from "../ui/time";
 
 interface GeoipState {
 	database: { source: "uploaded" | "crowdsec"; type: string; built: string | null; size: number } | null;

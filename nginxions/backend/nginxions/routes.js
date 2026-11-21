@@ -24,6 +24,7 @@ import internalHosts, { HOST_OBJECTS } from "./hosts.js";
 import internalLearning from "./learning/index.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
+import internalClusterSettings from "./nodes/cluster-settings.js";
 import internalNodes from "./nodes/index.js";
 import { MAX_LEARNING_BODY } from "./nodes/learning-model.js";
 import internalMember from "./nodes/member.js";
@@ -3205,5 +3206,36 @@ router
 		),
 	)
 	.delete(handle((_, res) => internalMember.leave(res.locals.access)));
+
+/**
+ * GET /api/nginxions/cluster/learning — the thresholds of the learning of the nodes (smartsync on a manager)
+ * PUT /api/nginxions/cluster/learning — {minSources, minSourcesTypes, minIntervals, ratioThreshold}
+ */
+router
+	.route("/cluster/learning")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_, res) => internalClusterSettings.get(res.locals.access)))
+	.put(
+		handle(async (req, res) =>
+			internalClusterSettings.set(
+				res.locals.access,
+				await validator(
+					{
+						type: "object",
+						additionalProperties: false,
+						required: ["minSources", "minSourcesTypes", "minIntervals", "ratioThreshold"],
+						properties: {
+							minSources: { type: "integer", minimum: 2, maximum: 1000 },
+							minSourcesTypes: { type: "integer", minimum: 2, maximum: 1000 },
+							minIntervals: { type: "integer", minimum: 1, maximum: 100 },
+							ratioThreshold: { type: "number", minimum: 0.1, maximum: 1 },
+						},
+					},
+					req.body,
+				),
+			),
+		),
+	);
 
 export default router;

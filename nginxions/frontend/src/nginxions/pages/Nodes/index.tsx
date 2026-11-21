@@ -13,8 +13,10 @@ import { VIEW } from "src/modules/Permissions";
 import { showError, showSuccess } from "src/notifications";
 import {
 	addNode,
+	type ClusterLearning,
 	type ClusterNode,
 	deleteNode,
+	getClusterLearning,
 	getClusterMember,
 	getNodes,
 	joinCluster,
@@ -23,6 +25,7 @@ import {
 	type NodeState,
 	newNodeCode,
 	revokeNode,
+	setClusterLearning,
 	setNodeHosts,
 } from "../../api";
 import { showConfirmModal } from "../../modals/ConfirmModal";
@@ -583,9 +586,84 @@ function MemberCard() {
 	);
 }
 
+const LEARNING_FIELDS: { key: keyof ClusterLearning; min: number; max: number; step: number }[] = [
+	{ key: "minSources", min: 2, max: 1000, step: 1 },
+	{ key: "minSourcesTypes", min: 2, max: 1000, step: 1 },
+	{ key: "minIntervals", min: 1, max: 100, step: 1 },
+	{ key: "ratioThreshold", min: 0.1, max: 1, step: 0.05 },
+];
+
+/** the thresholds of the learning of the nodes put together by smartsync (a manager with nodes) */
+function LearningCard() {
+	const can = useCan();
+	const manage = can("nodes", "manage");
+	const queryClient = useQueryClient();
+	const { data } = useQuery({ queryKey: ["nginxions-cluster-learning"], queryFn: getClusterLearning });
+	const [form, setForm] = useState<ClusterLearning | null>(null);
+	const [saving, setSaving] = useState(false);
+	const value = form ?? data;
+	if (!value) return null;
+
+	const onSave = async (e: FormEvent) => {
+		e.preventDefault();
+		setSaving(true);
+		try {
+			await setClusterLearning(value);
+			setForm(null);
+			showSuccess(t("nginxions.cluster.learning.saved"));
+			queryClient.invalidateQueries({ queryKey: ["nginxions-cluster-learning"] });
+		} catch (err) {
+			showError(errorText(err));
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<div className="card mt-4">
+			<div className="card-header">
+				<h3 className="card-title">
+					<T id="nginxions.cluster.learning.title" />
+				</h3>
+			</div>
+			<form className="card-body" onSubmit={onSave}>
+				<p className="text-secondary">
+					<T id="nginxions.cluster.learning.hint" />
+				</p>
+				<div className="row g-3">
+					{LEARNING_FIELDS.map((f) => (
+						<div className="col-md-3" key={f.key}>
+							<label className="form-label" htmlFor={`cluster-learning-${f.key}`}>
+								<T id={`nginxions.cluster.learning.${f.key}`} />
+							</label>
+							<input
+								id={`cluster-learning-${f.key}`}
+								className="form-control"
+								type="number"
+								min={f.min}
+								max={f.max}
+								step={f.step}
+								value={value[f.key]}
+								disabled={!manage}
+								onChange={(e) => setForm({ ...value, [f.key]: Number(e.target.value) })}
+							/>
+						</div>
+					))}
+				</div>
+				{manage && (
+					<Button type="submit" actionType="primary" className="mt-3" isLoading={saving} disabled={!form}>
+						<T id="nginxions.cluster.learning.save" />
+					</Button>
+				)}
+			</form>
+		</div>
+	);
+}
+
 const Nodes = () => (
 	<HasPermission rbac="nodes" permission={VIEW} pageLoading loadingNoLogo>
 		<NodesCard />
+		<LearningCard />
 		<MemberCard />
 	</HasPermission>
 );

@@ -320,6 +320,10 @@ export const start = () => {
 	import("./relay.js")
 		.then(({ startRelay }) => startRelay())
 		.catch((err) => logger.warn(`Cluster: the learning relay: ${err.message}`));
+	// the thresholds of smartsync from the GUI (a manager reads them before each sync)
+	import("./cluster-settings.js")
+		.then(({ bootstrap }) => bootstrap())
+		.catch((err) => logger.warn(`Cluster: the settings of smartsync: ${err.message}`));
 	const tick = () => beat().catch((err) => logger.warn(`Cluster heartbeat: ${err.message}`));
 	timer = setInterval(tick, HEARTBEAT_MS);
 	timer.unref?.();

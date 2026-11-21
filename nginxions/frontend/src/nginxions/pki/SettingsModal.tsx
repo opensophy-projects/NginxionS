@@ -1,7 +1,8 @@
 // Certificates → Settings: what is set once for the whole section. The PKI (public address for CRLs and links,
 // lifetimes, key type), the templates of certificates and when ACME certificates are renewed.
-import EasyModal, { type InnerModalProps } from "ez-modal-react";
+
 import cn from "classnames";
+import EasyModal, { type InnerModalProps } from "ez-modal-react";
 import { useState } from "react";
 import Modal from "react-bootstrap/Modal";
 import { T } from "src/locale";

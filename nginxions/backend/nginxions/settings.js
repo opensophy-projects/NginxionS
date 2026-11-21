@@ -36,6 +36,24 @@ const DEFINITIONS = {
 			v.failOpen.timeoutMs >= 10 &&
 			v.failOpen.timeoutMs <= 10000,
 	},
+	// thresholds of the learning of the nodes put together by smartsync on a manager (Agents → Nodes), see
+	// nodes/cluster-settings.js: written to a file smartsync reads before each sync
+	"cluster.learning": {
+		default: () => ({ minSources: 3, minSourcesTypes: 10, minIntervals: 5, ratioThreshold: 0.8 }),
+		validate: (v) =>
+			Number.isInteger(v?.minSources) &&
+			v.minSources >= 2 &&
+			v.minSources <= 1000 &&
+			Number.isInteger(v.minSourcesTypes) &&
+			v.minSourcesTypes >= 2 &&
+			v.minSourcesTypes <= 1000 &&
+			Number.isInteger(v.minIntervals) &&
+			v.minIntervals >= 1 &&
+			v.minIntervals <= 100 &&
+			typeof v.ratioThreshold === "number" &&
+			v.ratioThreshold >= 0.1 &&
+			v.ratioThreshold <= 1,
+	},
 	// File Security (WAF -> Agent), see waf/files.js: online updates of the signatures of ClamAV (freshclam)
 	"waf.files": {
 		default: () => ({ online_updates: false }),

@@ -85,6 +85,7 @@ func (lc *LearnCore) getTuningDecisions(ctx context.Context, ids models.SyncID) 
 
 func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map[models.SyncID]models.SyncHandler, error) {
 	ret := map[models.SyncID]models.SyncHandler{}
+	settings := readNginxionsSettings() // NginxionS: thresholds from the GUI of NginxionS
 	switch id.Type {
 	case models.IndicatorsConfidence:
 		params := models.ConfidenceParams{
@@ -94,6 +95,7 @@ func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map
 			NullObject:     "",
 			Interval:       2 * time.Hour,
 		}
+		params = withSettings(params, false, settings) // NginxionS
 		ret[id] = handlers.NewConfidenceCalculator(id, params, lc.getTuningDecisions(ctx, id), lc.repo)
 	case models.IndicatorsTrusted:
 		ret[id] = handlers.NewTrustedSources(id)
@@ -107,6 +109,7 @@ func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map
 			NullObject:     "unknown",
 			Interval:       time.Hour,
 		}
+		params = withSettings(params, true, settings) // NginxionS
 		ret[id] = handlers.NewConfidenceCalculator(id, params, lc.getTuningDecisions(ctx, id), lc.repo)
 	case models.TypesTrusted:
 		ret[id] = handlers.NewTrustedSources(id)
