@@ -115,7 +115,13 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			"/CN=manager.test",
 		]);
 		server = https.createServer(
-			{ key: readFileSync(path.join(dir, "panel.key")), cert: readFileSync(path.join(dir, "panel.crt")) },
+			{
+				key: readFileSync(path.join(dir, "panel.key")),
+				cert: readFileSync(path.join(dir, "panel.crt")),
+				// as nginx on the channel of the nodes: the certificate is asked for, the backend judges it
+				requestCert: true,
+				rejectUnauthorized: false,
+			},
 			(req, res) => {
 				const chunks = [];
 				req.on("data", (d) => chunks.push(d));
@@ -128,7 +134,17 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 						res.end(JSON.stringify({ error: { code: 500, message: String(err.message) } }));
 					}
 				});
-				const token = () => /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1];
+				// the token and the certificate the node showed (nginx passes it to the backend)
+				const token = () => {
+					const raw = req.socket.getPeerCertificate?.()?.raw;
+					const cert = raw
+						? `-----BEGIN CERTIFICATE-----\n${raw
+								.toString("base64")
+								.match(/.{1,64}/g)
+								.join("\n")}\n-----END CERTIFICATE-----\n`
+						: null;
+					return { token: /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1], cert };
+				};
 				const answerOf = async (raw) => {
 					// the learning routes (bytes in and out), as routes.js has them: the path not normalized
 					const [pathname, search = ""] = req.url.split(/\?(.*)/s);
@@ -246,6 +262,15 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await member.beat();
 		const state = await member.readState();
 		assert.equal(state.last_error, "");
+		// the channel (step 15.2): the token alone, or with a certificate that is not the one of the node, is refused
+		const { decrypt } = await import("../secrets.js");
+		const realToken = decrypt(state.token_enc);
+		assert.equal(await nodes.heartbeat({ token: realToken, cert: null }, {}), null);
+		assert.equal(
+			await nodes.heartbeat({ token: realToken, cert: readFileSync(path.join(dir, "panel.crt"), "utf8") }, {}),
+			null,
+		);
+		assert.ok(await nodes.heartbeat({ token: realToken, cert: state.cert_pem }, {}), "its own certificate passes");
 		// the key of the manager is pinned, the (empty) package of the node is applied and its version told
 		assert.match(state.signing_key, /BEGIN PUBLIC KEY/);
 		assert.match(state.applied_version, /^[0-9a-f]{64}$/);

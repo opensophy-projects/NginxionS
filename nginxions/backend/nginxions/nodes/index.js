@@ -5,7 +5,7 @@
 //   - the node sends a heartbeat with its token every 30 s: version, hosts, the state of its agent;
 //   - "Disable": the certificate of the node is revoked, its token forgotten; its next heartbeat gets 403.
 // RBAC: nodes:view (the list), nodes:manage (add, new code, disable, delete).
-import { randomBytes } from "node:crypto";
+import { randomBytes, X509Certificate } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import db from "../../db.js";
@@ -129,13 +129,38 @@ const NODE_LOGS_DIR = process.env.NGINXIONS_NODE_LOGS_DIR || "/data/nginxions/cl
 /** the rollout is kept this long */
 const ROLLOUT_KEEP_DAYS = 180;
 
-/** a node with this token, active; null otherwise */
-const nodeOfToken = async (token) => {
+/**
+ * The certificate a node showed on its channel is the one its manager issued to it (its fingerprint), within its
+ * dates, not revoked. nginx asked for it and checked the node holds its key; the chain is ours by the fingerprint.
+ */
+const certOfNode = async (row, pem) => {
+	if (!pem || typeof pem !== "string" || !row.fingerprint) return false;
+	let cert;
+	try {
+		cert = new X509Certificate(pem);
+	} catch {
+		return false;
+	}
+	if (cert.fingerprint256.toUpperCase() !== String(row.fingerprint).toUpperCase()) return false;
+	const now = Date.now();
+	if (new Date(cert.validFrom).getTime() > now || new Date(cert.validTo).getTime() < now) return false;
+	const issued = row.cert_id ? await db()("nginxions_pki_cert").where({ id: row.cert_id }).first("revoked_on") : null;
+	return Boolean(issued) && !issued.revoked_on;
+};
+
+/**
+ * The active node of these credentials, null otherwise: its token and the certificate of its channel (step 15.2:
+ * mTLS with the certificate of the PKI of its manager, besides the token).
+ * @param {{token?: string, cert?: string|null}} auth
+ */
+const nodeOfToken = async (auth) => {
+	const { token, cert } = auth && typeof auth === "object" ? auth : { token: auth, cert: null };
 	if (!TOKEN.test(String(token ?? ""))) return null;
 	const row = await db()(TABLE)
 		.where({ token_hash: hash(token) })
 		.first();
-	return row && row.status === "active" && sameHash(token, row.token_hash) ? row : null;
+	if (!row || row.status !== "active" || !sameHash(token, row.token_hash)) return null;
+	return (await certOfNode(row, cert)) ? row : null;
 };
 
 /** at most this many events per request of a node (it sends the rest with the next ones) */

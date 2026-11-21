@@ -3090,6 +3090,22 @@ const nodeSchema = {
 		labels: { type: "array", maxItems: 20, items: { type: "string", maxLength: 32 } },
 	},
 };
+/**
+ * How a node proves itself on its channel (docs/adr/0012-nodes.md 5a): its token, and the certificate it showed to
+ * nginx (the server of the panel named nginxions-cluster asks for it; the node has proven it holds its key). A client
+ * cannot send this header itself: every proxy of the panel sets it (empty unless on that channel).
+ */
+const nodeAuth = (req) => {
+	const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+	let cert = null;
+	try {
+		cert = req.get("x-nginxions-node-cert") ? decodeURIComponent(req.get("x-nginxions-node-cert")) : null;
+	} catch {
+		cert = null;
+	}
+	return { token, cert };
+};
+
 const nodeId = (req) => {
 	const id = Number(req.params.node_id);
 	if (!Number.isInteger(id) || id < 1 || id > MAX_ID) throw new errs.ValidationError("invalid node id");
@@ -3140,7 +3156,7 @@ router.post("/nodes/register", sensitiveLimiter, express.json({ limit: "64kb" })
  */
 router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.heartbeat(token, req.body?.info, req.ip);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3157,7 +3173,7 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
  */
 router.post("/nodes/events", express.json({ limit: "4mb" }), async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.events(token, req.body?.events);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3174,7 +3190,7 @@ router.post("/nodes/events", express.json({ limit: "4mb" }), async (req, res, ne
  */
 router.get("/nodes/package", async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.package(token);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3192,7 +3208,7 @@ router.get("/nodes/package", async (req, res, next) => {
  */
 router.post("/nodes/logs", express.raw({ type: () => true, limit: "4mb" }), async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		let body = null;
 		try {
 			body = JSON.parse(rawBytes(req)?.toString("utf8") || "null");
@@ -3217,7 +3233,7 @@ router.post("/nodes/logs", express.raw({ type: () => true, limit: "4mb" }), asyn
 // a node downloads the model once per change; the limit stops a stolen token from reading the file in a loop
 router.get("/nodes/model", sensitiveLimiter, async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.wafModel(token);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3237,7 +3253,7 @@ router.get("/nodes/model", sensitiveLimiter, async (req, res, next) => {
  */
 router.get("/nodes/learning/profile", async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.learningProfile(token);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3262,7 +3278,7 @@ router.all(
 	express.raw({ type: () => true, limit: MAX_LEARNING_BODY }),
 	async (req, res, next) => {
 		try {
-			const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+			const token = nodeAuth(req);
 			// the path as the agent sent it, not normalized (an agent without a tenant asks //<asset>/...; "..": the
 			// rules of nodes/learning-model.js refuse it): after the prefix of the route
 			const [pathname, search = ""] = String(req.originalUrl).split(/\?(.*)/s);
@@ -3290,7 +3306,7 @@ router.all(
  */
 router.post("/nodes/learning/sync", express.raw({ type: () => true, limit: "16kb" }), async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.learningSync(token, rawBytes(req));
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");

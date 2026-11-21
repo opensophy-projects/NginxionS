@@ -37,6 +37,13 @@ const MAX_ANSWER = 256 * 1024;
 
 const audit = (access, action, meta) => internalAuditLog.add(access, { action, object_type: "cluster", meta });
 
+/** the name a node asks the panel of its manager for: its channel, where the panel asks for its certificate */
+export const CLUSTER_SNI = "nginxions-cluster";
+
+/** the certificate of this node and its key, for the channel to its manager (step 15.2); null before the join */
+export const clientOf = (state) =>
+	state?.key_enc && state?.cert_pem ? { key: decrypt(state.key_enc), cert: state.cert_pem } : null;
+
 /** the colon form of a SHA-256 fingerprint, as Node and the PKI give it */
 const sameFingerprint = (a, b) => String(a).toUpperCase() === String(b).toUpperCase();
 
@@ -55,6 +62,7 @@ export const managerExchange = (
 		headers = {},
 		token,
 		pin,
+		client = null,
 		maxAnswer = MAX_ANSWER,
 		timeoutMs = TIMEOUT_MS,
 		toFile = null,
@@ -67,7 +75,9 @@ export const managerExchange = (
 		const socket = tls.connect({
 			host: url.hostname,
 			port,
-			servername: isIP(url.hostname) ? undefined : url.hostname,
+			// with its certificate a node asks for its channel (the panel then asks for the certificate); without, the panel
+			servername: client ? CLUSTER_SNI : isIP(url.hostname) ? undefined : url.hostname,
+			...(client ? { key: client.key, cert: client.cert } : {}),
 			// the trust is the pin (or the first connection), not the CAs of the system: panels of NginxionS often
 			// have a certificate of their own
 			rejectUnauthorized: false,
@@ -147,7 +157,7 @@ export const managerExchange = (
  * A JSON request to the manager (managerExchange).
  * @returns {Promise<{status: number, body: any, fingerprint: string}>}
  */
-export const managerRequest = async (managerUrl, urlPath, { method = "POST", body, token, pin } = {}) => {
+export const managerRequest = async (managerUrl, urlPath, { method = "POST", body, token, pin, client } = {}) => {
 	const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
 	const answer = await managerExchange(managerUrl, urlPath, {
 		method,
@@ -155,6 +165,7 @@ export const managerRequest = async (managerUrl, urlPath, { method = "POST", bod
 		headers: { Accept: "application/json", ...(payload ? { "Content-Type": "application/json" } : {}) },
 		token,
 		pin,
+		client,
 	});
 	let parsed = null;
 	try {
@@ -286,6 +297,7 @@ export const forwardEvents = async (state) => {
 			const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/events", {
 				token: decrypt(state.token_enc),
 				pin: state.fingerprint,
+				client: clientOf(state),
 				body: { events: rows.map(({ id: _id, node_id: _node, ...event }) => event) },
 			});
 			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the events`);
@@ -329,6 +341,7 @@ export const fetchProfile = async (state, ref, now = Date.now()) => {
 			method: "GET",
 			token: decrypt(state.token_enc),
 			pin: state.fingerprint,
+			client: clientOf(state),
 			maxAnswer: MAX_PROFILE_BYTES,
 			timeoutMs: 120000,
 		});
@@ -373,6 +386,7 @@ export const syncModel = async (state, ref, io = {}) => {
 				method: "GET",
 				token: decrypt(state.token_enc),
 				pin: state.fingerprint,
+				client: clientOf(state),
 				maxAnswer: ref.size,
 				timeoutMs: 600000,
 				toFile: file,
@@ -406,6 +420,7 @@ export const runCommand = async (command, state, io = {}) => {
 			const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/logs", {
 				token: decrypt(state.token_enc),
 				pin: state.fingerprint,
+				client: clientOf(state),
 				body: Buffer.from(JSON.stringify({ logs: await logsOf() })),
 				headers: { "Content-Type": "application/octet-stream" },
 			});
@@ -433,6 +448,7 @@ export const sync = async (state) => {
 			method: "GET",
 			token: decrypt(state.token_enc),
 			pin: state.fingerprint,
+			client: clientOf(state),
 		});
 		if (answer.status !== 200) throw new Error(`the manager answered ${answer.status}`);
 		const content = openPackage(answer.body, state.signing_key);
@@ -472,6 +488,7 @@ export const beat = async () => {
 		const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/heartbeat", {
 			token: decrypt(state.token_enc),
 			pin: state.fingerprint,
+			client: clientOf(state),
 			body: { info: await ownInfo(state) },
 		});
 		if (answer.status === 200) {
