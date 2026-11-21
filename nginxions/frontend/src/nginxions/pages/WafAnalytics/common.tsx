@@ -35,6 +35,7 @@ export const FILTER_KEYS: (keyof TrafficFilters)[] = [
 	"origin",
 	"referer",
 	"port",
+	"node",
 	"originStatus",
 	"minMs",
 	"maxMs",
