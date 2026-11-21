@@ -1044,7 +1044,8 @@ TEST(DebugFogTest, fog_stream)
         "                    \"agentId\": \"Unknown\",\n"
         "                    \"issuingFunction\": \"handleThresholdReach\",\n"
         "                    \"issuingFile\": \"debug_streams.cc\",\n"
-        "                    \"issuingLine\": 364,\n"
+        // NginxionS: the line of handleThresholdReach in debug_streams.cc (its license header was removed)
+        "                    \"issuingLine\": 353,\n"
         "                    \"eventTraceId\": \"\",\n"
         "                    \"eventSpanId\": \"\",\n"
         "                    \"issuingEngineVersion\": \"\",\n"
