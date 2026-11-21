@@ -38,6 +38,7 @@ test("tags of the message run only their tests", () => {
 	assert.deepEqual(d.suites, ["smoke-waf", "dast"]);
 	assert.equal(push([], "x [smoke:learning]").suites[0], "smoke-waf");
 	assert.equal(push([], "x [chaos]").dast, false);
+	assert.deepEqual(push([], "nodes [cluster]").suites, ["cluster"]);
 });
 
 test("work, tags and pull requests are full with every test; unknown changes scan everything", () => {
