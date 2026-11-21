@@ -747,5 +747,16 @@ export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/n
 export const joinCluster = (data: { manager_url: string; code: string }): Promise<ClusterMember> =>
 	api.put({ url: "/nginxions/cluster/member", data });
 export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
+
+/** thresholds of the learning of the nodes put together by smartsync on a manager */
+export interface ClusterLearning {
+	minSources: number;
+	minSourcesTypes: number;
+	minIntervals: number;
+	ratioThreshold: number;
+}
+export const getClusterLearning = (): Promise<ClusterLearning> => api.get({ url: "/nginxions/cluster/learning" });
+export const setClusterLearning = (data: ClusterLearning): Promise<ClusterLearning> =>
+	api.put({ url: "/nginxions/cluster/learning", data });
 export const setNodeHosts = (id: number, hostIds: number[]): Promise<number[]> =>
 	api.put({ url: `/nginxions/nodes/${id}/hosts`, data: { host_ids: hostIds } });

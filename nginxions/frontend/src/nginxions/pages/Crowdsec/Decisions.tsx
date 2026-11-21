@@ -2,17 +2,17 @@
 // ban by hand), alerts of the scenarios with their source and host.
 import cn from "classnames";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { type CrowdsecAlert, type Decision, unban, useAlerts, useDecisions } from "../../crowdsec/api";
 import { showBanModal } from "../../crowdsec/BanModal";
 import { showDecisionModal } from "../../crowdsec/DecisionModal";
-import { useNavigate } from "react-router-dom";
 import { originLabel, remaining, t } from "../../crowdsec/labels";
-import { useCan } from "../../rbac/hooks";
-import { dateTime, timeAgo } from "../../ui/time";
 import styles from "../../pki/Pki.module.css";
+import { useCan } from "../../rbac/hooks";
 import { SearchField } from "../../ui/SearchField";
+import { dateTime, timeAgo } from "../../ui/time";
 
 const PAGE = 100;
 

@@ -8,7 +8,7 @@ import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { useCan } from "../rbac/hooks";
-import { type HostRef, hostKey, type IssueResult, issueCert, issuersFor, type PkiOverview, linkBase } from "./api";
+import { type HostRef, hostKey, type IssueResult, issueCert, issuersFor, linkBase, type PkiOverview } from "./api";
 import { Delivery } from "./Delivery";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);

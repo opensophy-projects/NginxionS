@@ -17,8 +17,8 @@ import {
 	useHub,
 } from "../../crowdsec/api";
 import { t } from "../../crowdsec/labels";
-import { useCan } from "../../rbac/hooks";
 import styles from "../../pki/Pki.module.css";
+import { useCan } from "../../rbac/hooks";
 import { SearchField } from "../../ui/SearchField";
 
 const STATUS_TONE: Record<string, string> = {

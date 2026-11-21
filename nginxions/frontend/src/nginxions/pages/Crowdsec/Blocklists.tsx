@@ -20,10 +20,10 @@ import {
 import { showBlocklistModal } from "../../crowdsec/BlocklistModal";
 import { durationLabel, t } from "../../crowdsec/labels";
 import { showConfirmModal } from "../../modals/ConfirmModal";
+import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
 import { Dropdown } from "../../ui/Dropdown";
 import { dateTime, timeAgo } from "../../ui/time";
-import styles from "../../pki/Pki.module.css";
 
 function Share({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
 	const can = useCan();

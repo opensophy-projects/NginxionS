@@ -30,8 +30,8 @@ import {
 	setDefaultPolicy,
 } from "../../policy/api";
 import { summary } from "../../policy/fields";
-import { objectHint, objectTitle } from "../../policy/names";
 import { showImportModal } from "../../policy/ImportModal";
+import { objectHint, objectTitle } from "../../policy/names";
 import { showObjectModal } from "../../policy/ObjectModal";
 import { RefsEditor } from "../../policy/RefsEditor";
 import { AppliedCheckNote, FormatNote } from "../../policy/Review";

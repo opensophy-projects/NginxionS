@@ -1346,6 +1346,30 @@
 	"nginxions.cluster.learning-waiting": {
 		"defaultMessage": "через управляющий сервер: запросов агента ещё не было (начнутся после перезапуска агента)"
 	},
+	"nginxions.cluster.learning.hint": {
+		"defaultMessage": "Как норма сайтов сводится со всех серверов (smartsync на этом сервере, когда у него есть узлы). Значение становится нормой, когда его увидело достаточно разных источников за достаточное число окон обучения; один узел в одиночку норму не задаёт. Применяется при следующей сводке, без перезапуска."
+	},
+	"nginxions.cluster.learning.minIntervals": {
+		"defaultMessage": "Окон обучения"
+	},
+	"nginxions.cluster.learning.minSources": {
+		"defaultMessage": "Источников для параметра"
+	},
+	"nginxions.cluster.learning.minSourcesTypes": {
+		"defaultMessage": "Источников для типа значения"
+	},
+	"nginxions.cluster.learning.ratioThreshold": {
+		"defaultMessage": "Доля источников (0,1–1)"
+	},
+	"nginxions.cluster.learning.save": {
+		"defaultMessage": "Сохранить"
+	},
+	"nginxions.cluster.learning.saved": {
+		"defaultMessage": "Настройки обучения узлов сохранены"
+	},
+	"nginxions.cluster.learning.title": {
+		"defaultMessage": "Обучение узлов"
+	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Отключить от управляющего"
 	},

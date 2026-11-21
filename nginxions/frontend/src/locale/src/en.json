@@ -1346,6 +1346,30 @@
 	"nginxions.cluster.learning-waiting": {
 		"defaultMessage": "through the manager: no request of the agent yet (it starts after the restart of the agent)"
 	},
+	"nginxions.cluster.learning.hint": {
+		"defaultMessage": "How the norm of the sites is put together from all the servers (smartsync on this server, when it has nodes). A value becomes normal when enough different sources have seen it, in enough windows of learning; one node alone never makes it normal. Applied at the next sync, no restart."
+	},
+	"nginxions.cluster.learning.minIntervals": {
+		"defaultMessage": "Windows of learning"
+	},
+	"nginxions.cluster.learning.minSources": {
+		"defaultMessage": "Sources for a parameter"
+	},
+	"nginxions.cluster.learning.minSourcesTypes": {
+		"defaultMessage": "Sources for a type of value"
+	},
+	"nginxions.cluster.learning.ratioThreshold": {
+		"defaultMessage": "Share of the sources (0.1–1)"
+	},
+	"nginxions.cluster.learning.save": {
+		"defaultMessage": "Save"
+	},
+	"nginxions.cluster.learning.saved": {
+		"defaultMessage": "The learning of the nodes is saved"
+	},
+	"nginxions.cluster.learning.title": {
+		"defaultMessage": "Learning of the nodes"
+	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Disconnect"
 	},
