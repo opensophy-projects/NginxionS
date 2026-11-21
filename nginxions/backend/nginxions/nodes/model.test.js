@@ -69,6 +69,8 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 	});
 	assert.deepEqual(Object.keys(info).sort(), [
 		"agent",
+		"command_done",
+		"command_error",
 		"hostname",
 		"hosts",
 		"model_error",

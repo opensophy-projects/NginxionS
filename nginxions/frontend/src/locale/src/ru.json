@@ -4496,6 +4496,15 @@
 	"nginxions.nodes.code.until": {
 		"defaultMessage": "код действует до {time}"
 	},
+	"nginxions.nodes.command.restart_agent": {
+		"defaultMessage": "перезапуск агента"
+	},
+	"nginxions.nodes.command.sent": {
+		"defaultMessage": "Команда ждёт следующего heartbeat узла"
+	},
+	"nginxions.nodes.command.waiting": {
+		"defaultMessage": "Ждёт узел"
+	},
 	"nginxions.nodes.copied": {
 		"defaultMessage": "Скопировано"
 	},
@@ -4568,6 +4577,12 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Ждёт узел"
 	},
+	"nginxions.nodes.restart-agent": {
+		"defaultMessage": "Перезапустить агент"
+	},
+	"nginxions.nodes.restart-agent.confirm": {
+		"defaultMessage": "Агент узла «{name}» перезапустится со следующим heartbeat (в течение полминуты): около минуты WAF на этом сервере не отвечает."
+	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Отключить"
 	},
@@ -4588,6 +4603,9 @@
 	},
 	"nginxions.nodes.rollout.hint": {
 		"defaultMessage": "Что и когда применил каждый узел с этого сервера: пакет конфигурации, модель агента, профиль обучения, — и что не удалось. Пакет, который отверг nginx, узел сам откатывает на прежний; модель возвращается кнопкой «Вернуть прежнюю модель» в «WAF → Агент»."
+	},
+	"nginxions.nodes.rollout.kind.command": {
+		"defaultMessage": "Команда"
 	},
 	"nginxions.nodes.rollout.kind.model": {
 		"defaultMessage": "Модель агента"
