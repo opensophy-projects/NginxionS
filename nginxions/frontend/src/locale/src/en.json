@@ -4463,6 +4463,30 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Add node"
 	},
+	"nginxions.nodes.cluster-learning.empty": {
+		"defaultMessage": "No data of learning in the storage yet: the agents send it with the traffic of the sites."
+	},
+	"nginxions.nodes.cluster-learning.hint": {
+		"defaultMessage": "Per site of the shared storage of this server: how many windows of learning this server and each node sent, and when smartsync last put them together into the common norm. A node that sends nothing for long does not take part in the learning."
+	},
+	"nginxions.nodes.cluster-learning.merged": {
+		"defaultMessage": "Last merge"
+	},
+	"nginxions.nodes.cluster-learning.nodes": {
+		"defaultMessage": "Nodes"
+	},
+	"nginxions.nodes.cluster-learning.site": {
+		"defaultMessage": "Site (asset)"
+	},
+	"nginxions.nodes.cluster-learning.this-server": {
+		"defaultMessage": "This server"
+	},
+	"nginxions.nodes.cluster-learning.title": {
+		"defaultMessage": "Learning of the cluster"
+	},
+	"nginxions.nodes.cluster-learning.windows": {
+		"defaultMessage": "{count, plural, one {# window} other {# windows}}"
+	},
 	"nginxions.nodes.code.how": {
 		"defaultMessage": "On the new server open «Agents → Nodes → This server», enter the address {address} and this code. The code is valid until {time} and works once."
 	},

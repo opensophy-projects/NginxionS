@@ -17,6 +17,7 @@ import {
 	type ClusterNode,
 	deleteNode,
 	getClusterLearning,
+	getClusterLearningSites,
 	getClusterMember,
 	getNodeRollout,
 	getNodes,
@@ -693,6 +694,92 @@ function LearningCard() {
 	);
 }
 
+/** the learning of the cluster (a manager with nodes): what each node sent per site, and the last merge */
+function ClusterLearningCard() {
+	const { locale } = useLocaleState();
+	const { data, isLoading } = useQuery({
+		queryKey: ["nginxions-cluster-learning-sites"],
+		queryFn: getClusterLearningSites,
+		refetchInterval: 60000,
+	});
+	if (isLoading || !data?.available) return null;
+	const when = (time: string | null) => (time ? formatDateTime(time, locale) : "—");
+	return (
+		<div className="card mt-4">
+			<div className="card-header">
+				<h3 className="card-title">
+					<T id="nginxions.nodes.cluster-learning.title" />
+				</h3>
+			</div>
+			<div className="card-body">
+				<p className="text-secondary">
+					<T id="nginxions.nodes.cluster-learning.hint" />
+				</p>
+				{data.error && <Alert variant="warning">{data.error}</Alert>}
+				{!data.assets.length ? (
+					<p className="text-secondary mb-0">
+						<T id="nginxions.nodes.cluster-learning.empty" />
+					</p>
+				) : (
+					<div className="table-responsive">
+						<table className="table table-vcenter table-sm">
+							<thead>
+								<tr>
+									<th>
+										<T id="nginxions.nodes.cluster-learning.site" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.cluster-learning.this-server" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.cluster-learning.nodes" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.cluster-learning.merged" />
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{data.assets.map((a) => (
+									<tr key={a.asset}>
+										<td className="font-monospace text-break">{a.asset}</td>
+										<td>
+											<T
+												id="nginxions.nodes.cluster-learning.windows"
+												data={{ count: a.local.windows }}
+											/>
+											<div className="text-secondary small">{when(a.local.lastOn)}</div>
+										</td>
+										<td>
+											{a.nodes.length ? (
+												a.nodes.map((n) => (
+													<div key={n.uid}>
+														<strong>{n.name}</strong>{" "}
+														<T
+															id="nginxions.nodes.cluster-learning.windows"
+															data={{ count: n.windows }}
+														/>
+														<span className="text-secondary small ms-1">
+															{when(n.lastOn)}
+														</span>
+													</div>
+												))
+											) : (
+												<span className="text-secondary">—</span>
+											)}
+										</td>
+										<td className="text-nowrap">{when(a.mergedOn)}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 /** the rollout to the nodes: what each applied of this manager (packages, the model, profiles), or what failed */
 function RolloutCard() {
 	const { locale } = useLocaleState();
@@ -797,6 +884,7 @@ const Nodes = () => (
 	<HasPermission rbac="nodes" permission={VIEW} pageLoading loadingNoLogo>
 		<NodesCard />
 		<RolloutCard />
+		<ClusterLearningCard />
 		<LearningCard />
 		<MemberCard />
 	</HasPermission>

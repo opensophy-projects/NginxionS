@@ -3278,6 +3278,16 @@ router.post("/nodes/learning/sync", express.raw({ type: () => true, limit: "16kb
 });
 
 /**
+ * GET /api/nginxions/nodes/cluster-learning — on a manager with nodes: per site of its shared storage, the data of
+ *   windows of each node and of this server, the last merge of smartsync ({available: false} elsewhere)
+ */
+router
+	.route("/nodes/cluster-learning")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.clusterLearning(res.locals.access)));
+
+/**
  * GET /api/nginxions/nodes/rollout?node_id=&limit= — what the nodes applied of this manager (packages, the model of
  *   the agent, learning profiles) or what failed, the newest first
  */

@@ -30,7 +30,9 @@ import {
 } from "./model.js";
 import { profileBytes, profileForNewNodes } from "../learning/profile-store.js";
 import { MODEL_FILE, modelRef } from "../waf/model-file.js";
+import { readClusterLearning } from "./cluster-learning.js";
 import { hostIdsOf, packageOf, signingKey } from "./package.js";
+import { learningRole } from "./role.js";
 
 const TABLE = "nginxions_node";
 export const NODES_ROOT = "NginxionS Nodes Root CA";
@@ -403,6 +405,22 @@ const internalNodes = {
 			.limit(Math.min(Math.max(Number(query.limit) || 200, 1), 1000));
 		if (query.node_id) rows = rows.where(`${ROLLOUT_TABLE}.node_id`, query.node_id);
 		return rows;
+	},
+
+	/**
+	 * The learning of the cluster (step 15.6): per site of the shared storage of this manager, the data of windows each
+	 * node sent and those of this server, and when smartsync last put them together. Only on a manager with nodes.
+	 * @param {Access} access
+	 */
+	clusterLearning: async (access) => {
+		await access.can("nodes:view");
+		if (!(await learningRole()).smartsync) return { available: false, assets: [] };
+		const nodes = await db()(TABLE).whereNot({ status: "pending" }).select("uid", "name");
+		try {
+			return { available: true, assets: await readClusterLearning(nodes), error: "" };
+		} catch (err) {
+			return { available: true, assets: [], error: String(err.message).slice(0, 300) };
+		}
 	},
 
 	/** the proxy hosts a node serves (ids of this manager) */
