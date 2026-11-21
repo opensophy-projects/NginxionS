@@ -63,6 +63,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		writeFileSync(path.join(dir, "control_token"), "t");
 		process.env.NGINXIONS_CONTROL_TOKEN_FILE = path.join(dir, "control_token");
 		process.env.NGINXIONS_LEARNING_PROFILE_DIR = path.join(dir, "profiles");
+		process.env.NGINXIONS_APPSEC_MODEL_DIR = path.join(dir, "model");
 		process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR = path.join(dir, "snapshots");
 		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req) =>
 			req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'],
@@ -138,6 +139,15 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 						answer = await nodes.register(body, "198.51.100.7");
 					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
 					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
+					if (req.url === "/api/nginxions/nodes/model") {
+						const model = await nodes.wafModel(token());
+						if (model?.file) {
+							res.writeHead(200, { "Content-Type": "application/gzip" });
+							return res.end(readFileSync(model.file));
+						}
+						res.writeHead(model ? 404 : 401);
+						return res.end();
+					}
 					if (req.url === "/api/nginxions/nodes/learning/profile") {
 						const profile = await nodes.learningProfile(token());
 						if (profile?.bytes) {
@@ -408,6 +418,50 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await nodes.setHosts(ADMIN, row.id, []);
 		await profiles.remove(ADMIN, meta.id);
 		assert.deepEqual((await profiles.list(ADMIN)).profiles, []);
+	});
+
+	test("the model of the agent of the manager goes to its nodes, checked by its hash", async () => {
+		const { createHash } = await import("node:crypto");
+		const { mkdirSync } = await import("node:fs");
+		const { MODEL_FILE } = await import("../waf/model-file.js");
+		const [row] = await nodes.list(ADMIN);
+		const { contentOf } = await import("./package.js");
+		assert.equal((await contentOf(row.id)).waf_model, undefined, "no model uploaded: the model of the image");
+		// a model uploaded on the manager: its hash and size are in the signed package of every node
+		const model = gzipSync(Buffer.from("a model of the agent".repeat(1000)));
+		mkdirSync(path.dirname(MODEL_FILE), { recursive: true });
+		writeFileSync(MODEL_FILE, model);
+		const sha256 = createHash("sha256").update(model).digest("hex");
+		const ref = (await contentOf(row.id)).waf_model;
+		assert.deepEqual(ref, { sha256, size: model.length });
+
+		// the node fetches it over its pinned channel into a file, as the package names it
+		const state = await member.readState();
+		let fetched = null;
+		const install = async (fetchTo, wanted) => {
+			const file = path.join(dir, "model-of-the-node.tgz");
+			await fetchTo(file);
+			fetched = { bytes: readFileSync(file), wanted };
+		};
+		let change = await member.syncModel({ ...state, model_sha256: "" }, ref, { install });
+		assert.deepEqual(change, { model_sha256: sha256, model_error: "" });
+		assert.deepEqual(fetched, { bytes: model, wanted: sha256 });
+		// the same model: nothing fetched
+		fetched = null;
+		assert.deepEqual(await member.syncModel({ ...state, model_sha256: sha256 }, ref, { install }), {});
+		assert.equal(fetched, null);
+		// a size the manager did not answer with: the download stops, the error is told
+		change = await member.syncModel({ ...state, model_sha256: "" }, { sha256, size: 10 }, { install });
+		assert.match(change.model_error, /too big/);
+		// the manager without a model: the node goes back to the model of the image
+		let removed = 0;
+		change = await member.syncModel({ ...state, model_sha256: sha256 }, undefined, {
+			remove: async () => {
+				removed += 1;
+			},
+		});
+		assert.deepEqual(change, { model_sha256: "", model_error: "" });
+		assert.equal(removed, 1);
 	});
 
 	test("another certificate on the address of the manager: the node sends nothing", async () => {

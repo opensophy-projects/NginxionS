@@ -1382,6 +1382,12 @@
 	"nginxions.cluster.manager.placeholder": {
 		"defaultMessage": "https://manager.example.com:81"
 	},
+	"nginxions.cluster.model": {
+		"defaultMessage": "Model of the agent"
+	},
+	"nginxions.cluster.model-applied": {
+		"defaultMessage": "The model of the manager (SHA-256 {sha}…)"
+	},
 	"nginxions.cluster.node": {
 		"defaultMessage": "This node"
 	},
@@ -8447,8 +8453,20 @@
 	"nginxions.waf.model.description": {
 		"defaultMessage": "NginxionS ships with the advanced model (Advanced model, V2.0). Another model (open-appsec-advanced-model.tgz, for example one trained by NginxionS, see docs/MODEL.md) replaces it: it is unpacked when the agent starts; the upload restarts the agent."
 	},
+	"nginxions.waf.model.managed": {
+		"defaultMessage": "This server is a node: its model is given by its manager and changes there."
+	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Uploaded: {size}, {date}"
+	},
+	"nginxions.waf.model.previous": {
+		"defaultMessage": "Back to the model before"
+	},
+	"nginxions.waf.model.previous-done": {
+		"defaultMessage": "The model before is back, the agent restarts"
+	},
+	"nginxions.waf.model.previous-warning": {
+		"defaultMessage": "The model before the last upload or removal is put back, the current one is kept as the one before. The agent restarts. On a manager, its nodes take the same model with their next package."
 	},
 	"nginxions.waf.model.remove": {
 		"defaultMessage": "Remove model"

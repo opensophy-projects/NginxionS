@@ -61,6 +61,9 @@ export const normalizeInfo = (info) => {
 		// the learning profile for new nodes it started with (step 15.5), its last error
 		profile_version: /^[0-9a-f]{64}$/.test(src.profile_version ?? "") ? src.profile_version : "",
 		profile_error: text(src.profile_error, 300),
+		// the model of the agent it took from the manager, its last error
+		model_sha256: /^[0-9a-f]{64}$/.test(src.model_sha256 ?? "") ? src.model_sha256 : "",
+		model_error: text(src.model_error, 300),
 	};
 };
 

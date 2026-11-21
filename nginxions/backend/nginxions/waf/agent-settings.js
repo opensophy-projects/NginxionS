@@ -3,6 +3,9 @@
 // policy (volume appsec-localconfig); the agent's entrypoint (deploy/openappsec/agent/nginxions-entry.sh)
 // applies them at start and copies the file to nginxions-agent.applied. Saving restarts the agent.
 // The advanced model is the .tgz the upstream entrypoint unpacks from /advanced-model at start.
+// The model a manager uploaded goes to its nodes (step 15.5, docs/adr/0012-nodes.md 5e): its SHA-256 is in the signed
+// package of each node, the node fetches the file, checks the hash and puts it in place; the model before an upload is
+// kept, and going back to it (here, or on every node through the next package) is one button.
 // The role of this server in the learning of several servers (step 15.4, docs/adr/0012-nodes.md 5c) goes in the same
 // file: it is not a setting, it follows the nodes (applyLearningRole).
 import { createWriteStream } from "node:fs";
@@ -15,12 +18,12 @@ import { debug, global as logger } from "../../logger.js";
 import control from "../control/client.js";
 import { learningRole } from "../nodes/role.js";
 import { getSetting, setSetting } from "../settings.js";
+import { fileInfo, MODEL_DIR, MODEL_FILE, PREVIOUS_FILE, sha256Of } from "./model-file.js";
 
 const LOCALCONFIG_DIR = path.dirname(process.env.NGINXIONS_APPSEC_POLICY_FILE || "/ext/appsec/local_policy.yaml");
 const ENV_FILE = path.join(LOCALCONFIG_DIR, "nginxions-agent.env");
 const APPLIED_FILE = path.join(LOCALCONFIG_DIR, "nginxions-agent.applied");
-const MODEL_DIR = process.env.NGINXIONS_APPSEC_MODEL_DIR || "/ext/appsec-model";
-const MODEL_FILE = path.join(MODEL_DIR, "open-appsec-advanced-model.tgz");
+
 const MODEL_MAX_BYTES = 1024 * 1024 * 1024;
 // the agent runs in the openappsec container; its "restart" restarts the agent process (nginxions/control/server.js)
 const AGENT_SERVICE = "openappsec";
@@ -56,13 +59,59 @@ const writeEnv = async (settings, role) => {
 	await rename(tmp, ENV_FILE);
 };
 
-const getModel = async () => {
+/** the state of this node of a manager: its model is given by the manager (no upload here then) */
+const managedByManager = async () => {
+	const { readState } = await import("../nodes/member.js");
+	const member = await readState();
+	if (!member || member.disabled || !member.model_sha256) return false;
+	// a server that is a manager itself (its own node in a test) keeps its model in its hands
+	return !(await learningRole()).smartsync;
+};
+
+const getModel = async () => ({
+	...(await fileInfo(MODEL_FILE)),
+	previous: await fileInfo(PREVIOUS_FILE),
+	managed: await managedByManager().catch(() => false),
+});
+
+/** the current model goes to PREVIOUS_FILE (the one there before is dropped) */
+const keepPrevious = async () => {
 	try {
-		const s = await stat(MODEL_FILE);
-		return { present: true, size: s.size, modifiedOn: s.mtime.toISOString() };
-	} catch {
-		return { present: false };
+		await rename(MODEL_FILE, PREVIOUS_FILE);
+	} catch (err) {
+		if (err.code !== "ENOENT") throw err;
 	}
+};
+
+/**
+ * On a node: the model of its manager, fetched into a file next to the model, in place once its hash is the one of the
+ * signed package; the model before is kept. The agent restarts.
+ * @param {(file: string) => Promise<void>} fetchTo  writes the file of the manager
+ * @param {string} sha256  the hash the package names
+ */
+export const installManagerModel = async (fetchTo, sha256) => {
+	// the same model here already (a server that is its own node): nothing to fetch, no restart
+	if ((await fileInfo(MODEL_FILE)).sha256 === sha256) return;
+	await mkdir(MODEL_DIR, { recursive: true });
+	const tmp = `${MODEL_FILE}.manager`;
+	try {
+		await fetchTo(tmp);
+		const got = await sha256Of(tmp);
+		if (got !== sha256) throw new Error(`the model is not the one of the package (SHA-256 ${got.slice(0, 12)})`);
+		await keepPrevious();
+		await rename(tmp, MODEL_FILE);
+	} finally {
+		await rm(tmp, { force: true });
+	}
+	await control.restartService(AGENT_SERVICE, 1);
+};
+
+/** On a node: the manager has no model any more: the model of the image again (the one before is kept) */
+export const removeManagerModel = async () => {
+	if (!(await fileInfo(MODEL_FILE)).present) return false;
+	await keepPrevious();
+	await control.restartService(AGENT_SERVICE, 1);
+	return true;
 };
 
 const state = async (settings) => {
@@ -166,6 +215,9 @@ const internalWafAgent = {
 	 */
 	uploadModel: async (access, req, apply = true) => {
 		await access.can("waf_policy:manage");
+		if (await managedByManager()) {
+			throw new errs.ValidationError("The model of this node is given by its manager: upload it there");
+		}
 		const length = Number(req.headers["content-length"] || 0);
 		if (length > MODEL_MAX_BYTES) {
 			throw new errs.ValidationError("The model file is larger than 1 GB");
@@ -186,6 +238,7 @@ const internalWafAgent = {
 			if (size === 0 || magic[0] !== 0x1f || magic[1] !== 0x8b) {
 				throw new errs.ValidationError("The model must be a .tgz file (open-appsec-advanced-model.tgz)");
 			}
+			await keepPrevious();
 			await rename(tmp, MODEL_FILE);
 		} catch (err) {
 			await rm(tmp, { force: true });
@@ -208,8 +261,11 @@ const internalWafAgent = {
 	 */
 	removeModel: async (access, apply = true) => {
 		await access.can("waf_policy:manage");
+		if (await managedByManager()) {
+			throw new errs.ValidationError("The model of this node is given by its manager: change it there");
+		}
 		const had = (await getModel()).present;
-		await rm(MODEL_FILE, { force: true });
+		if (had) await keepPrevious();
 		if (had) {
 			await internalAuditLog.add(access, {
 				action: "deleted",
@@ -223,6 +279,39 @@ const internalWafAgent = {
 		}
 		return { ...(await getModel()), restarting };
 	},
+};
+
+/**
+ * Back to the model before (an upload or a removal is undone): the current one and the one before change places.
+ * On a manager its nodes follow with their next package.
+ * @param {Access}  access
+ * @param {boolean} [apply]  restart the agent now
+ */
+internalWafAgent.previousModel = async (access, apply = true) => {
+	await access.can("waf_policy:manage");
+	if (await managedByManager()) {
+		throw new errs.ValidationError("The model of this node is given by its manager: change it there");
+	}
+	if (!(await fileInfo(PREVIOUS_FILE)).present) throw new errs.ValidationError("There is no model before this one");
+	const swap = `${MODEL_FILE}.swap`;
+	try {
+		await rename(MODEL_FILE, swap);
+	} catch (err) {
+		if (err.code !== "ENOENT") throw err;
+	}
+	await rename(PREVIOUS_FILE, MODEL_FILE);
+	try {
+		await rename(swap, PREVIOUS_FILE);
+	} catch (err) {
+		if (err.code !== "ENOENT") throw err;
+	}
+	await internalAuditLog.add(access, {
+		action: "updated",
+		object_type: "waf",
+		meta: { name: "open-appsec advanced model", back: true },
+	});
+	if (apply) await restartAgent(access);
+	return { ...(await getModel()), restarting: apply };
 };
 
 export { bootstrap, renderEnv };
