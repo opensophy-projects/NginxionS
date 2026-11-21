@@ -34,6 +34,7 @@ import {
 	openProfile,
 	signProfile,
 } from "./profile-model.js";
+import { applyPolicy, policyOfSites } from "./profile-policy.js";
 import { listProfiles, PROFILE_DIR, PROFILE_ID, profileBytes } from "./profile-store.js";
 import { loadSnapshot, summaryOf, takeSnapshot } from "./snapshots.js";
 
@@ -84,6 +85,18 @@ export const readProfile = async (bytes) => {
 };
 
 /** the meta of a profile from its content */
+/** the WAF of hosts and the policy objects (loaded on use: they load the policy generator) */
+const wafHosts = async () => (await import("../waf/hosts.js")).default;
+const wafObjects = async () => (await import("../waf/objects/store.js")).listObjects();
+
+/** what applying the policy of a profile does on this server, with the rights of its user */
+const policyIo = async (access) => ({
+	hosts: await sitesOf(),
+	objects: wafObjects,
+	createObject: async (o) => (await import("../waf/objects/api.js")).default.create(access, o),
+	setWaf: async (hostId, data) => (await wafHosts()).set(access, hostId, data),
+});
+
 const metaOf = (id, opened, extra) => ({
 	id,
 	name: opened.content.name,
@@ -91,6 +104,10 @@ const metaOf = (id, opened, extra) => ({
 	source: opened.content.source ?? null,
 	sites: opened.content.sites ?? [],
 	assets: opened.content.summary ?? [],
+	// the WAF of its sites (step 15.5): how many sites and objects of the policy it carries
+	policy: opened.content.policy
+		? { sites: opened.content.policy.sites?.length ?? 0, objects: opened.content.policy.objects?.length ?? 0 }
+		: null,
 	files: opened.content.files.length,
 	version: opened.version,
 	fingerprint: opened.fingerprint,
@@ -198,10 +215,12 @@ const internalLearningProfiles = {
 	/**
 	 * A profile of the sites given, from what the agent learned now or from a snapshot.
 	 * @param {Access} access
-	 * @param {{name: string, host_ids: number[], snapshot_id?: string}} data
+	 * @param {{name: string, host_ids: number[], snapshot_id?: string, with_policy?: boolean}} data  with_policy: the
+	 *   WAF of the sites goes with it (modes, policy objects), to move them to another cluster
 	 */
 	create: async (access, data) => {
 		await access.can("waf_learning:label");
+		if (data.with_policy) await access.can("waf_policy:view");
 		const name = cleanName(data.name);
 		if (!name) throw new errs.ValidationError("The name of the profile: letters, digits, spaces, . _ ( ) + -");
 		const hostIds = [...new Set(data.host_ids ?? [])];
@@ -216,6 +235,9 @@ const internalLearningProfiles = {
 		).map((f) => ({ asset: f.asset, name: f.name, modifiedAt: f.modifiedAt ?? null, content: f.content }));
 		if (!files.length) throw new errs.ValidationError("The agent has learned nothing of these sites yet");
 		const key = await signingKey();
+		const policy = data.with_policy
+			? await policyOfSites(sites, (id) => wafHosts().then((w) => w.get(access, id)), await wafObjects())
+			: undefined;
 		const envelope = signProfile(
 			{
 				name,
@@ -224,6 +246,7 @@ const internalLearningProfiles = {
 				sites: sites.map((s) => ({ domains: s.domains })),
 				summary: summaryOf(files),
 				files,
+				...(policy ? { policy } : {}),
 			},
 			key,
 		);
@@ -267,19 +290,25 @@ const internalLearningProfiles = {
 	 * The profile in place of the learned state of its sites here (all of them, or the sites of these hosts).
 	 * @param {Access} access
 	 * @param {string} id
-	 * @param {{host_ids?: number[]}} [data]
+	 * @param {{host_ids?: number[], with_policy?: boolean}} [data]  with_policy: the WAF of its sites too (a site found
+	 *   by its domains; objects of the same kind and name here are used, missing ones created)
 	 */
 	apply: async (access, id, data = {}) => {
 		await canManage(access);
 		const meta = await loadMeta(id);
 		const opened = await readProfile(await profileBytes(id));
+		let policy = null;
+		if (data.with_policy) {
+			if (!opened.content.policy) throw new errs.ValidationError("The profile carries no WAF policy");
+			policy = await applyPolicy(opened.content.policy, await policyIo(access));
+		}
 		const wanted = data.host_ids?.length ? (await sitesOf(data.host_ids)).flatMap((s) => s.assets) : null;
 		const merged = await mergedState(opened.content, { wanted });
 		if (!merged) throw new errs.ValidationError("The profile has nothing of these sites");
 		const before = await restoreMerged(merged, access.token.getUserId(0));
 		await saveMeta({ ...meta, appliedOn: new Date().toISOString() });
-		await audit(access, { action: "applied", id, assets: merged.assets.length, before });
-		return { applied: id, assets: merged.assets, before, restarting: true };
+		await audit(access, { action: "applied", id, assets: merged.assets.length, before, policy });
+		return { applied: id, assets: merged.assets, before, restarting: true, policy };
 	},
 
 	/**
