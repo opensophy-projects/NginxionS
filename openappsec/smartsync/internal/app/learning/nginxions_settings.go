@@ -7,6 +7,8 @@ package learning
 import (
 	"encoding/json"
 	"os"
+	"strconv"
+	"time"
 
 	"openappsec.io/smartsync-service/models"
 )
@@ -54,5 +56,19 @@ func withSettings(params models.ConfidenceParams, types bool, s nginxionsSetting
 	if s.RatioThreshold != nil && *s.RatioThreshold >= 0.1 && *s.RatioThreshold <= 1 {
 		params.RatioThreshold = *s.RatioThreshold
 	}
+	if interval := learningInterval(); interval > 0 {
+		params.Interval = interval
+	}
 	return params
+}
+
+// learningInterval the length of a window of learning from NGINXIONS_LEARNING_INTERVAL_MINUTES (1-999), 0 when not set:
+// only for a test stack of several servers, where learning has to take minutes; the agent reads the same variable
+// (the parameter learning.intervalDuration of its policy), so the windows of the agents and of smartsync match.
+func learningInterval() time.Duration {
+	minutes, err := strconv.Atoi(os.Getenv("NGINXIONS_LEARNING_INTERVAL_MINUTES"))
+	if err != nil || minutes < 1 || minutes > 999 {
+		return 0
+	}
+	return time.Duration(minutes) * time.Minute
 }

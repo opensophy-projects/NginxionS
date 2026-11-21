@@ -9,11 +9,17 @@
 #   rollback     a package nginx refuses on the nodes is rolled back there (the host still served), the error is in
 #                the rollout; fixed on the manager, the nodes apply it
 #   drain        a node taken out of work drops its hosts, back in work serves them again; the other one never stops
-#   learning     the agents of the nodes reach the shared storage of the manager (through the relay of their node)
+#   plan         hosts given to a label reach every node with it; a staged rollout reaches the canary first, the
+#                other node with "Roll out to all nodes"; a node held on its package before drops the change
+#   learning     the agents of the nodes reach the shared storage of the manager (through the relay of their node);
+#                normal traffic of three sources through the three servers is put together by smartsync (windows of a
+#                minute here: NGINXIONS_LEARNING_INTERVAL_MINUTES of compose.cluster.yaml)
+#   bans         a ban on one node is held by the others, an unban there lifts it everywhere
 #   link down    the manager unreachable: the nodes keep proxying and blocking; the event of the outage reaches the
 #                manager once the link is back
 #   command      "restart the agent" of a node is done with its heartbeat, written in the rollout
 #   revoke       a node disabled on the manager learns it and keeps serving on its own
+#   profile      a profile of the manager for new nodes: a node joining again takes it and blocks the first attack
 #
 #   NGINXIONS_REGISTRY=docker.io/opensophy NGINXIONS_VERSION=<tag> scripts/test-cluster.sh
 #   KEEP=1 leaves the stacks running; OUT=reports/cluster the report and the logs
@@ -25,6 +31,8 @@ OUT="${OUT:-reports/cluster}"
 NET="${CLUSTER_NETWORK:-nginxions-cluster}"
 SUBNET=172.30.250.0/24
 PROBE_IP=172.30.250.5
+# two more clients: three sources of traffic for the learning put together, one to ban
+declare -A CLIENT=([b]=172.30.250.6 [c]=172.30.250.7)
 STACKS=(manager node1 node2)
 declare -A IP=([manager]=172.30.250.10 [node1]=172.30.250.11 [node2]=172.30.250.12)
 probe="nginxions-cluster-probe"
@@ -71,7 +79,8 @@ cleanup() {
   status=$?
   if [ $status -ne 0 ]; then report "❌"; else report "✅"; fi
   for s in "${STACKS[@]}"; do stack "$s" logs --no-color > "$OUT/logs/$s.log" 2>&1 || true; done
-  docker rm -f "$probe" > /dev/null 2>&1 || true
+  docker rm -f "$probe" "$probe-b" "$probe-c" > /dev/null 2>&1 || true
+  [ -n "${traffic_pid:-}" ] && kill "$traffic_pid" 2> /dev/null
   if [ "${KEEP:-}" != 1 ]; then
     for s in "${STACKS[@]}"; do stack "$s" down -v --remove-orphans > /dev/null 2>&1 || true; done
     docker volume rm "$state" > /dev/null 2>&1 || true
@@ -97,6 +106,11 @@ code() { docker exec "$probe" curl -s -o /dev/null -w '%{http_code}' --max-time 
 # the site is proxied to its upstream (whoami answers "Hostname:")
 proxied() { docker exec "$probe" curl -s --max-time 10 -H "Host: $DOMAIN" "http://${IP[$1]}/" 2> /dev/null | grep -q '^Hostname:'; }
 up() { call "$1" GET / | grep -q '"status": *"OK"'; }
+# a host proxied through the nginx of a stack: stack, host
+serves() { docker exec "$probe" curl -s --max-time 10 -H "Host: $2" "http://${IP[$1]}/" 2> /dev/null | grep -q '^Hostname:'; }
+not_serves() { ! serves "$@"; }
+# the code of an answer to another client (b, c): client, stack, path
+code_from() { docker exec "$probe-$1" curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Host: $DOMAIN" "http://${IP[$2]}$3" || true; }
 # repeats a check until it passes: what, tries, seconds between, the check...
 until_ok() {
   local what=$1 tries=$2 every=$3 i
@@ -149,6 +163,10 @@ done
 docker volume create "$state" > /dev/null
 docker run -d --user 0 --name "$probe" --network "$NET" --ip "$PROBE_IP" -v "$state:/state" --entrypoint sleep \
   "docker.io/curlimages/curl:$CURL_VERSION" 7200 > /dev/null
+for c in b c; do
+  docker run -d --user 0 --name "$probe-$c" --network "$NET" --ip "${CLIENT[$c]}" --entrypoint sleep \
+    "docker.io/curlimages/curl:$CURL_VERSION" 7200 > /dev/null
+done
 panels_up "${STACKS[@]}"
 
 step "the first administrator of each server"
@@ -243,9 +261,93 @@ proxied node1 || fail "node1 stopped serving $DOMAIN while node2 was out of work
 call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/drain" '{"drained": false}' > /dev/null
 until_ok "node2 does not serve $DOMAIN back in work" 40 3 proxied node2
 
+step "plan: hosts of a label, a staged rollout to the canary first, a node held on its package before"
+lab_id=$(call manager POST /nginx/proxy-hosts '{"domain_names": ["lab.local"], "forward_scheme": "http",
+  "forward_host": "test-upstream", "forward_port": "80"}' | jq -r '.id // empty')
+[ -n "$lab_id" ] || fail "the host lab.local was not created on the manager"
+call manager PUT /nginxions/nodes/staged '{"staged": true}' | jq -e '.staged == true' > /dev/null \
+  || fail "the staged rollout was not switched on"
+call manager PUT "/nginxions/nodes/${NODE_ID[node1]}/canary" '{"canary": true}' | jq -e '.canary == true' > /dev/null \
+  || fail "node1 is not a canary"
+held_version=$(node_field "${NODE_ID[node2]}" .info.package_version)
+# both nodes have the label "cluster": lab.local goes to every node with it
+call manager PUT /nginxions/nodes/label-hosts/cluster "{\"host_ids\": [$lab_id]}" | jq -e ". == [$lab_id]" > /dev/null \
+  || fail "lab.local was not given to the label cluster"
+until_ok "the canary node1 does not serve lab.local" 40 3 serves node1 lab.local
+sleep 35
+serves node2 lab.local && fail "node2 got the change before the staged rollout reached it"
+[ "$(node_field "${NODE_ID[node2]}" .info.package_version)" = "$held_version" ] || fail "node2 left its package"
+call manager POST /nginxions/nodes/staged/promote | jq -e '.promoted >= 1' > /dev/null || fail "the rollout was not promoted"
+until_ok "node2 does not serve lab.local after the rollout to all nodes" 40 3 serves node2 lab.local
+# back to the package before on node2 only: lab.local goes from it, node1 keeps it
+call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/packages" "{\"version\": \"$held_version\"}" \
+  | jq -e '.pinned.by == "manual"' > /dev/null || fail "node2 was not held on its package before"
+until_ok "node2 still serves lab.local held on its package before" 40 3 not_serves node2 lab.local
+serves node1 lab.local || fail "node1 dropped lab.local when node2 was rolled back"
+call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/packages" '{"version": null}' > /dev/null
+until_ok "node2 does not serve lab.local again" 40 3 serves node2 lab.local
+call manager PUT /nginxions/nodes/staged '{"staged": false}' > /dev/null
+call manager PUT "/nginxions/nodes/${NODE_ID[node1]}/canary" '{"canary": false}' > /dev/null
+
 step "learning: the agents of the nodes reach the shared storage of the manager"
 learns() { member "$1" | jq -e '.learning.last_ok_on // empty' > /dev/null; }
 for s in node1 node2; do until_ok "the agent of $s did not reach the storage of the manager: $(member "$s")" 60 3 learns "$s"; done
+
+step "learning together: traffic of three sources through the three servers is learned, the same through one node is not"
+# every second: a search with an SQL word from each client through its own server (three sources, three servers),
+# and another word from the same three clients through node1 alone (a node with three sources: a poisoning try; one
+# node counts as at most MinSources - 1 sources). Windows of learning of a minute (compose.cluster.yaml).
+(
+  i=0
+  while true; do
+    i=$((i + 1))
+    docker exec "$probe" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[manager]}/search?q=select%20best%20item$((i % 5))" || true
+    docker exec "$probe-b" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node1]}/search?q=select%20best%20item$((i % 5))" || true
+    docker exec "$probe-c" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node2]}/search?q=select%20best%20item$((i % 5))" || true
+    for c in "" -b -c; do
+      docker exec "$probe$c" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node1]}/search?p=union%20all%20item$((i % 5))" || true
+    done
+    sleep 1
+  done
+) > /dev/null 2>&1 &
+traffic_pid=$!
+# the windows of the site from this server and both nodes, and a sync of smartsync since (files under remote/)
+together() {
+  call manager GET /nginxions/nodes/cluster-learning | jq -e --arg d "$DOMAIN" '[.assets[]
+    | select(.asset | startswith($d))
+    | select(.local.windows > 0 and ([.nodes[] | select(.windows > 0)] | length) >= 2 and .merged_on != null)]
+    | length > 0' > /dev/null
+}
+until_ok "no learning of the three servers put together: $(call manager GET /nginxions/nodes/cluster-learning | head -c 1500)" \
+  90 10 together
+# the norm smartsync put together, in the shared storage of the manager: the levels of confidence of the words
+norm() {
+  local path
+  for path in "/api//$DOMAIN/Indicators/Confidence/remote/confidence.data" "/api/$DOMAIN/Indicators/Confidence/remote/confidence.data"; do
+    docker exec manager-openappsec wget -qO- "http://127.0.0.1:7811$path" 2> /dev/null && return 0
+  done
+  return 1
+}
+# a level of the word of the three servers, none (or zero) of the word of node1 alone
+learned_together() {
+  norm | jq -e '[.confidence_levels[]?.value[]? | select((.key | test("select")) and .value > 0)] | length > 0' > /dev/null
+}
+until_ok "the word of three sources through three servers was not learned: $(norm | head -c 1500)" 60 10 learned_together
+norm | jq -e '[.confidence_levels[]?.value[]? | select((.key | test("union")) and .value > 0)] | length == 0' > /dev/null \
+  || fail "the word of three sources through node1 alone was learned (poisoning from one node): $(norm | head -c 1500)"
+kill "$traffic_pid" 2> /dev/null
+traffic_pid=""
+
+step "bans: a ban on node1 is held by the manager and node2; its unban there lifts it everywhere"
+answers_from_c() { [ "$(code_from c "$1" /)" = "$2" ]; }
+answers_from_c node2 200 || fail "client c is refused by node2 before any ban"
+call node1 POST /nginxions/crowdsec/decisions "{\"values\": [\"${CLIENT[c]}\"], \"duration\": \"1h\", \"reason\": \"cluster test\"}" \
+  | jq -e '.count == 1' > /dev/null || fail "the ban on node1 was not made"
+until_ok "node2 does not refuse the client banned on node1" 40 3 answers_from_c node2 403
+until_ok "the manager does not refuse the client banned on node1" 40 3 answers_from_c manager 403
+[ "$(code_from b node2 /)" = 200 ] || fail "node2 refuses a client nobody banned"
+call node1 POST /nginxions/crowdsec/decisions/delete "{\"values\": [\"${CLIENT[c]}\"]}" > /dev/null
+until_ok "the unban on node1 did not reach node2" 40 3 answers_from_c node2 200
 
 step "link down: without the manager the nodes keep proxying and blocking; the event of the outage arrives later"
 docker network disconnect "$NET" manager-openappsec
@@ -282,6 +384,37 @@ panels_up node2
 until_ok "node2 does not serve $DOMAIN on its own" 40 3 proxied node2
 answers node2 "$SQLI" 403 || fail "node2 does not block on its own"
 proxied node1 || fail "node1 stopped serving $DOMAIN"
+
+step "profile: the manager gives its learning profile to new nodes; node2 joins again, takes it, blocks the first attack"
+# what the agent of the manager learned of the site (the traffic of the learning step), with its WAF
+make_profile() {
+  profile=$(call manager POST /nginxions/learning/profiles "{\"name\": \"shop\", \"host_ids\": [$host_id], \"with_policy\": true}")
+  echo "$profile" | jq -e '.id' > /dev/null
+}
+until_ok "no learning profile of $DOMAIN on the manager: $profile" 30 10 make_profile
+profile_id=$(echo "$profile" | jq -r .id)
+profile_version=$(echo "$profile" | jq -r .version)
+echo "$profile" | jq -e '.policy.sites == 1' > /dev/null || fail "the profile does not carry the WAF of the site: $profile"
+call manager PUT "/nginxions/learning/profiles/$profile_id" '{"for_new_nodes": true}' | jq -e '.forNewNodes == true' \
+  > /dev/null || fail "the profile is not for new nodes"
+call node2 DELETE /nginxions/cluster/member | jq -e '.joined == false' > /dev/null || fail "node2 did not leave"
+answer=$(call manager POST /nginxions/nodes '{"name": "node2-again", "labels": ["cluster"]}')
+NODE_ID[node2]=$(echo "$answer" | jq -r '.node.id')
+call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/hosts" "{\"host_ids\": [$host_id]}" > /dev/null
+call node2 PUT /nginxions/cluster/member \
+  "{\"manager_url\": \"https://${IP[manager]}:81\", \"code\": \"$(echo "$answer" | jq -r .code)\"}" \
+  | jq -e '.joined == true' > /dev/null || fail "node2 did not join again"
+sleep 10
+panels_up node2
+took_profile() { member node2 | jq -e --arg v "$profile_version" '.profile_version == $v and .profile_error == ""' > /dev/null; }
+until_ok "node2 did not take the profile of the manager: $(member node2)" 40 5 took_profile
+# the agent may restart with the profile: the panel and the site back, then the first attack is refused
+sleep 10
+panels_up node2
+until_ok "node2 does not serve $DOMAIN after it joined again" 40 3 proxied node2
+waf_ready() { call node2 GET /nginxions/waf | grep -q '"reachable": *true'; }
+until_ok "the agent of node2 does not answer" 40 3 waf_ready
+[ "$(code node2 "/first-$(date +%s)$SQLI")" = 403 ] || fail "node2 let the first attack through after it took the profile"
 step "done"
 current=""
 echo "OK: a manager and two nodes"

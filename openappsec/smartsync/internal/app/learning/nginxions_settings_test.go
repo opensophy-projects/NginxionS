@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"openappsec.io/smartsync-service/models"
 )
@@ -33,5 +34,25 @@ func TestSettingsOfNginxions(t *testing.T) {
 	_ = os.WriteFile(file, []byte(`not json`), 0o600)
 	if got := withSettings(base, false, readNginxionsSettings()); got != base {
 		t.Fatalf("broken file: %+v", got)
+	}
+}
+
+// NginxionS: the length of a window of learning of a test stack (NGINXIONS_LEARNING_INTERVAL_MINUTES), else upstream's
+func TestLearningIntervalOfTests(t *testing.T) {
+	base := models.ConfidenceParams{MinSources: 3, MinIntervals: 5, RatioThreshold: 0.8, Interval: 2 * time.Hour}
+	t.Setenv(settingsEnv, filepath.Join(t.TempDir(), "none.json"))
+	t.Setenv("NGINXIONS_LEARNING_INTERVAL_MINUTES", "")
+	if got := withSettings(base, false, readNginxionsSettings()); got.Interval != 2*time.Hour {
+		t.Fatalf("not set: %v", got.Interval)
+	}
+	t.Setenv("NGINXIONS_LEARNING_INTERVAL_MINUTES", "1")
+	if got := withSettings(base, true, readNginxionsSettings()); got.Interval != time.Minute {
+		t.Fatalf("one minute: %v", got.Interval)
+	}
+	for _, bad := range []string{"0", "-5", "1000", "x"} {
+		t.Setenv("NGINXIONS_LEARNING_INTERVAL_MINUTES", bad)
+		if got := withSettings(base, false, readNginxionsSettings()); got.Interval != 2*time.Hour {
+			t.Fatalf("%q: %v", bad, got.Interval)
+		}
 	}
 }
