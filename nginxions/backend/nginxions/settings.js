@@ -54,6 +54,12 @@ const DEFINITIONS = {
 			v.ratioThreshold >= 0.1 &&
 			v.ratioThreshold <= 1,
 	},
+	// a staged rollout to the nodes (Agents → Nodes → Rollout), see nodes/index.js: while on, a change reaches the
+	// canary nodes only; the others keep their package until "Roll out to all nodes"
+	"cluster.rollout": {
+		default: () => ({ staged: false }),
+		validate: (v) => typeof v?.staged === "boolean",
+	},
 	// File Security (WAF -> Agent), see waf/files.js: online updates of the signatures of ClamAV (freshclam)
 	"waf.files": {
 		default: () => ({ online_updates: false }),

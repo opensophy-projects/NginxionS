@@ -4,6 +4,8 @@
 // public key given to the node at its registration and pinned there); the version is the SHA-256 of the content, so
 // a node fetches it again only when something changed.
 // What a node cannot serve on its own is left out and told: a certificate of ACME (its renewal is on the manager).
+// The hosts of a node are its own and those of its labels. A node can be held on a package it was given before
+// (a rollback, or a staged rollout that has not reached it yet): the last 20 are kept per node.
 // A node with sites also gets the id and version of the learning profile for new nodes (step 15.5), if there is one,
 // and every node the SHA-256 of the model of the agent uploaded on the manager.
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
@@ -71,15 +73,44 @@ export const signingKey = () => {
 	return keyPromise;
 };
 
-/** the proxy hosts of a node (ids of this manager) */
+/** the proxy hosts given to a node itself (ids of this manager) */
 export const hostIdsOf = async (nodeId) =>
 	(await db()("nginxions_node_host").where({ node_id: nodeId }).orderBy("proxy_host_id")).map((r) => r.proxy_host_id);
+
+/** the proxy hosts given to labels: {label: [ids]} */
+export const labelHosts = async () => {
+	const out = {};
+	for (const r of await db()("nginxions_label_host").orderBy(["label", "proxy_host_id"])) {
+		out[r.label] ??= [];
+		out[r.label].push(r.proxy_host_id);
+	}
+	return out;
+};
+
+const labelsOfRow = (row) => {
+	try {
+		const labels = typeof row?.labels === "string" ? JSON.parse(row.labels || "[]") : row?.labels;
+		return Array.isArray(labels) ? labels : [];
+	} catch {
+		return [];
+	}
+};
+
+/** the proxy hosts a node serves: its own and those of its labels (ids of this manager, sorted) */
+export const servedHostIdsOf = async (nodeId) => {
+	const node = await db()("nginxions_node").where({ id: nodeId }).first("labels");
+	const labels = labelsOfRow(node);
+	const fromLabels = labels.length
+		? (await db()("nginxions_label_host").whereIn("label", labels)).map((r) => r.proxy_host_id)
+		: [];
+	return [...new Set([...(await hostIdsOf(nodeId)), ...fromLabels])].sort((a, b) => a - b);
+};
 
 /** the content of the package of a node */
 export const contentOf = async (nodeId) => {
 	// a node taken out of work serves nothing: no hosts (they stay given to it for when it is back)
 	const node = await db()("nginxions_node").where({ id: nodeId }).first("drained");
-	const hostIds = node?.drained ? [] : await hostIdsOf(nodeId);
+	const hostIds = node?.drained ? [] : await servedHostIdsOf(nodeId);
 	const hosts = hostIds.length
 		? (await db()("proxy_host").whereIn("id", hostIds).where({ is_deleted: 0 }).orderBy("id")).map((r) =>
 				parsed("proxy_host", r),
@@ -146,5 +177,51 @@ export const contentOf = async (nodeId) => {
 	};
 };
 
-/** the signed package of a node */
-export const packageOf = async (nodeId) => signPackage(await contentOf(nodeId), (await signingKey()).privateKey);
+const PACKAGE_TABLE = "nginxions_node_package";
+/** the packages kept per node: the ones it can be held on */
+export const KEEP_PACKAGES = 20;
+
+/** a package a node was given, kept for "back to this package" (the newest KEEP_PACKAGES) */
+export const keepPackage = async (nodeId, pkg) => {
+	const known = await db()(PACKAGE_TABLE).where({ node_id: nodeId, version: pkg.version }).first("id");
+	if (known) return;
+	try {
+		await db()(PACKAGE_TABLE).insert({
+			node_id: nodeId,
+			version: pkg.version,
+			body: pkg.body,
+			created_on: new Date(),
+		});
+	} catch {
+		// the same package kept at the same moment by another request
+		return;
+	}
+	const old = await db()(PACKAGE_TABLE)
+		.where({ node_id: nodeId })
+		.orderBy("id", "desc")
+		.offset(KEEP_PACKAGES)
+		.pluck("id");
+	if (old.length) await db()(PACKAGE_TABLE).whereIn("id", old).delete();
+};
+
+/** the packages kept for a node, the newest first: [{version, created_on}] */
+export const packagesOf = async (nodeId) =>
+	db()(PACKAGE_TABLE).where({ node_id: nodeId }).orderBy("id", "desc").select("version", "created_on");
+
+/** the content of a kept package of a node, or null */
+export const keptContent = async (nodeId, version) => {
+	const row = await db()(PACKAGE_TABLE).where({ node_id: nodeId, version }).first("body");
+	return row ? JSON.parse(row.body) : null;
+};
+
+/**
+ * The signed package of a node: the one it is held on (a rollback, a staged rollout that has not reached it), or the
+ * one of the configuration now. Every package given is kept, to be held on later.
+ */
+export const packageOf = async (nodeId) => {
+	const node = await db()("nginxions_node").where({ id: nodeId }).first("pinned_version");
+	const held = node?.pinned_version ? await keptContent(nodeId, node.pinned_version) : null;
+	const pkg = signPackage(held ?? (await contentOf(nodeId)), (await signingKey()).privateKey);
+	await keepPackage(nodeId, pkg);
+	return pkg;
+};

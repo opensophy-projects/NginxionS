@@ -4463,6 +4463,15 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Добавить узел"
 	},
+	"nginxions.nodes.canary": {
+		"defaultMessage": "Узлы-канарейки"
+	},
+	"nginxions.nodes.canary.badge": {
+		"defaultMessage": "канарейка"
+	},
+	"nginxions.nodes.canary.hint": {
+		"defaultMessage": "Поэтапная выкатка сначала доходит до них."
+	},
 	"nginxions.nodes.cluster-learning.empty": {
 		"defaultMessage": "Данных обучения в хранилище пока нет: агенты присылают их вместе с трафиком сайтов."
 	},
@@ -4553,6 +4562,27 @@
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Метки"
 	},
+	"nginxions.nodes.labels.count": {
+		"defaultMessage": "Хостов: {hosts}, активных узлов: {nodes}"
+	},
+	"nginxions.nodes.labels.hosts": {
+		"defaultMessage": "Хосты по меткам"
+	},
+	"nginxions.nodes.labels.hosts.button": {
+		"defaultMessage": "Хосты"
+	},
+	"nginxions.nodes.labels.hosts.hint": {
+		"defaultMessage": "Каждый узел с меткой «{label}» обслуживает отмеченные хосты в дополнение к своим."
+	},
+	"nginxions.nodes.labels.hosts.saved": {
+		"defaultMessage": "Хосты метки «{label}» уйдут на её узлы со следующим heartbeat."
+	},
+	"nginxions.nodes.labels.hosts.title": {
+		"defaultMessage": "Хосты метки"
+	},
+	"nginxions.nodes.labels.none": {
+		"defaultMessage": "Меток пока нет: задайте метки узлам при добавлении."
+	},
 	"nginxions.nodes.labels.placeholder": {
 		"defaultMessage": "eu edge (через пробел или запятую)"
 	},
@@ -4601,11 +4631,65 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Ждёт узел"
 	},
+	"nginxions.nodes.packages": {
+		"defaultMessage": "Пакеты"
+	},
+	"nginxions.nodes.packages.applied": {
+		"defaultMessage": "Работает сейчас"
+	},
+	"nginxions.nodes.packages.follow": {
+		"defaultMessage": "Вернуть к текущей конфигурации"
+	},
+	"nginxions.nodes.packages.follows": {
+		"defaultMessage": "Узел снова получает текущую конфигурацию."
+	},
+	"nginxions.nodes.packages.given": {
+		"defaultMessage": "Выдан"
+	},
+	"nginxions.nodes.packages.held": {
+		"defaultMessage": "Узел получит этот пакет со следующим heartbeat."
+	},
+	"nginxions.nodes.packages.hint": {
+		"defaultMessage": "Последние пакеты конфигурации, которые manager выдал узлу. Узел можно удержать на одном из них, чтобы откатить изменение только на нём; он держит этот пакет, пока его не вернут к текущей конфигурации."
+	},
+	"nginxions.nodes.packages.hold": {
+		"defaultMessage": "Вернуть этот пакет"
+	},
+	"nginxions.nodes.packages.none": {
+		"defaultMessage": "Узлу ещё не выдано ни одного пакета."
+	},
+	"nginxions.nodes.packages.pinned": {
+		"defaultMessage": "Удерживается"
+	},
+	"nginxions.nodes.packages.title": {
+		"defaultMessage": "Пакеты узла {name}"
+	},
+	"nginxions.nodes.packages.version": {
+		"defaultMessage": "Версия"
+	},
 	"nginxions.nodes.picker": {
 		"defaultMessage": "Сервер"
 	},
 	"nginxions.nodes.picker.this-server": {
 		"defaultMessage": "Этот сервер"
+	},
+	"nginxions.nodes.pinned.manual": {
+		"defaultMessage": "Удерживается на пакете {version}: изменения конфигурации на этот узел не приходят."
+	},
+	"nginxions.nodes.pinned.short.manual": {
+		"defaultMessage": "Удерживается на прежнем пакете"
+	},
+	"nginxions.nodes.pinned.short.staged": {
+		"defaultMessage": "Ждёт поэтапной выкатки"
+	},
+	"nginxions.nodes.pinned.staged": {
+		"defaultMessage": "Ждёт поэтапной выкатки на пакете {version}: изменения придут с кнопкой «Выкатить на все узлы»."
+	},
+	"nginxions.nodes.plan.hint": {
+		"defaultMessage": "Какие хосты получают узлы по меткам и в каком порядке до них доходят изменения."
+	},
+	"nginxions.nodes.plan.title": {
+		"defaultMessage": "План выкатки"
 	},
 	"nginxions.nodes.restart-agent": {
 		"defaultMessage": "Перезапустить агент"
@@ -4672,6 +4756,30 @@
 	},
 	"nginxions.nodes.service.unknown": {
 		"defaultMessage": "ещё не сообщил"
+	},
+	"nginxions.nodes.staged": {
+		"defaultMessage": "Поэтапная выкатка"
+	},
+	"nginxions.nodes.staged.hint": {
+		"defaultMessage": "Включена: изменение сначала получают узлы-канарейки, остальные держат свой пакет до кнопки «Выкатить на все узлы». Выключена: каждое изменение сразу получают все узлы."
+	},
+	"nginxions.nodes.staged.off": {
+		"defaultMessage": "Поэтапная выкатка выключена: изменения получают все узлы."
+	},
+	"nginxions.nodes.staged.on": {
+		"defaultMessage": "Поэтапная выкатка включена: изменения сначала получают канарейки."
+	},
+	"nginxions.nodes.staged.promote": {
+		"defaultMessage": "Выкатить на все узлы"
+	},
+	"nginxions.nodes.staged.promote.confirm": {
+		"defaultMessage": "Текущая конфигурация уйдёт на все узлы со следующим heartbeat. Сначала проверьте канарейки."
+	},
+	"nginxions.nodes.staged.promoted": {
+		"defaultMessage": "Выкатка запущена: узлы получат конфигурацию со следующим heartbeat."
+	},
+	"nginxions.nodes.staged.waiting": {
+		"defaultMessage": "Узлов ждут выкатки: {count}"
 	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "Состояние"

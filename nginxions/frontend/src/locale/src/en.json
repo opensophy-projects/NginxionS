@@ -4463,6 +4463,15 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Add node"
 	},
+	"nginxions.nodes.canary": {
+		"defaultMessage": "Canary nodes"
+	},
+	"nginxions.nodes.canary.badge": {
+		"defaultMessage": "canary"
+	},
+	"nginxions.nodes.canary.hint": {
+		"defaultMessage": "A staged rollout reaches them first."
+	},
 	"nginxions.nodes.cluster-learning.empty": {
 		"defaultMessage": "No data of learning in the storage yet: the agents send it with the traffic of the sites."
 	},
@@ -4553,6 +4562,27 @@
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Labels"
 	},
+	"nginxions.nodes.labels.count": {
+		"defaultMessage": "{hosts} hosts, {nodes} active nodes"
+	},
+	"nginxions.nodes.labels.hosts": {
+		"defaultMessage": "Hosts by label"
+	},
+	"nginxions.nodes.labels.hosts.button": {
+		"defaultMessage": "Hosts"
+	},
+	"nginxions.nodes.labels.hosts.hint": {
+		"defaultMessage": "Every node with the label «{label}» serves the ticked hosts, besides the hosts given to it."
+	},
+	"nginxions.nodes.labels.hosts.saved": {
+		"defaultMessage": "The hosts of «{label}» go to its nodes with their next heartbeat."
+	},
+	"nginxions.nodes.labels.hosts.title": {
+		"defaultMessage": "Hosts of a label"
+	},
+	"nginxions.nodes.labels.none": {
+		"defaultMessage": "No labels yet: give labels to nodes when you add them."
+	},
 	"nginxions.nodes.labels.placeholder": {
 		"defaultMessage": "eu edge (space or comma)"
 	},
@@ -4601,11 +4631,65 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Waits for the node"
 	},
+	"nginxions.nodes.packages": {
+		"defaultMessage": "Packages"
+	},
+	"nginxions.nodes.packages.applied": {
+		"defaultMessage": "Runs now"
+	},
+	"nginxions.nodes.packages.follow": {
+		"defaultMessage": "Follow the configuration"
+	},
+	"nginxions.nodes.packages.follows": {
+		"defaultMessage": "The node follows the configuration again."
+	},
+	"nginxions.nodes.packages.given": {
+		"defaultMessage": "Given"
+	},
+	"nginxions.nodes.packages.held": {
+		"defaultMessage": "The node gets this package with its next heartbeat."
+	},
+	"nginxions.nodes.packages.hint": {
+		"defaultMessage": "The last packages of configuration this manager gave the node. Hold it on one of them to roll back a change on this node only; it keeps that package until it follows the configuration again."
+	},
+	"nginxions.nodes.packages.hold": {
+		"defaultMessage": "Back to this package"
+	},
+	"nginxions.nodes.packages.none": {
+		"defaultMessage": "The node was given no package yet."
+	},
+	"nginxions.nodes.packages.pinned": {
+		"defaultMessage": "Held"
+	},
+	"nginxions.nodes.packages.title": {
+		"defaultMessage": "Packages of {name}"
+	},
+	"nginxions.nodes.packages.version": {
+		"defaultMessage": "Version"
+	},
 	"nginxions.nodes.picker": {
 		"defaultMessage": "Server"
 	},
 	"nginxions.nodes.picker.this-server": {
 		"defaultMessage": "This server"
+	},
+	"nginxions.nodes.pinned.manual": {
+		"defaultMessage": "Held on the package {version}: changes of the configuration do not reach this node."
+	},
+	"nginxions.nodes.pinned.short.manual": {
+		"defaultMessage": "Held on a package before"
+	},
+	"nginxions.nodes.pinned.short.staged": {
+		"defaultMessage": "Waits for the staged rollout"
+	},
+	"nginxions.nodes.pinned.staged": {
+		"defaultMessage": "Waits for the staged rollout on the package {version}: changes reach it with «Roll out to all nodes»."
+	},
+	"nginxions.nodes.plan.hint": {
+		"defaultMessage": "Which hosts go to the nodes by their labels, and in which order a change reaches them."
+	},
+	"nginxions.nodes.plan.title": {
+		"defaultMessage": "Rollout plan"
 	},
 	"nginxions.nodes.restart-agent": {
 		"defaultMessage": "Restart the agent"
@@ -4672,6 +4756,30 @@
 	},
 	"nginxions.nodes.service.unknown": {
 		"defaultMessage": "not told yet"
+	},
+	"nginxions.nodes.staged": {
+		"defaultMessage": "Staged rollout"
+	},
+	"nginxions.nodes.staged.hint": {
+		"defaultMessage": "On: a change reaches the canary nodes first; the other nodes keep the package they run until «Roll out to all nodes». Off: every node gets each change."
+	},
+	"nginxions.nodes.staged.off": {
+		"defaultMessage": "Staged rollout off: every node gets each change."
+	},
+	"nginxions.nodes.staged.on": {
+		"defaultMessage": "Staged rollout on: changes reach the canaries first."
+	},
+	"nginxions.nodes.staged.promote": {
+		"defaultMessage": "Roll out to all nodes"
+	},
+	"nginxions.nodes.staged.promote.confirm": {
+		"defaultMessage": "The configuration now reaches every node with its next heartbeat. Check the canaries first."
+	},
+	"nginxions.nodes.staged.promoted": {
+		"defaultMessage": "Rolled out: the nodes get the configuration with their next heartbeat."
+	},
+	"nginxions.nodes.staged.waiting": {
+		"defaultMessage": "Nodes waiting for the rollout: {count}"
 	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "State"

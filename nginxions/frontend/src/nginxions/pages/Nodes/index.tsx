@@ -14,7 +14,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import Alert from "react-bootstrap/Alert";
-import { getProxyHosts, type ProxyHost } from "src/api/backend";
+import { getProxyHosts } from "src/api/backend";
 import { Button, HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
@@ -43,6 +43,7 @@ import {
 } from "../../api";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showNodeLogs } from "../../nodes/NodeView";
+import { HostsPicker, RolloutPlanCard, showPackages } from "../../nodes/RolloutPlan";
 import { useCan } from "../../rbac/hooks";
 
 const t = (id: string, values?: Record<string, string | number>) => intl.formatMessage({ id }, values);
@@ -87,42 +88,6 @@ function CodeBox({ result, onClose }: { result: NodeCode; onClose: () => void })
 	);
 }
 
-/** the proxy hosts of this server a node serves: ticked ones go to the node with its next package */
-function HostsPicker({ hosts, picked }: { hosts: ProxyHost[]; picked: Set<number> }) {
-	const [, redraw] = useState(0);
-	if (!hosts.length) {
-		return (
-			<p className="text-secondary mb-0">
-				<T id="nginxions.nodes.hosts.none" />
-			</p>
-		);
-	}
-	return (
-		<>
-			<p className="text-secondary small">
-				<T id="nginxions.nodes.hosts.hint" />
-			</p>
-			<div className="nx-scroll" style={{ maxHeight: "50vh", overflowY: "auto" }}>
-				{hosts.map((h) => (
-					<label key={h.id} className="form-check">
-						<input
-							type="checkbox"
-							className="form-check-input"
-							checked={picked.has(h.id)}
-							onChange={(e) => {
-								if (e.target.checked) picked.add(h.id);
-								else picked.delete(h.id);
-								redraw((n) => n + 1);
-							}}
-						/>
-						<span className="form-check-label">{h.domainNames.join(", ")}</span>
-					</label>
-				))}
-			</div>
-		</>
-	);
-}
-
 /** the package of a node: applied, refused, or not there yet */
 function PackageState({ node }: { node: ClusterNode }) {
 	if (node.status !== "active") return <>—</>;
@@ -149,6 +114,11 @@ function PackageState({ node }: { node: ClusterNode }) {
 	}
 	return (
 		<span className="small">
+			{node.pinned && (
+				<div className="text-warning" title={node.pinned.version}>
+					<T id={`nginxions.nodes.pinned.short.${node.pinned.by}`} />
+				</div>
+			)}
 			<span className="badge bg-green-lt me-1">
 				<T id="nginxions.nodes.package.applied" />
 			</span>
@@ -384,6 +354,11 @@ function NodesCard() {
 									<td>
 										<div className="font-weight-medium">{node.name}</div>
 										<div className="text-secondary small font-monospace">{node.uid}</div>
+										{node.canary && (
+											<span className="badge bg-purple-lt me-1">
+												<T id="nginxions.nodes.canary.badge" />
+											</span>
+										)}
 										{node.labels.length > 0 && (
 											<div className="mt-1">
 												{node.labels.map((l) => (
@@ -445,6 +420,11 @@ function NodesCard() {
 													id="nginxions.nodes.hosts.button"
 													data={{ count: node.hostIds.length }}
 												/>
+											</Button>
+										)}
+										{node.status === "active" && (
+											<Button size="sm" className="me-2" onClick={() => showPackages(node)}>
+												<T id="nginxions.nodes.packages" />
 											</Button>
 										)}
 										{manage && node.status === "pending" && (
@@ -976,6 +956,7 @@ function RolloutCard() {
 const Nodes = () => (
 	<HasPermission rbac="nodes" permission={VIEW} pageLoading loadingNoLogo>
 		<NodesCard />
+		<RolloutPlanCard />
 		<RolloutCard />
 		<ClusterLearningCard />
 		<LearningCard />

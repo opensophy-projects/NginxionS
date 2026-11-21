@@ -735,6 +735,18 @@ export interface ClusterNode {
 	drained: boolean;
 	/** a command waiting for the next heartbeat of the node */
 	command: { action: string; on: string } | null;
+	/** reached first by a staged rollout */
+	canary: boolean;
+	/** held on a package it was given before: a rollback ("manual") or a staged rollout that has not reached it */
+	pinned: { version: string; by: "manual" | "staged" } | null;
+}
+
+/** a package a node was given (the last 20 are kept) */
+export interface NodePackage {
+	version: string;
+	createdOn: string;
+	applied: boolean;
+	pinned: boolean;
 }
 
 export interface NodeCode {
@@ -824,3 +836,20 @@ export const setClusterLearning = (data: ClusterLearning): Promise<ClusterLearni
 	api.put({ url: "/nginxions/cluster/learning", data });
 export const setNodeHosts = (id: number, hostIds: number[]): Promise<number[]> =>
 	api.put({ url: `/nginxions/nodes/${id}/hosts`, data: { host_ids: hostIds } });
+/** the proxy hosts every node with a label serves */
+export const getLabelHosts = (): Promise<{ label: string; hostIds: number[] }[]> =>
+	api.get({ url: "/nginxions/nodes/label-hosts" });
+export const setLabelHosts = (label: string, hostIds: number[]): Promise<number[]> =>
+	api.put({ url: `/nginxions/nodes/label-hosts/${encodeURIComponent(label)}`, data: { host_ids: hostIds } });
+/** a staged rollout: a change reaches the canaries first, the other nodes with "Roll out to all nodes" */
+export const getStaged = (): Promise<{ staged: boolean }> => api.get({ url: "/nginxions/nodes/staged" });
+export const setStaged = (staged: boolean): Promise<{ staged: boolean }> =>
+	api.put({ url: "/nginxions/nodes/staged", data: { staged } });
+export const promoteRollout = (): Promise<{ promoted: number }> => api.post({ url: "/nginxions/nodes/staged/promote" });
+export const setNodeCanary = (id: number, canary: boolean): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/canary`, data: { canary } });
+export const getNodePackages = (id: number): Promise<NodePackage[]> =>
+	api.get({ url: `/nginxions/nodes/${id}/packages` });
+/** held on a package given before (a rollback); null: it follows the configuration again */
+export const holdNodePackage = (id: number, version: string | null): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/packages`, data: { version } });
