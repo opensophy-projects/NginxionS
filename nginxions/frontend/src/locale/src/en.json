@@ -4550,6 +4550,45 @@
 	"nginxions.nodes.revoke.confirm": {
 		"defaultMessage": "Disable the node {name}? Its certificate is revoked and it stops being managed from here. It keeps protecting its sites on its own."
 	},
+	"nginxions.nodes.rollout.all": {
+		"defaultMessage": "All nodes"
+	},
+	"nginxions.nodes.rollout.applied": {
+		"defaultMessage": "applied"
+	},
+	"nginxions.nodes.rollout.empty": {
+		"defaultMessage": "Nothing rolled out yet."
+	},
+	"nginxions.nodes.rollout.failed": {
+		"defaultMessage": "failed"
+	},
+	"nginxions.nodes.rollout.hint": {
+		"defaultMessage": "What each node applied of this server and when: the package of configuration, the model of the agent, the learning profile; and what failed. A package nginx refused is rolled back on the node to the one before; the model goes back with \"Back to the model before\" in WAF → Agent."
+	},
+	"nginxions.nodes.rollout.kind.model": {
+		"defaultMessage": "Model of the agent"
+	},
+	"nginxions.nodes.rollout.kind.package": {
+		"defaultMessage": "Package of configuration"
+	},
+	"nginxions.nodes.rollout.kind.profile": {
+		"defaultMessage": "Learning profile"
+	},
+	"nginxions.nodes.rollout.node": {
+		"defaultMessage": "Node"
+	},
+	"nginxions.nodes.rollout.result": {
+		"defaultMessage": "Result"
+	},
+	"nginxions.nodes.rollout.time": {
+		"defaultMessage": "Time"
+	},
+	"nginxions.nodes.rollout.title": {
+		"defaultMessage": "Rollout"
+	},
+	"nginxions.nodes.rollout.what": {
+		"defaultMessage": "What"
+	},
 	"nginxions.nodes.server": {
 		"defaultMessage": "Server"
 	},

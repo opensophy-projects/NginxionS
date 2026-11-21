@@ -162,7 +162,7 @@ export function SimulationNote({ simulation }: { simulation?: Simulation | null 
 									{s.host}
 									{s.uri}
 								</td>
-								<td className="font-monospace">{s.source_ip}</td>
+								<td className="font-monospace">{s.source_ip ?? s.sourceIp}</td>
 								<td className="text-nowrap">
 									<span className={cn("badge", VERDICT_TONE[s.before])}>
 										<T id={`nginxions.policy.verdict.${s.before}`} />

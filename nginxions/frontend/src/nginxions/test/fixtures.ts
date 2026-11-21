@@ -634,3 +634,43 @@ export const traffic = {
 	breakdown: { connectMs: 2, upstreamMs: 30 },
 	actions: [{ kind: "security", action: "Prevent", events: 4 }],
 };
+
+export const node = {
+	id: 1,
+	uid: "n-0123456789abcdef",
+	name: "edge-1",
+	status: "active",
+	state: "online",
+	labels: ["eu"],
+	fingerprint: Array(32).fill("AB").join(":"),
+	address: "198.51.100.7",
+	info: { version: "2.0.0", hostname: "edge-1", hosts: 2, packageVersion: "a".repeat(64), packageSkipped: 0 },
+	hostIds: [1],
+	createdOn: now,
+	registeredOn: now,
+	lastSeenOn: now,
+	codeExpiresOn: null,
+};
+
+export const rollout = [
+	{
+		id: 2,
+		nodeId: 1,
+		nodeName: "edge-1",
+		kind: "model",
+		version: "b".repeat(64),
+		result: "failed",
+		error: "the model is not the one of the package",
+		createdOn: now,
+	},
+	{
+		id: 1,
+		nodeId: 1,
+		nodeName: "edge-1",
+		kind: "package",
+		version: "a".repeat(64),
+		result: "applied",
+		error: "",
+		createdOn: now,
+	},
+];
