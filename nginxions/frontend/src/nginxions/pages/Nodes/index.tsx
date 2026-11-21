@@ -673,7 +673,7 @@ const LEARNING_FIELDS: { key: keyof ClusterLearning; min: number; max: number; s
 /** the thresholds of the learning of the nodes put together by smartsync (a manager with nodes) */
 function LearningCard() {
 	const can = useCan();
-	const manage = can("nodes", "manage");
+	const manage = can("waf_learning", "sync");
 	const queryClient = useQueryClient();
 	const { data } = useQuery({ queryKey: ["nginxions-cluster-learning"], queryFn: getClusterLearning });
 	const [form, setForm] = useState<ClusterLearning | null>(null);

@@ -35,7 +35,7 @@ interface Props extends InnerModalProps {
 	label: boolean;
 	/** applies, uploads, deletes (also waf_policy:manage) */
 	manage: boolean;
-	/** chooses the profile for new nodes (nodes:manage) */
+	/** chooses the profile for new nodes (waf_learning:sync) */
 	nodes: boolean;
 }
 

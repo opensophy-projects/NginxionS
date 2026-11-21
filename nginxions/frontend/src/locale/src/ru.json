@@ -6713,6 +6713,12 @@
 	"nginxions.rbac.action.revoke.desc": {
 		"defaultMessage": "Отзывать сертификаты"
 	},
+	"nginxions.rbac.action.sync": {
+		"defaultMessage": "Обучение кластера"
+	},
+	"nginxions.rbac.action.sync.desc": {
+		"defaultMessage": "Пороги smartsync, профиль обучения для новых узлов, откат снимка вместе с общим состоянием кластера"
+	},
 	"nginxions.rbac.action.view": {
 		"defaultMessage": "Просмотр"
 	},
