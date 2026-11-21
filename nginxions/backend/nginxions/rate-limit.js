@@ -1,6 +1,7 @@
 // A limit of requests per client address for routes that hand out secrets or act as another user: the download of a
 // certificate with its private key, the login as another user. Both need the token of an allowed user already; the
-// limit stops a stolen or scripted session from pulling them in bulk. The login itself has its own (routes/tokens.js).
+// limit stops a stolen or scripted session from pulling them in bulk. The model of the agent a node downloads from
+// its manager (a large file read for each request) has it too. The login itself has its own (routes/tokens.js).
 import { rateLimit } from "express-rate-limit";
 
 export const sensitiveLimiter = rateLimit({

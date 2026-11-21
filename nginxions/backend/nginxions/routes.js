@@ -3214,7 +3214,8 @@ router.post("/nodes/logs", express.raw({ type: () => true, limit: "4mb" }), asyn
  *   agent of this manager (step 15.5; its SHA-256 is in the signed package); 404 without one, 401 for an unknown or
  *   disabled node
  */
-router.get("/nodes/model", async (req, res, next) => {
+// a node downloads the model once per change; the limit stops a stolen token from reading the file in a loop
+router.get("/nodes/model", sensitiveLimiter, async (req, res, next) => {
 	try {
 		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
 		const answer = await internalNodes.wafModel(token);

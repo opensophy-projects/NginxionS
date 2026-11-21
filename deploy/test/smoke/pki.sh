@@ -293,7 +293,9 @@ api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [
 applied=""
 for _ in $(seq 1 30); do
   nodes_now=$($CURL "$ADMIN/api/nginxions/nodes" | json)
-  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":1' && { applied=1; break; }
+  # mtls.local is left out (its domain is taken here), and with it what only it needs (its certificate, if the PKI
+  # steps before took it): at least one thing skipped
+  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":[1-9]' && { applied=1; break; }
   sleep 2
 done
 [ -n "$applied" ] || fail "the package of the node was not applied: $nodes_now"
