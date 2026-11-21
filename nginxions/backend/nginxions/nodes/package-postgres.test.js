@@ -127,6 +127,9 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal(content.access_lists[0].items[0].username, "alice");
 		assert.equal(content.access_lists[0].clients[0].address, "10.0.0.0/8");
 		assert.equal(content.waf_hosts[0].mode, "prevent-learn");
+		// the block page and CrowdSec of the manager, never the secret of a captcha
+		assert.equal(typeof content.block_page.enabled, "boolean");
+		assert.equal(content.crowdsec.bouncer.captcha.secret_key, "");
 
 		// the version changes only with the content
 		const a = await pkg.packageOf(node.id);
@@ -250,6 +253,43 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal((await knex("certificate")).length, 0);
 		assert.equal((await knex("access_list")).length, 0);
 		assert.equal((await knex("access_list_auth")).length, 0);
+	});
+
+	test("the block page and CrowdSec of the package: applied when they differ, a captcha needs its own secret", async () => {
+		const { applySettings } = await import("./settings-apply.js");
+		const { getSetting, setSetting } = await import("../settings.js");
+		const calls = [];
+		const io = {
+			setBlockPage: async (d) => {
+				calls.push(["page", d.title]);
+				await setSetting("block.page", d);
+			},
+			setCrowdsec: async (d) => {
+				calls.push(["crowdsec", d.log_level]);
+				await setSetting("crowdsec", d);
+			},
+		};
+		const page = { ...(await getSetting("block.page")), title: "Blocked by the manager" };
+		const crowdsec = { ...(await getSetting("crowdsec")), log_level: "debug" };
+		assert.equal(await applySettings({ block_page: page, crowdsec }, io), "");
+		assert.deepEqual(calls, [
+			["page", "Blocked by the manager"],
+			["crowdsec", "debug"],
+		]);
+		// the same again: nothing to do
+		calls.length = 0;
+		assert.equal(await applySettings({ block_page: page, crowdsec }, io), "");
+		assert.deepEqual(calls, []);
+		// a captcha of the manager, no secret here: told, CrowdSec left as it is
+		const captcha = {
+			...crowdsec,
+			bouncer: {
+				...crowdsec.bouncer,
+				captcha: { ...crowdsec.bouncer.captcha, provider: "hcaptcha", secret_key: "" },
+			},
+		};
+		assert.match(await applySettings({ crowdsec: captcha }, io), /CrowdSec: the captcha needs its secret key/);
+		assert.deepEqual(calls, []);
 	});
 
 	test("a host nginx refuses is in the result (the node then goes back to the package before)", async () => {

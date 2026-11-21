@@ -27,6 +27,7 @@ import { applyLearningRole } from "../waf/agent-settings.js";
 import { applyContent } from "./apply.js";
 import { HEARTBEAT_MS, MEMBER_FILE, normalizeManagerUrl, uidOfCode } from "./model.js";
 import { openPackage } from "./package-model.js";
+import { applySettings } from "./settings-apply.js";
 
 export { MEMBER_FILE };
 
@@ -462,11 +463,13 @@ export const sync = async (state) => {
 		}
 		await mkdir(path.dirname(PACKAGE_FILE()), { recursive: true, mode: 0o700 });
 		await writeFile(PACKAGE_FILE(), JSON.stringify(content), { mode: 0o600 });
+		// the block page and CrowdSec: their hosts stay applied whatever happens to them; what failed is told
+		const settingsError = await applySettings(content);
 		logger.info(`Cluster: package ${answer.body.version.slice(0, 12)} applied (${result.hosts} host(s))`);
 		return {
 			applied_version: answer.body.version,
 			failed_version: "",
-			package_error: "",
+			package_error: settingsError,
 			package_skipped: result.skipped.length,
 			...(await fetchProfile(state, content.learning_profile)),
 			...(await syncModel(state, content.waf_model)),
