@@ -28,6 +28,7 @@ import { applyContent } from "./apply.js";
 import { HEARTBEAT_MS, MEMBER_FILE, normalizeManagerUrl, uidOfCode } from "./model.js";
 import { openPackage } from "./package-model.js";
 import { applySettings } from "./settings-apply.js";
+import { cleanBans, holdBans, readOwnBans, versionOfBans } from "../crowdsec/cluster-bans.js";
 
 export { MEMBER_FILE };
 
@@ -312,6 +313,87 @@ export const forwardEvents = async (state) => {
 	}
 };
 
+/** requests of the log of this server sent per request, and the most per heartbeat */
+const REQUESTS_BATCH = 1000;
+const REQUESTS_PER_BEAT = 20000;
+
+/** the id of the last request of this server in its log: where sending starts (no history before the join) */
+const lastRequestId = async () => {
+	const row = await db()("nginxions_request_log").where({ node_id: "local" }).max({ id: "id" }).first();
+	return Number(row?.id ?? 0);
+};
+
+/**
+ * The requests of the log of this server since the last sent one go to the manager (step 15.3): its Analytics and
+ * Events → All see the traffic of every server. As the events: a manager down keeps the cursor, nothing is lost.
+ * @returns {Promise<object>} what changes in the state
+ */
+export const forwardRequests = async (state) => {
+	// a node that joined before step 15.3: from now on, not its history
+	let cursor = state.requests_cursor === undefined ? await lastRequestId() : Number(state.requests_cursor);
+	let sent = 0;
+	try {
+		while (sent < REQUESTS_PER_BEAT) {
+			const rows = await db()("nginxions_request_log")
+				.where({ node_id: "local" })
+				.where("id", ">", cursor)
+				.orderBy("id")
+				.limit(REQUESTS_BATCH);
+			if (!rows.length) break;
+			const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/requests", {
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				client: clientOf(state),
+				body: { requests: rows.map(({ id: _id, node_id: _node, ...row }) => row) },
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the requests`);
+			cursor = Number(rows.at(-1).id);
+			sent += rows.length;
+			if (rows.length < REQUESTS_BATCH) break;
+		}
+		return { requests_cursor: cursor, requests_error: "" };
+	} catch (err) {
+		return { requests_cursor: cursor, requests_error: String(err.message).slice(0, 300) };
+	}
+};
+
+/**
+ * The bans of the cluster (step 15.3): the own bans of this server go to the manager when they change; the bans of the
+ * cluster come back when their version changes, and CrowdSec here holds them.
+ * @returns {Promise<object>} what changes in the state
+ */
+export const syncBans = async (state, version) => {
+	const out = {};
+	try {
+		const own = await readOwnBans();
+		const ownVersion = versionOfBans(own);
+		if (ownVersion !== state.bans_sent) {
+			const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/bans", {
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				client: clientOf(state),
+				body: { bans: own },
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the bans`);
+			out.bans_sent = ownVersion;
+		}
+		if (version && version !== state.bans_version) {
+			const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/bans", {
+				method: "GET",
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				client: clientOf(state),
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the bans`);
+			await holdBans(cleanBans(answer.body?.bans));
+			out.bans_version = version;
+		}
+		return { ...out, bans_error: "" };
+	} catch (err) {
+		return { ...out, bans_error: String(err.message).slice(0, 300) };
+	}
+};
+
 /** the package applied last, or none (no managed rows) */
 const lastContent = async () => {
 	try {
@@ -528,6 +610,8 @@ export const beat = async () => {
 				next = { ...next, ...(await runCommand(command, next)) };
 			}
 			next = { ...next, ...(await forwardEvents(next)) };
+			next = { ...next, ...(await forwardRequests(next)) };
+			next = { ...next, ...(await syncBans(next, answer.body?.bans_version)) };
 			await writeState(next);
 		} else if (answer.status === 401 || answer.status === 403) {
 			await writeState({ ...state, disabled: true, last_error: "disabled on the manager" });
@@ -614,6 +698,7 @@ const internalMember = {
 			chain_pem: answer.body.chain_pem,
 			signing_key: answer.body.signing_key || "",
 			events_cursor: await lastEventId(),
+			requests_cursor: await lastRequestId(),
 			joined_on: now,
 			last_ok_on: now,
 			last_error: "",

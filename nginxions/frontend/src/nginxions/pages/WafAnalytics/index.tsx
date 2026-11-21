@@ -42,6 +42,7 @@ const FILTER_FIELDS: { key: keyof TrafficFilters; choices?: string[]; placeholde
 	{ key: "originStatus", placeholder: "502, 5xx" },
 	{ key: "referer", placeholder: "google.com" },
 	{ key: "port", placeholder: "443" },
+	{ key: "node", placeholder: "local, n-0123456789abcdef" },
 	{ key: "unknown", choices: ["1"] },
 	{ key: "mitigated", choices: ["1", "0"] },
 ];

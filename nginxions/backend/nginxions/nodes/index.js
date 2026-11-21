@@ -11,7 +11,9 @@ import path from "node:path";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
-import { EVENT_TABLE, store } from "../events/store.js";
+import { cleanBans, holdBans, mergeBans, readOwnBans, versionOfBans } from "../crowdsec/cluster-bans.js";
+import { countryAggregates, requestAggregates } from "../events/requests.js";
+import { EVENT_TABLE, REQUEST_LOG_TABLE, store } from "../events/store.js";
 import internalPki, { SYSTEM } from "../pki/index.js";
 import { readCsr } from "../pki/ops.js";
 import { parseCert } from "../pki/x509.js";
@@ -162,6 +164,10 @@ const nodeOfToken = async (auth) => {
 	if (!row || row.status !== "active" || !sameHash(token, row.token_hash)) return null;
 	return (await certOfNode(row, cert)) ? row : null;
 };
+
+/** at most this many requests of the log per request of a node */
+export const MAX_REQUESTS = 1000;
+let requestColumns = null;
 
 /** at most this many events per request of a node (it sends the rest with the next ones) */
 export const MAX_EVENTS = 500;
@@ -409,6 +415,7 @@ const internalNodes = {
 				.delete();
 		}
 		const pkg = await packageOf(row.id);
+		const bans = await clusterBansFor(row.uid);
 		return {
 			uid: row.uid,
 			name: row.name,
@@ -416,6 +423,8 @@ const internalNodes = {
 			server_time: now.toISOString(),
 			package_version: pkg.version,
 			signing_key: (await signingKey()).publicKeyPem,
+			// the bans of the cluster for this node (step 15.3); none when the CrowdSec of this manager does not answer
+			...(bans ? { bans_version: versionOfBans(bans) } : {}),
 			...(row.command ? { command: { id: row.command_id, action: row.command } } : {}),
 		};
 	},
@@ -441,6 +450,74 @@ const internalNodes = {
 		}
 		if (events.length) await store({ events, telemetry: [], cursors: [] });
 		return { stored: events.length };
+	},
+
+	/**
+	 * Without login: requests of the log of a node (step 15.3), stored as requests of this server with the id of the node,
+	 * counted per hour and country as the log of this server is: Analytics and Events → All see them.
+	 * @returns {Promise<{stored: number}|null>} null: unknown or disabled node
+	 */
+	requests: async (token, rows) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		if (!Array.isArray(rows)) throw new errs.ValidationError("requests: a list");
+		if (rows.length > MAX_REQUESTS) throw new errs.ValidationError(`requests: at most ${MAX_REQUESTS} at once`);
+		requestColumns ??= Object.keys(await db()(REQUEST_LOG_TABLE).columnInfo()).filter(
+			(c) => !["id", "node_id"].includes(c),
+		);
+		const lines = [];
+		for (const r of rows) {
+			if (!r || typeof r !== "object") continue;
+			const time = new Date(r.time);
+			if (Number.isNaN(time.getTime()) || typeof r.host !== "string") continue;
+			const clean = Object.fromEntries(requestColumns.filter((c) => r[c] !== undefined).map((c) => [c, r[c]]));
+			lines.push({
+				...clean,
+				time,
+				node_id: row.uid,
+				status: Number(clean.status) || 0,
+				bytes: Number(clean.bytes) || 0,
+				mitigated: Boolean(clean.mitigated),
+				country: typeof clean.country === "string" ? clean.country : "",
+			});
+		}
+		if (lines.length) {
+			await store({
+				events: [],
+				telemetry: [],
+				cursors: [],
+				requests: requestAggregates(lines, row.uid),
+				requestLog: lines,
+				countries: countryAggregates(lines, row.uid),
+			});
+		}
+		return { stored: lines.length };
+	},
+
+	/**
+	 * Without login: the own bans of a node (step 15.3), the whole list each time it changes; this manager holds the
+	 * bans of its nodes in its CrowdSec too.
+	 * @returns {Promise<{stored: number}|null>} null: unknown or disabled node
+	 */
+	shareBans: async (token, list) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		const bans = cleanBans(list);
+		await db().transaction(async (trx) => {
+			await trx(BAN_TABLE).where({ origin: row.uid }).delete();
+			for (let i = 0; i < bans.length; i += 500) {
+				await trx(BAN_TABLE).insert(bans.slice(i, i + 500).map((b) => ({ ...b, origin: row.uid })));
+			}
+		});
+		await holdNodeBans();
+		return { stored: bans.length };
+	},
+
+	/** Without login: the bans of the cluster for the node with this token (step 15.3) */
+	clusterBans: async (token) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		return { bans: (await clusterBansFor(row.uid)) ?? [] };
 	},
 
 	/** Without login: the signed package of the node with this token; null for an unknown or disabled node */
@@ -710,6 +787,39 @@ const internalNodes = {
 		await audit(access, "updated", id, { name: row.name, package: version ?? "follows the configuration" });
 		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
 	},
+};
+
+const BAN_TABLE = "nginxions_cluster_ban";
+
+/** the bans the nodes shared that are still on: [{origin, value, scope, type, until, scenario}] */
+const nodeBans = async () =>
+	(await db()(BAN_TABLE).where("until", ">", new Date())).map((b) => ({
+		...b,
+		until: new Date(b.until).toISOString(),
+	}));
+
+/**
+ * The bans of the cluster for a server: its manager's own and those of every other node, the longest of each address;
+ * null when the CrowdSec of this manager does not answer (the node keeps what it holds).
+ */
+const clusterBansFor = async (uid) => {
+	let own;
+	try {
+		own = await readOwnBans();
+	} catch {
+		return null;
+	}
+	const others = (await nodeBans()).filter((b) => b.origin !== uid).map(({ origin: _o, ...b }) => b);
+	return mergeBans(own, others);
+};
+
+/** this manager holds the bans of its nodes in its CrowdSec (never fails the request of a node) */
+const holdNodeBans = async () => {
+	try {
+		await holdBans(mergeBans((await nodeBans()).map(({ origin: _o, ...b }) => b)));
+	} catch {
+		// its CrowdSec does not answer: the next list of a node tries again
+	}
 };
 
 const ROLLOUT_KEY = "cluster.rollout";

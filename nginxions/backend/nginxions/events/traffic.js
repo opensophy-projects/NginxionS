@@ -35,7 +35,12 @@ const TEXT_FILTERS = {
 	port: "port",
 	// human, bot, scanner (client.js)
 	client: "client",
+	// the server the request came to: "local" (this one) or the id of a node (docs/adr/0012-nodes.md, step 15.3)
+	node: "node_id",
 };
+
+/** the columns the hourly aggregates have besides their counters: a filter on them needs no request log */
+const HOURLY_COLUMNS = ["host", "node_id"];
 
 /** ranges of the query → numeric columns (min…max, both optional) */
 const RANGE_FILTERS = {
@@ -72,6 +77,7 @@ export const parseTrafficFilters = (query = {}) => {
 		text[column] = column === "host" ? values.map((v) => v.toLowerCase()) : values;
 		if (column === "country") text[column] = values.map((v) => v.toUpperCase());
 		if (column === "port") text[column] = values.filter((v) => /^\d{1,5}$/.test(v));
+		if (column === "node_id") text[column] = values.filter((v) => /^(local|n-[0-9a-f]{16})$/.test(v));
 		if (!text[column].length) delete text[column];
 	}
 	const ranges = {};
@@ -103,9 +109,9 @@ export const parseTrafficFilters = (query = {}) => {
 	};
 };
 
-/** filters other than the host need the request log (the hourly aggregates know only hosts) */
+/** filters other than the host and the node need the request log (the hourly aggregates know only these) */
 export const needsLog = (f) =>
-	Object.keys(f.text).some((c) => c !== "host") ||
+	Object.keys(f.text).some((c) => !HOURLY_COLUMNS.includes(c)) ||
 	f.status.length > 0 ||
 	f.originStatus.length > 0 ||
 	Object.keys(f.ranges).length > 0 ||
@@ -183,6 +189,12 @@ const applyFilters = (b, f, k) => {
 		if (k.exact.size) b.whereNotIn("host", [...k.exact]);
 		for (const suffix of k.wildcards) b.whereNot("host", "like", `%${suffix}`);
 	}
+	return b;
+};
+
+/** the filters the hourly aggregates know: host and node */
+const hourlyFilters = (b, f) => {
+	for (const column of HOURLY_COLUMNS) if (f.text[column]) b.whereIn(column, f.text[column]);
 	return b;
 };
 
@@ -269,7 +281,7 @@ const hourlyTimeline = async (c, columns) => {
 		.where("hour", ">=", new Date(Math.floor(c.from.getTime() / HOUR) * HOUR))
 		.where("hour", "<=", c.to)
 		.select(knex.raw("date_bin(?::interval, hour, ?::timestamptz) AS t", [sec(c.bucket), c.from.toISOString()]));
-	if (c.filters.text.host) b.whereIn("host", c.filters.text.host);
+	hourlyFilters(b, c.filters);
 	// nosemgrep: nginxions-knex-raw-interpolation -- SQL of the column maps of this module; the names are bindings
 	for (const [name, sql] of Object.entries(columns)) b.select(knex.raw(`${sql} AS ??`, [name]));
 	const rows = await b.groupByRaw("1");
@@ -331,7 +343,7 @@ const hourlyTotals = async (c, from, to) => {
 		.where("hour", ">=", new Date(Math.floor(from.getTime() / HOUR) * HOUR))
 		.where("hour", "<", to)
 		.sum({ requests: "requests", bytes: "bytes", s5xx: "s5xx", blocked: "blocked" });
-	if (c.filters.text.host) b.whereIn("host", c.filters.text.host);
+	hourlyFilters(b, c.filters);
 	const row = (await b.first()) ?? {};
 	return { requests: num(row.requests), bytes: num(row.bytes), s5xx: num(row.s5xx), mitigated: num(row.blocked) };
 };
@@ -370,7 +382,7 @@ const countries = async (c, { metric = "requests" } = {}) => {
 		.groupBy("country")
 		.orderBy("requests", "desc")
 		.limit(250);
-	if (c.filters.text.host) b.whereIn("host", c.filters.text.host);
+	hourlyFilters(b, c.filters);
 	return (await b).map((r) => ({
 		value: r.value,
 		requests: num(r.requests),
@@ -436,19 +448,22 @@ const tabs = {
 		const prev = await basicTotals(c, c.prevFrom, c.from, c.prevFrom >= c.logFrom);
 		const prevVisits =
 			c.prevFrom >= c.logFrom ? (await logTotals(c, c.prevFrom, c.from, { v: series.visits })).v : null;
-		const [cache, paths, ips, hosts, browsers, os, devices, agents, protocols, statuses, ctry] = await Promise.all([
-			fromLog ? null : logTotals(c, c.logFrom, c.to, { cached: CACHED, cacheable: series.cacheable }),
-			top(c, "path"),
-			top(c, "ip", { extra: { country: "MAX(country)" } }),
-			top(c, "host"),
-			top(c, "browser"),
-			top(c, "os"),
-			top(c, "device"),
-			top(c, "user_agent"),
-			top(c, "protocol"),
-			top(c, "status"),
-			countries(c),
-		]);
+		const [cache, paths, ips, hosts, browsers, os, devices, agents, protocols, statuses, ctry, nodes] =
+			await Promise.all([
+				fromLog ? null : logTotals(c, c.logFrom, c.to, { cached: CACHED, cacheable: series.cacheable }),
+				top(c, "path"),
+				top(c, "ip", { extra: { country: "MAX(country)" } }),
+				top(c, "host"),
+				top(c, "browser"),
+				top(c, "os"),
+				top(c, "device"),
+				top(c, "user_agent"),
+				top(c, "protocol"),
+				top(c, "status"),
+				countries(c),
+				// the servers the requests came to: this one ("local") and the nodes of a manager
+				top(c, "node_id"),
+			]);
 		const requests = sum("requests");
 		const cached = cache ? num(cache.cached) : sum("cached");
 		const cacheable = cache ? num(cache.cacheable) : sum("cacheable");
@@ -472,6 +487,7 @@ const tabs = {
 				agents,
 				protocols,
 				statuses,
+				nodes,
 			},
 		};
 	},
@@ -918,6 +934,8 @@ export const requestFeed = async (f, before, limit, cap) => {
 		q: f.q,
 		status: (f.status ?? []).join(","),
 		client: (f.client ?? []).join(","),
+		// the server: the requests of nodes come to their manager too (step 15.3)
+		node: (f.node ?? []).join(","),
 		mitigated: f.outcome === "refused" ? "1" : f.outcome === "passed" ? "0" : undefined,
 	});
 	const k = await knownDomains();

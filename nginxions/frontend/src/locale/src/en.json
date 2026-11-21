@@ -7706,6 +7706,9 @@
 	"nginxions.traffic.filter.mitigated.yes": {
 		"defaultMessage": "refused"
 	},
+	"nginxions.traffic.filter.node": {
+		"defaultMessage": "Server"
+	},
 	"nginxions.traffic.filter.origin": {
 		"defaultMessage": "Origin server"
 	},
@@ -8042,6 +8045,9 @@
 	"nginxions.traffic.no-data": {
 		"defaultMessage": "No data"
 	},
+	"nginxions.traffic.node.local": {
+		"defaultMessage": "This server"
+	},
 	"nginxions.traffic.note": {
 		"defaultMessage": "Requests: the request log of nginx (the interface of NginxionS is not counted). Attacks: events of open-appsec, CrowdSec and mTLS. Countries: the GeoIP database of NginxionS, offline."
 	},
@@ -8263,6 +8269,9 @@
 	},
 	"nginxions.traffic.top.mitigated-paths.info": {
 		"defaultMessage": "The paths of refused requests."
+	},
+	"nginxions.traffic.top.nodes": {
+		"defaultMessage": "Servers"
 	},
 	"nginxions.traffic.top.origin-paths": {
 		"defaultMessage": "Top paths by origin requests"
