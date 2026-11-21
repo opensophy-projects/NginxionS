@@ -98,7 +98,12 @@ async function until(what, check, { timeout = 60000, every = 1500 } = {}) {
 	const end = Date.now() + timeout;
 	let last;
 	while (Date.now() < end) {
-		last = await check();
+		try {
+			last = await check();
+		} catch (err) {
+			// a page or a request that failed (the panel restarting) is a "not yet"; its error is the last value
+			last = { ok: false, error: String(err.message || err).split("\n")[0].slice(0, 200) };
+		}
 		if (last?.ok ?? last) return last;
 		await sleep(every);
 	}
@@ -135,6 +140,22 @@ const api = async (method, path, data) => {
 	if (!res.ok()) throw new Error(`${method} ${path}: ${res.status()} ${text.slice(0, 200)}`);
 	return json;
 };
+
+/** the panel answers its API */
+const answers = () => api("GET", "/").then(
+	() => true,
+	() => false,
+);
+const panelUp = () => until("the panel answers", answers, { timeout: 150000, every: 2000 });
+/**
+ * A change of the learning role of this server (a node joined, disabled) restarts the agent, and nginxions in its
+ * network namespace with it (docs/adr/0012-nodes.md 5c): the panel goes away within `within` ms, then comes back.
+ */
+async function panelRestarted(within = 45000) {
+	const end = Date.now() + within;
+	while (Date.now() < end && (await answers())) await sleep(1000);
+	await panelUp();
+}
 
 const go = async (path) => {
 	await page.goto(ADMIN + path, { waitUntil: "networkidle", timeout: 45000 });
@@ -634,6 +655,7 @@ const scenarios = [
 			await page.locator("#cluster-code").fill(code);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
 			await page.getByText("Certificate of the manager (SHA-256)").waitFor({ timeout: 30000 });
+			await panelRestarted();
 			await until("the node is online in the list", async () => {
 				await go("/agents/nodes");
 				return /Online/.test(await row().innerText());
@@ -642,6 +664,8 @@ const scenarios = [
 			await row().getByRole("button", { name: "Disable" }).click();
 			await modal().getByRole("button", { name: "Disable", exact: true }).click();
 			await saved("disable the node");
+			// no active node: smartsync off here
+			await panelRestarted();
 			await until(
 				"the node learns it was disabled",
 				async () => {
@@ -650,6 +674,9 @@ const scenarios = [
 				},
 				{ timeout: 75000, every: 3000 },
 			);
+			// disabled: it no longer learns through the manager
+			await panelRestarted();
+			await go("/agents/nodes");
 			await page.getByRole("button", { name: "Disconnect" }).click();
 			await modal().getByRole("button", { name: "Disconnect", exact: true }).click();
 			await saved("disconnect");
@@ -809,6 +836,8 @@ for (const s of scenarios) {
 	pageErrors.length = 0;
 	console.log(`==> ${s.title}`);
 	try {
+		// a scenario before may have restarted the panel (the nodes)
+		await panelUp();
 		await s.run();
 		if (pageErrors.length) throw new Error(`errors in the page: ${pageErrors.join("; ")}`);
 		r.ok = true;
@@ -821,6 +850,7 @@ for (const s of scenarios) {
 		await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true }).catch(() => {});
 	}
 	try {
+		await panelUp().catch(() => {});
 		await s.cleanup?.();
 	} catch (err) {
 		console.log(`    cleanup of ${s.name}: ${String(err.message || err).slice(0, 200)}`);
