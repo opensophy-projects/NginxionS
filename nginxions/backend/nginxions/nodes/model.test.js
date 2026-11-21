@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	CODE,
+	nodeLogsOf,
 	rolloutOf,
 	hash,
 	newCode,
@@ -80,6 +81,7 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 		"package_version",
 		"profile_error",
 		"profile_version",
+		"services",
 		"uptime",
 		"version",
 	]);
@@ -123,4 +125,21 @@ test("the rollout a heartbeat tells: a new version applied, a new error, nothing
 		),
 		["model:applied", "profile:applied"],
 	);
+});
+
+test("services and logs of a node: known names, bounded", () => {
+	const info = normalizeInfo({ services: { openappsec: "running", "Bad Name": "x", crowdsec: "exited".repeat(9) } });
+	assert.deepEqual(info.services, { openappsec: "running", crowdsec: "exited".repeat(9).slice(0, 16) });
+	assert.deepEqual(normalizeInfo({ services: ["x"] }).services, {});
+	const many = Array.from({ length: 400 }, (_, i) => ({ stream: "stdout", line: `line ${i}` }));
+	const logs = nodeLogsOf({
+		openappsec: many,
+		crowdsec: [{ stream: "stderr", line: "x".repeat(3000) }, { line: 5 }],
+	});
+	assert.equal(logs.openappsec.length, 300);
+	assert.equal(logs.openappsec.at(-1).line, "line 399");
+	assert.deepEqual(logs.crowdsec[1], { stream: "stdout", line: "5" });
+	assert.equal(logs.crowdsec[0].line.length, 2000);
+	assert.equal(nodeLogsOf({ "../x": [] }), null);
+	assert.equal(nodeLogsOf("text"), null);
 });

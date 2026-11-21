@@ -3186,6 +3186,30 @@ router.get("/nodes/package", async (req, res, next) => {
 });
 
 /**
+ * POST /api/nginxions/nodes/logs — without login: Authorization: Bearer <token of the node>; body (bytes, JSON):
+ *   {logs: {service: [{stream, line}]}}: the logs it collected for this manager (command collect_logs); 401 for an
+ *   unknown node
+ */
+router.post("/nodes/logs", express.raw({ type: () => true, limit: "4mb" }), async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		let body = null;
+		try {
+			body = JSON.parse(rawBytes(req)?.toString("utf8") || "null");
+		} catch {
+			body = null;
+		}
+		const answer = await internalNodes.storeLogs(token, body?.logs);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
  * GET /api/nginxions/nodes/model — without login: Authorization: Bearer <token of the node>; the advanced model of the
  *   agent of this manager (step 15.5; its SHA-256 is in the signed package); 404 without one, 401 for an unknown or
  *   disabled node
@@ -3325,6 +3349,16 @@ router
 	.options((_, res) => res.sendStatus(204))
 	.all(jwtdecode())
 	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
+
+/**
+ * GET /api/nginxions/nodes/:node_id/logs — the last logs the node sent (nodes:view and services:view); a command
+ *   collect_logs asks for new ones
+ */
+router
+	.route("/nodes/:node_id/logs")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.logs(res.locals.access, nodeId(req))));
 
 /**
  * PUT /api/nginxions/nodes/:node_id/drain — {drained}: out of work (its package has no hosts) or back

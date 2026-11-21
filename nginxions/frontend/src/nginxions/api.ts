@@ -721,6 +721,10 @@ export interface ClusterNode {
 		packageVersion?: string;
 		packageSkipped?: number | null;
 		packageError?: string;
+		/** the containers of its stack and their state (its heartbeat) */
+		services?: Record<string, string>;
+		modelSha256?: string;
+		profileVersion?: string;
 	};
 	hostIds: number[];
 	createdOn: string;
@@ -794,7 +798,13 @@ export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/
 export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
 export const drainNode = (id: number, drained: boolean): Promise<ClusterNode> =>
 	api.put({ url: `/nginxions/nodes/${id}/drain`, data: { drained } });
-export const nodeCommand = (id: number, action: "restart_agent"): Promise<ClusterNode> =>
+export interface NodeLogs {
+	collectedOn: string;
+	logs: Record<string, { stream: "stdout" | "stderr"; line: string }[]>;
+}
+/** the last logs the node sent (null before any); nodeCommand(id, "collect_logs") asks for new ones */
+export const getNodeLogs = (id: number): Promise<NodeLogs | null> => api.get({ url: `/nginxions/nodes/${id}/logs` });
+export const nodeCommand = (id: number, action: "restart_agent" | "collect_logs"): Promise<ClusterNode> =>
 	api.post({ url: `/nginxions/nodes/${id}/command`, data: { action } });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
 export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });

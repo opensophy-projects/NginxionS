@@ -4559,6 +4559,21 @@
 	"nginxions.nodes.last-seen": {
 		"defaultMessage": "Последняя связь"
 	},
+	"nginxions.nodes.logs": {
+		"defaultMessage": "Логи"
+	},
+	"nginxions.nodes.logs.collect": {
+		"defaultMessage": "Собрать свежие логи"
+	},
+	"nginxions.nodes.logs.collected": {
+		"defaultMessage": "Собраны на узле {time}. Секреты узел скрывает сам."
+	},
+	"nginxions.nodes.logs.none": {
+		"defaultMessage": "Узел ещё не присылал логи: запросите их."
+	},
+	"nginxions.nodes.logs.title": {
+		"defaultMessage": "Логи узла {name}"
+	},
 	"nginxions.nodes.name": {
 		"defaultMessage": "Имя"
 	},
@@ -4585,6 +4600,12 @@
 	},
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Ждёт узел"
+	},
+	"nginxions.nodes.picker": {
+		"defaultMessage": "Сервер"
+	},
+	"nginxions.nodes.picker.this-server": {
+		"defaultMessage": "Этот сервер"
 	},
 	"nginxions.nodes.restart-agent": {
 		"defaultMessage": "Перезапустить агент"
@@ -4643,6 +4664,15 @@
 	"nginxions.nodes.server": {
 		"defaultMessage": "Сервер"
 	},
+	"nginxions.nodes.service.crowdsec": {
+		"defaultMessage": "CrowdSec"
+	},
+	"nginxions.nodes.service.openappsec": {
+		"defaultMessage": "Агент open-appsec"
+	},
+	"nginxions.nodes.service.unknown": {
+		"defaultMessage": "ещё не сообщил"
+	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "Состояние"
 	},
@@ -4669,6 +4699,9 @@
 	},
 	"nginxions.nodes.version": {
 		"defaultMessage": "версия {version}"
+	},
+	"nginxions.nodes.view.hint": {
+		"defaultMessage": "То, что узел сообщает в heartbeat (каждые 30 с). Его политики и настройки приходят с этого сервера в пакете; его события — в «Событиях» с фильтром по узлу."
 	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Проблема"
