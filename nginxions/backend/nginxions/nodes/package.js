@@ -4,10 +4,12 @@
 // public key given to the node at its registration and pinned there); the version is the SHA-256 of the content, so
 // a node fetches it again only when something changed.
 // What a node cannot serve on its own is left out and told: a certificate of ACME (its renewal is on the manager).
+// A node with sites also gets the id and version of the learning profile for new nodes (step 15.5), if there is one.
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import db from "../../db.js";
+import { profileForNewNodes } from "../learning/profile-store.js";
 import { accessListIdsOf, PACKAGE_SCHEMA, signPackage } from "./package-model.js";
 
 export const SIGNING_KEY_FILE = process.env.NGINXIONS_SIGNING_KEY_FILE || "/data/nginxions/cluster/manager-signing.key";
@@ -133,6 +135,8 @@ export const contentOf = async (nodeId) => {
 		waf_hosts: wafHosts,
 		waf_locations: wafLocations,
 		skipped,
+		// the learning profile new nodes start with (step 15.5): the node fetches it once, by its version
+		learning_profile: hostIds.length ? ((await profileForNewNodes()) ?? undefined) : undefined,
 	};
 };
 

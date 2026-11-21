@@ -22,6 +22,7 @@ import { geoAvailable, writeGeoConf } from "./geo/index.js";
 import internalGeoip from "./geoip/index.js";
 import internalHosts, { HOST_OBJECTS } from "./hosts.js";
 import internalLearning from "./learning/index.js";
+import internalLearningProfiles from "./learning/profiles.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
 import internalClusterSettings from "./nodes/cluster-settings.js";
@@ -2961,6 +2962,112 @@ router
 	.all(jwtdecode())
 	.delete(handle((req, res) => internalLearningSnapshots.remove(res.locals.access, String(req.params.snapshot_id))));
 
+/**
+ * Learning profiles (learning/profiles.js, step 15.5): what the agent learned of chosen sites, signed, applied here,
+ * on another NginxionS (a file) or on new nodes
+ * GET    /api/nginxions/learning/profiles — the profiles, the newest first, and the fingerprint of the key of this server
+ * POST   /api/nginxions/learning/profiles — {name, host_ids, snapshot_id?}: a profile of these sites, now or of a snapshot
+ * POST   /api/nginxions/learning/profiles/upload — body: a profile file (application/octet-stream), its signature checked
+ * POST   /api/nginxions/learning/profiles/:profile_id/apply — {host_ids?}: in place of the learned state of its sites
+ *        (the agent and nginxions restart)
+ * GET    /api/nginxions/learning/profiles/:profile_id/download — the signed file
+ * PUT    /api/nginxions/learning/profiles/:profile_id — {for_new_nodes}: the profile new nodes start with
+ * DELETE /api/nginxions/learning/profiles/:profile_id
+ */
+const hostIdsSchema = { type: "array", maxItems: 1000, items: { type: "integer", minimum: 1 } };
+router
+	.route("/learning/profiles")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalLearningProfiles.list(res.locals.access)))
+	.post(
+		handle(
+			async (req, res) =>
+				internalLearningProfiles.create(
+					res.locals.access,
+					await validator(
+						{
+							type: "object",
+							additionalProperties: false,
+							required: ["name", "host_ids"],
+							properties: {
+								name: { type: "string", minLength: 1, maxLength: 100 },
+								host_ids: { ...hostIdsSchema, minItems: 1 },
+								snapshot_id: { type: "string", maxLength: 40 },
+							},
+						},
+						req.body,
+					),
+				),
+			201,
+		),
+	);
+
+router
+	.route("/learning/profiles/upload")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		express.raw({ type: () => true, limit: "100mb" }),
+		handle((req, res) => internalLearningProfiles.upload(res.locals.access, rawBytes(req)), 201),
+	);
+
+router
+	.route("/learning/profiles/:profile_id/apply")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		handle(async (req, res) =>
+			internalLearningProfiles.apply(
+				res.locals.access,
+				String(req.params.profile_id),
+				await validator(
+					{ type: "object", additionalProperties: false, properties: { host_ids: hostIdsSchema } },
+					req.body ?? {},
+				),
+			),
+		),
+	);
+
+router
+	.route("/learning/profiles/:profile_id/download")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(async (req, res, next) => {
+		try {
+			const file = await internalLearningProfiles.download(res.locals.access, String(req.params.profile_id));
+			res.set("Content-Type", "application/gzip");
+			res.set("Content-Disposition", `attachment; filename="${file.name}"`);
+			res.send(file.content);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+router
+	.route("/learning/profiles/:profile_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["for_new_nodes"],
+					properties: { for_new_nodes: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalLearningProfiles.setForNewNodes(
+				res.locals.access,
+				String(req.params.profile_id),
+				data.for_new_nodes,
+			);
+		}),
+	)
+	.delete(handle((req, res) => internalLearningProfiles.remove(res.locals.access, String(req.params.profile_id))));
+
 // ------------------------------------------------------------------ servers of NginxionS (docs/adr/0012-nodes.md)
 
 const nodeSchema = {
@@ -3061,6 +3168,26 @@ router.get("/nodes/package", async (req, res, next) => {
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
 		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
 		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * GET /api/nginxions/nodes/learning/profile — without login: Authorization: Bearer <token of the node>; the signed file
+ *   of the learning profile for new nodes (step 15.5); 404 when there is none, 401 for an unknown or disabled node
+ */
+router.get("/nodes/learning/profile", async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.learningProfile(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		if (answer.none)
+			return res.status(404).send({ error: { code: 404, message: "No learning profile for new nodes" } });
+		res.type("application/gzip");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- a gzip file for the node, never HTML of the panel
+		res.send(answer.bytes);
 	} catch (err) {
 		next(err);
 	}

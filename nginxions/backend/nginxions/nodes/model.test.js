@@ -73,6 +73,8 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 		"package_error",
 		"package_skipped",
 		"package_version",
+		"profile_error",
+		"profile_version",
 		"uptime",
 		"version",
 	]);
@@ -81,6 +83,8 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 	assert.equal(info.uptime, null);
 	assert.equal(normalizeInfo({ agent: "hacked" }).agent, "");
 	assert.equal(normalizeInfo(null).version, "");
+	assert.equal(normalizeInfo({ profile_version: "x" }).profile_version, "");
+	assert.equal(normalizeInfo({ profile_version: "a".repeat(64) }).profile_version, "a".repeat(64));
 });
 
 test("the address of a manager: https, host and port only", () => {

@@ -2,7 +2,8 @@
 // through member.js against a real HTTPS server in front of it (the pin of the certificate of the manager included).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import http from "node:http";
 import https from "node:https";
 import { tmpdir } from "node:os";
@@ -50,7 +51,19 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			service.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${service.address().port}`));
 		});
 
+	// nginxions-control of this server (step 15.5): what the agent learned, and the state restored
+	const agentLearned = { files: [] };
+	const restored = [];
 	before(async () => {
+		process.env.NGINXIONS_CONTROL_URL = await fake("control", (req) => {
+			if (req.url === "/v1/agent/learning/snapshot") return [200, JSON.stringify(agentLearned)];
+			if (req.url === "/v1/agent/learning") return [200, "[]"];
+			return [200, '{"restored": true}'];
+		});
+		writeFileSync(path.join(dir, "control_token"), "t");
+		process.env.NGINXIONS_CONTROL_TOKEN_FILE = path.join(dir, "control_token");
+		process.env.NGINXIONS_LEARNING_PROFILE_DIR = path.join(dir, "profiles");
+		process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR = path.join(dir, "snapshots");
 		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req) =>
 			req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'],
 		);
@@ -125,6 +138,15 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 						answer = await nodes.register(body, "198.51.100.7");
 					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
 					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
+					if (req.url === "/api/nginxions/nodes/learning/profile") {
+						const profile = await nodes.learningProfile(token());
+						if (profile?.bytes) {
+							res.writeHead(200, { "Content-Type": "application/gzip" });
+							return res.end(profile.bytes);
+						}
+						res.writeHead(profile ? 404 : 401);
+						return res.end();
+					}
 					if (req.url === "/api/nginxions/nodes/heartbeat") {
 						answer = await nodes.heartbeat(token(), body.info, "198.51.100.7");
 					}
@@ -298,6 +320,94 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		const status = await member.default.status(ADMIN);
 		assert.ok(status.learning.last_ok_on);
 		assert.equal(status.learning.requests > 5, true);
+	});
+
+	test("a new node starts with the learning profile of its manager, never over what it learned", async () => {
+		const { default: profiles } = await import("../learning/profiles.js");
+		const gz = (text) => gzipSync(JSON.stringify(text)).toString("base64");
+		const [{ id: shop }] = await knex("proxy_host")
+			.insert({
+				created_on: new Date(),
+				modified_on: new Date(),
+				owner_user_id: 1,
+				is_deleted: 0,
+				domain_names: JSON.stringify(["shop.example.com"]),
+				forward_host: "upstream",
+				forward_port: 80,
+				enabled: 1,
+				meta: "{}",
+				locations: "[]",
+			})
+			.returning("id");
+		// what the agent of the manager learned: the shop (its API location too) and another site
+		agentLearned.files = [
+			{ asset: "shop.example.com", name: "5.data", content: gz({ learned: "shop" }) },
+			{ asset: "shop.example.com/api", name: "4.data", content: gz({ learned: "api" }) },
+			{ asset: "other.example.com", name: "5.data", content: gz({ learned: "other" }) },
+		];
+		await assert.rejects(() => profiles.create(VIEWER, { name: "shop", host_ids: [shop] }), /forbidden/);
+		await assert.rejects(() => profiles.create(ADMIN, { name: "a/b", host_ids: [shop] }), /name of the profile/);
+		const meta = await profiles.create(ADMIN, { name: "Shop prod", host_ids: [shop] });
+		assert.equal(meta.files, 2, "the files of the site only");
+		assert.equal(meta.own, true);
+		assert.deepEqual(meta.sites, [{ domains: ["shop.example.com"] }]);
+		// the file: downloaded, uploaded again is the same profile
+		const file = await profiles.download(ADMIN, meta.id);
+		await assert.rejects(() => profiles.upload(ADMIN, file.content), /here already/);
+		await assert.rejects(() => profiles.upload(ADMIN, Buffer.from("junk")), /not a learning profile/);
+
+		// the node serves the shop; the profile for new nodes is in its package, by version
+		const [row] = await nodes.list(ADMIN);
+		await nodes.setHosts(ADMIN, row.id, [shop]);
+		const { contentOf } = await import("./package.js");
+		assert.equal((await contentOf(row.id)).learning_profile, undefined);
+		await profiles.setForNewNodes(ADMIN, meta.id, true);
+		assert.deepEqual((await contentOf(row.id)).learning_profile, { id: meta.id, version: meta.version });
+
+		// the node has learned the API location of the shop itself: nothing of the shop is replaced
+		agentLearned.files = [{ asset: "shop.example.com/api", name: "4.data", content: gz({ own: 1 }) }];
+		learned.length = 0;
+		const state = await member.readState();
+		let change = await member.fetchProfile(state, { id: meta.id, version: meta.version });
+		assert.deepEqual(change, { profile_version: meta.version, profile_assets: 0, profile_error: "" });
+		assert.equal(learned.filter((r) => r.url === "/v1/agent/learning/restore").length, 0);
+
+		// a node that learned nothing of it: the site is filled, what else it learned stays
+		agentLearned.files = [{ asset: "blog.example.com", name: "5.data", content: gz({ own: 2 }) }];
+		change = await member.fetchProfile({ ...state, profile_version: "" }, { id: meta.id, version: meta.version });
+		assert.equal(change.profile_assets, 1, change.profile_error);
+		const restore = learned.find((r) => r.url === "/v1/agent/learning/restore");
+		assert.deepEqual(
+			JSON.parse(restore.body)
+				.files.map((f) => `${f.asset}/${f.name}`)
+				.sort(),
+			["blog.example.com/5.data", "shop.example.com/5.data", "shop.example.com/api/4.data"],
+		);
+		// the same version again: nothing fetched
+		assert.deepEqual(await member.fetchProfile({ ...state, profile_version: meta.version }, meta), {});
+
+		// a profile signed by another key than the one the node pinned is refused
+		const other = await member.fetchProfile(
+			{
+				...state,
+				profile_version: "",
+				signing_key: (await import("node:crypto"))
+					.generateKeyPairSync("ed25519")
+					.publicKey.export({ type: "spki", format: "pem" }),
+			},
+			{ id: meta.id, version: meta.version },
+		);
+		assert.match(other.profile_error, /not signed by the manager/);
+
+		// applied here, for the sites of these hosts; then off for new nodes and deleted
+		agentLearned.files = [];
+		const applied = await profiles.apply(ADMIN, meta.id, { host_ids: [shop] });
+		assert.deepEqual(applied.assets, ["shop.example.com"]);
+		await profiles.setForNewNodes(ADMIN, meta.id, false);
+		assert.equal(await nodes.learningProfile("x"), null);
+		await nodes.setHosts(ADMIN, row.id, []);
+		await profiles.remove(ADMIN, meta.id);
+		assert.deepEqual((await profiles.list(ADMIN)).profiles, []);
 	});
 
 	test("another certificate on the address of the manager: the node sends nothing", async () => {

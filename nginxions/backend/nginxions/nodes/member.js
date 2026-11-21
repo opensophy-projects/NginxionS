@@ -158,6 +158,9 @@ const statusOf = (state) =>
 				last_ok_on: state.last_ok_on ?? null,
 				last_error: state.last_error ?? "",
 				disabled: Boolean(state.disabled),
+				profile_version: state.profile_version ?? "",
+				profile_assets: state.profile_assets ?? 0,
+				profile_error: state.profile_error ?? "",
 			}
 		: { joined: false };
 
@@ -178,6 +181,8 @@ const ownInfo = async (state) => {
 		package_version: state?.applied_version ?? "",
 		package_skipped: state?.package_skipped ?? null,
 		package_error: state?.package_error ?? "",
+		profile_version: state?.profile_version ?? "",
+		profile_error: state?.profile_error ?? "",
 	};
 };
 
@@ -233,6 +238,40 @@ const lastContent = async () => {
 	}
 };
 
+/** the most of a learning profile file (gzip): a snapshot of learning is at most 64 MB unpacked */
+const MAX_PROFILE_BYTES = 96 * 1024 * 1024;
+const PROFILE_RETRY_MS = 10 * 60 * 1000;
+
+/**
+ * The learning profile for new nodes the package names (step 15.5): fetched once per version, its signature checked
+ * against the pinned key of the manager; it fills the sites this node has learned nothing of yet (the agent restarts
+ * then). An error is told and the next package tries again.
+ * @param {object} state
+ * @param {{id: string, version: string}|undefined} ref
+ * @returns {Promise<object>} what changes in the state
+ */
+export const fetchProfile = async (state, ref, now = Date.now()) => {
+	if (!ref?.version || ref.version === state.profile_version) return {};
+	// after an error: again in 10 minutes, not with each heartbeat (the file may be tens of MB)
+	if (state.profile_error && now - new Date(state.profile_tried_on ?? 0).getTime() < PROFILE_RETRY_MS) return {};
+	try {
+		const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/learning/profile", {
+			method: "GET",
+			token: decrypt(state.token_enc),
+			pin: state.fingerprint,
+			maxAnswer: MAX_PROFILE_BYTES,
+			timeoutMs: 120000,
+		});
+		if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the learning profile`);
+		const { applyFromManager } = await import("../learning/profiles.js");
+		const { assets } = await applyFromManager(answer.body, state.signing_key);
+		return { profile_version: ref.version, profile_assets: assets.length, profile_error: "" };
+	} catch (err) {
+		logger.warn(`Cluster: the learning profile: ${err.message}`);
+		return { profile_error: String(err.message).slice(0, 300), profile_tried_on: new Date(now) };
+	}
+};
+
 /**
  * The package of the manager: fetched, its signature checked against the pinned key, applied; a package nginx
  * refuses is replaced by the one before (the node keeps serving what worked) and is not tried again.
@@ -264,6 +303,7 @@ export const sync = async (state) => {
 			failed_version: "",
 			package_error: "",
 			package_skipped: result.skipped.length,
+			...(await fetchProfile(state, content.learning_profile)),
 		};
 	} catch (err) {
 		return { package_error: String(err.message).slice(0, 300) };
@@ -296,6 +336,10 @@ export const beat = async () => {
 			const version = answer.body?.package_version;
 			if (version && version !== next.applied_version && version !== next.failed_version) {
 				next = { ...next, ...(await sync(next)) };
+			}
+			// a profile that failed before (the manager was busy, the agent down): tried again with a later heartbeat
+			if (next.profile_error && next.applied_version) {
+				next = { ...next, ...(await fetchProfile(next, (await lastContent()).learning_profile)) };
 			}
 			next = { ...next, ...(await forwardEvents(next)) };
 			await writeState(next);

@@ -445,6 +445,28 @@ export const snapshots = {
 	keepAuto: 7,
 };
 
+export const profiles = {
+	profiles: [
+		{
+			id: "p-0123456789ab",
+			name: "Shop prod",
+			createdOn: now,
+			origin: "taken",
+			source: { server: "manager", snapshot: null },
+			sites: [{ domains: ["app.example.com"] }],
+			assets: [{ asset: "app.example.com", params: 4, values: 20 }],
+			files: 2,
+			size: 2048,
+			version: "a".repeat(64),
+			fingerprint: Array(32).fill("AB").join(":"),
+			own: true,
+			forNewNodes: true,
+			appliedOn: null,
+		},
+	],
+	fingerprint: Array(32).fill("AB").join(":"),
+};
+
 export const learned = {
 	id: 1,
 	name: "app.example.com",

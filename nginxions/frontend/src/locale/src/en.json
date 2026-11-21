@@ -1385,6 +1385,12 @@
 	"nginxions.cluster.node": {
 		"defaultMessage": "This node"
 	},
+	"nginxions.cluster.profile": {
+		"defaultMessage": "Learning profile"
+	},
+	"nginxions.cluster.profile-applied": {
+		"defaultMessage": "Started with the profile of the manager: {count, plural, =0 {nothing to fill, this server had learned its sites already} one {# site filled} other {# sites filled}}"
+	},
 	"nginxions.cluster.standalone": {
 		"defaultMessage": "This server works on its own."
 	},
@@ -3406,6 +3412,93 @@
 	},
 	"nginxions.learning.prevent.done": {
 		"defaultMessage": "{name}: prevention on"
+	},
+	"nginxions.learning.profiles.applied": {
+		"defaultMessage": "The profile is applied, the agent restarts"
+	},
+	"nginxions.learning.profiles.applied-on": {
+		"defaultMessage": "applied {time}"
+	},
+	"nginxions.learning.profiles.apply": {
+		"defaultMessage": "Apply"
+	},
+	"nginxions.learning.profiles.apply.text": {
+		"defaultMessage": "What the agent learned of the sites of \"{name}\" ({sites} site(s)) is replaced by the profile; the other sites stay as they are. A snapshot of the state now is taken first. The agent restarts: about a minute without the WAF answering."
+	},
+	"nginxions.learning.profiles.apply.title": {
+		"defaultMessage": "Apply the learning profile?"
+	},
+	"nginxions.learning.profiles.create": {
+		"defaultMessage": "Make the profile"
+	},
+	"nginxions.learning.profiles.created": {
+		"defaultMessage": "The profile is made"
+	},
+	"nginxions.learning.profiles.delete.text": {
+		"defaultMessage": "The profile \"{name}\" is deleted. Nodes that started with it keep what it gave them."
+	},
+	"nginxions.learning.profiles.delete.title": {
+		"defaultMessage": "Delete the profile?"
+	},
+	"nginxions.learning.profiles.empty": {
+		"defaultMessage": "No profiles yet."
+	},
+	"nginxions.learning.profiles.for-new-nodes": {
+		"defaultMessage": "for new nodes"
+	},
+	"nginxions.learning.profiles.for-new-nodes.off": {
+		"defaultMessage": "Stop giving to new nodes"
+	},
+	"nginxions.learning.profiles.for-new-nodes.on": {
+		"defaultMessage": "Give to new nodes"
+	},
+	"nginxions.learning.profiles.from": {
+		"defaultMessage": "Learned state"
+	},
+	"nginxions.learning.profiles.from.now": {
+		"defaultMessage": "As the agent knows it now"
+	},
+	"nginxions.learning.profiles.from.snapshot": {
+		"defaultMessage": "Snapshot of {time}"
+	},
+	"nginxions.learning.profiles.key": {
+		"defaultMessage": "Key of this server: {fingerprint}"
+	},
+	"nginxions.learning.profiles.name": {
+		"defaultMessage": "Name"
+	},
+	"nginxions.learning.profiles.new": {
+		"defaultMessage": "New profile"
+	},
+	"nginxions.learning.profiles.open": {
+		"defaultMessage": "Learning profiles"
+	},
+	"nginxions.learning.profiles.origin": {
+		"defaultMessage": "Made by"
+	},
+	"nginxions.learning.profiles.origin.import": {
+		"defaultMessage": "Uploaded, made on {server}"
+	},
+	"nginxions.learning.profiles.origin.own": {
+		"defaultMessage": "This server ({server})"
+	},
+	"nginxions.learning.profiles.signed": {
+		"defaultMessage": "Signed: {fingerprint}…"
+	},
+	"nginxions.learning.profiles.sites": {
+		"defaultMessage": "Sites"
+	},
+	"nginxions.learning.profiles.text": {
+		"defaultMessage": "A profile is what the agent learned for chosen sites, signed by this server. Apply it here, take its file to another NginxionS (a closed network too), or give it to new nodes: they start with the learned norm instead of learning from nothing, then learn on with the others. A new node fills only the sites it has learned nothing of yet."
+	},
+	"nginxions.learning.profiles.title": {
+		"defaultMessage": "Learning profiles"
+	},
+	"nginxions.learning.profiles.upload": {
+		"defaultMessage": "Upload a profile"
+	},
+	"nginxions.learning.profiles.uploaded": {
+		"defaultMessage": "The profile is uploaded: its signature is valid"
 	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Queue"
