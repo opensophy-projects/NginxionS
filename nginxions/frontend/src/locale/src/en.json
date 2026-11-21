@@ -4559,6 +4559,21 @@
 	"nginxions.nodes.last-seen": {
 		"defaultMessage": "Last contact"
 	},
+	"nginxions.nodes.logs": {
+		"defaultMessage": "Logs"
+	},
+	"nginxions.nodes.logs.collect": {
+		"defaultMessage": "Collect fresh logs"
+	},
+	"nginxions.nodes.logs.collected": {
+		"defaultMessage": "Collected on the node {time}. Secrets are masked by the node."
+	},
+	"nginxions.nodes.logs.none": {
+		"defaultMessage": "The node has not sent its logs yet: ask for them."
+	},
+	"nginxions.nodes.logs.title": {
+		"defaultMessage": "Logs of {name}"
+	},
 	"nginxions.nodes.name": {
 		"defaultMessage": "Name"
 	},
@@ -4585,6 +4600,12 @@
 	},
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Waits for the node"
+	},
+	"nginxions.nodes.picker": {
+		"defaultMessage": "Server"
+	},
+	"nginxions.nodes.picker.this-server": {
+		"defaultMessage": "This server"
 	},
 	"nginxions.nodes.restart-agent": {
 		"defaultMessage": "Restart the agent"
@@ -4643,6 +4664,15 @@
 	"nginxions.nodes.server": {
 		"defaultMessage": "Server"
 	},
+	"nginxions.nodes.service.crowdsec": {
+		"defaultMessage": "CrowdSec"
+	},
+	"nginxions.nodes.service.openappsec": {
+		"defaultMessage": "Agent open-appsec"
+	},
+	"nginxions.nodes.service.unknown": {
+		"defaultMessage": "not told yet"
+	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "State"
 	},
@@ -4669,6 +4699,9 @@
 	},
 	"nginxions.nodes.version": {
 		"defaultMessage": "version {version}"
+	},
+	"nginxions.nodes.view.hint": {
+		"defaultMessage": "What the node tells with its heartbeat (every 30 s). Its policies and settings come from this server with its package; its events are in Events with the filter of the node."
 	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Problem"

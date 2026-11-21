@@ -30,6 +30,7 @@ import {
 	putHostCode,
 } from "../../policy/api";
 import { type CodeCheck, CodePane } from "../../policy/CodePane";
+import { NodePicker, NodeServiceView } from "../../nodes/NodeView";
 import { useCan } from "../../rbac/hooks";
 import hostStyles from "../Hosts/Hosts.module.css";
 import WafAgent from "../WafAgent";
@@ -360,6 +361,8 @@ function AgentOpenappsecPage() {
 	const tabs = ["policies", ...(can("waf_learning") ? ["learning"] : []), "agent"] as const;
 	const asked = params.get("tab") || "";
 	const tab = (tabs as readonly string[]).includes(asked) ? asked : "policies";
+	// a node of this manager instead of this server
+	const [nodeId, setNodeId] = useState(0);
 	return (
 		<div className={hostStyles.page}>
 			<div className={hostStyles.head}>
@@ -371,8 +374,10 @@ function AgentOpenappsecPage() {
 						<T id="nginxions.agent.openappsec.description" />
 					</p>
 				</div>
+				<NodePicker value={nodeId} onChange={setNodeId} />
 			</div>
-			<ul className="nav nav-tabs">
+			{nodeId ? <NodeServiceView nodeId={nodeId} service="openappsec" /> : null}
+			<ul className={cn("nav nav-tabs", { "d-none": !!nodeId })}>
 				{tabs.map((x) => (
 					<li className="nav-item" key={x}>
 						<button
@@ -385,7 +390,7 @@ function AgentOpenappsecPage() {
 					</li>
 				))}
 			</ul>
-			{tab === "policies" ? <PoliciesTab /> : tab === "learning" ? <LearningTab /> : <WafAgent />}
+			{nodeId ? null : tab === "policies" ? <PoliciesTab /> : tab === "learning" ? <LearningTab /> : <WafAgent />}
 		</div>
 	);
 }

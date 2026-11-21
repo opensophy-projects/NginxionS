@@ -200,6 +200,35 @@ const statusOf = (state) =>
 			}
 		: { joined: false };
 
+/** the containers of the stack of this server and their state ({} when nginxions-control does not answer) */
+const servicesState = async () => {
+	try {
+		const control = (await import("../control/client.js")).default;
+		const list = await control.listServices();
+		return Object.fromEntries(list.map((s) => [s.service, s.state]));
+	} catch {
+		return {};
+	}
+};
+
+/** the logs of the stack of this server for the manager: the last lines of each service, secrets masked */
+const collectLogs = async () => {
+	const control = (await import("../control/client.js")).default;
+	const { knownSecrets, redact } = await import("../redact.js");
+	const { NODE_LOG_LINES } = await import("./model.js");
+	const secrets = knownSecrets();
+	const logs = {};
+	for (const { service } of await control.listServices()) {
+		try {
+			const lines = await control.getLogs(service, { tail: NODE_LOG_LINES });
+			logs[service] = lines.map((l) => ({ stream: l.stream, line: redact(l.line, secrets) }));
+		} catch (err) {
+			logs[service] = [{ stream: "stderr", line: `the logs could not be read: ${err.message}` }];
+		}
+	}
+	return logs;
+};
+
 /** what the node tells the manager in its heartbeat */
 const ownInfo = async (state) => {
 	let hosts = null;
@@ -223,6 +252,7 @@ const ownInfo = async (state) => {
 		model_error: state?.model_error ?? "",
 		command_done: state?.command_done ?? "",
 		command_error: state?.command_error ?? "",
+		services: await servicesState(),
 	};
 };
 
@@ -363,13 +393,27 @@ export const syncModel = async (state, ref, io = {}) => {
  * @param {{restartAgent?: Function}} [io]  replaced in tests
  * @returns {Promise<object>} what changes in the state
  */
-export const runCommand = async (command, io = {}) => {
+export const runCommand = async (command, state, io = {}) => {
 	const restartAgent =
 		io.restartAgent ?? (async () => (await import("../control/client.js")).default.restartService("openappsec", 1));
+	const logsOf = io.collectLogs ?? collectLogs;
 	try {
-		if (command.action !== "restart_agent") throw new Error(`unknown command: ${command.action}`);
-		await restartAgent();
-		logger.info("Cluster: the manager asked to restart the agent: done");
+		if (command.action === "restart_agent") {
+			await restartAgent();
+		} else if (command.action === "collect_logs") {
+			// the logs go to the manager over the pinned channel; it keeps the last ones of each node
+			// bytes, not JSON: the JSON parser of the panel takes 100 KB, the logs of a stack are more
+			const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/logs", {
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				body: Buffer.from(JSON.stringify({ logs: await logsOf() })),
+				headers: { "Content-Type": "application/octet-stream" },
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the logs`);
+		} else {
+			throw new Error(`unknown command: ${command.action}`);
+		}
+		logger.info(`Cluster: the manager asked ${command.action}: done`);
 		return { command_done: command.id, command_error: "" };
 	} catch (err) {
 		logger.warn(`Cluster: the command of the manager ${command.action}: ${err.message}`);
@@ -458,7 +502,7 @@ export const beat = async () => {
 			// a command of the manager, once per id
 			const command = answer.body?.command;
 			if (command?.id && /^[0-9a-f]{16}$/.test(command.id) && command.id !== next.command_done) {
-				next = { ...next, ...(await runCommand(command)) };
+				next = { ...next, ...(await runCommand(command, next)) };
 			}
 			next = { ...next, ...(await forwardEvents(next)) };
 			await writeState(next);

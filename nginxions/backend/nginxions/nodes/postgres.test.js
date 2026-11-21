@@ -58,12 +58,28 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		process.env.NGINXIONS_CONTROL_URL = await fake("control", (req) => {
 			if (req.url === "/v1/agent/learning/snapshot") return [200, JSON.stringify(agentLearned)];
 			if (req.url === "/v1/agent/learning") return [200, "[]"];
+			if (req.url === "/v1/services") {
+				return [
+					200,
+					JSON.stringify([
+						{ service: "openappsec", state: "running" },
+						{ service: "crowdsec", state: "exited" },
+					]),
+				];
+			}
+			if (/^\/v1\/services\/[a-z]+\/logs/.test(req.url)) {
+				return [
+					200,
+					JSON.stringify([{ stream: "stdout", line: `a line of ${req.url.split("/")[3]} token=SECRET` }]),
+				];
+			}
 			return [200, '{"restored": true}'];
 		});
 		writeFileSync(path.join(dir, "control_token"), "t");
 		process.env.NGINXIONS_CONTROL_TOKEN_FILE = path.join(dir, "control_token");
 		process.env.NGINXIONS_LEARNING_PROFILE_DIR = path.join(dir, "profiles");
 		process.env.NGINXIONS_APPSEC_MODEL_DIR = path.join(dir, "model");
+		process.env.NGINXIONS_NODE_LOGS_DIR = path.join(dir, "node-logs");
 		process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR = path.join(dir, "snapshots");
 		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req) =>
 			req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'],
@@ -139,6 +155,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 						answer = await nodes.register(body, "198.51.100.7");
 					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
 					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
+					if (req.url === "/api/nginxions/nodes/logs") answer = await nodes.storeLogs(token(), body.logs);
 					if (req.url === "/api/nginxions/nodes/model") {
 						const model = await nodes.wafModel(token());
 						if (model?.file) {
@@ -276,6 +293,16 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.equal((await nodes.list(ADMIN))[0].command, null);
 		const [done] = await nodes.rollout(VIEWER);
 		assert.deepEqual([done.kind, done.version, done.result], ["command", "restart_agent", "applied"]);
+		// the services of the node in its heartbeat; its logs on demand, collected with the next heartbeat
+		assert.deepEqual((await nodes.list(ADMIN))[0].info.services, { openappsec: "running", crowdsec: "exited" });
+		assert.equal(await nodes.logs(ADMIN, row.id), null);
+		await nodes.command(ADMIN, row.id, "collect_logs");
+		await member.beat();
+		const logs = await nodes.logs(ADMIN, row.id);
+		assert.deepEqual(Object.keys(logs.logs).sort(), ["crowdsec", "openappsec"]);
+		assert.match(logs.logs.openappsec[0].line, /^a line of openappsec/);
+		await assert.rejects(() => nodes.logs(VIEWER, row.id), /forbidden: services:view/);
+		assert.equal(await nodes.storeLogs("n-unknown.token", {}), null);
 		// a manager with a node: the learning of the cluster from its storage (empty here)
 		assert.deepEqual(await nodes.clusterLearning(VIEWER), { available: true, assets: [], error: "" });
 	});

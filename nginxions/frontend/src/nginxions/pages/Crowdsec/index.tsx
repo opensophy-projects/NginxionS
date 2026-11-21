@@ -23,6 +23,7 @@ import { showBanModal } from "../../crowdsec/BanModal";
 import { originLabel, t } from "../../crowdsec/labels";
 import styles from "../../pki/Pki.module.css";
 import { CodePane } from "../../policy/CodePane";
+import { NodePicker, NodeServiceView } from "../../nodes/NodeView";
 import { useCan } from "../../rbac/hooks";
 import agentStyles from "../AgentOpenappsec/Agent.module.css";
 import hostStyles from "../Hosts/Hosts.module.css";
@@ -286,6 +287,8 @@ function CrowdsecPage({ place }: { place: Place }) {
 		if (tabs.includes(x)) setParams(x === tabs[0] ? {} : { tab: x }, { replace: true });
 		else navigate(`${place === "agent" ? "/analytics/blocks" : "/crowdsec"}?tab=${x}`);
 	};
+	// a node of this manager instead of this server (Agents → CrowdSec only)
+	const [nodeId, setNodeId] = useState(0);
 	const overview = useCrowdsec({ refetchInterval: 30000 });
 	const settings = useCrowdsecSettings();
 	const refresh = () => {
@@ -328,7 +331,8 @@ function CrowdsecPage({ place }: { place: Place }) {
 					</p>
 				</div>
 				<div className={hostStyles.toolbar}>
-					{can("crowdsec", "decide") && (
+					{place === "agent" && <NodePicker value={nodeId} onChange={setNodeId} />}
+					{can("crowdsec", "decide") && !nodeId && (
 						<button
 							type="button"
 							className={cn("btn btn-primary btn-sm", hostStyles.add)}
@@ -340,63 +344,71 @@ function CrowdsecPage({ place }: { place: Place }) {
 				</div>
 			</div>
 
-			{!data.lapi.healthy && (
-				<Alert variant="danger" className="mb-0">
-					<T id="nginxions.crowdsec.lapi.down.text" data={{ error: data.lapi.error }} />{" "}
-					<Link to="/system/services">
-						<T id="nginxions.crowdsec.open-services" />
-					</Link>
-				</Alert>
-			)}
-			{data.pending.length > 0 && can("crowdsec", "manage") && (
-				<Alert variant="warning" className="mb-0 d-flex align-items-center gap-3">
-					<span>
-						<T id="nginxions.crowdsec.settings.pending" data={{ files: data.pending.join(", ") }} />
-					</span>
-					<button
-						type="button"
-						className="btn btn-sm ms-auto"
-						onClick={async () => {
-							try {
-								await applySettings();
-								showSuccess(t("nginxions.crowdsec.settings.applied"));
-							} catch (err: any) {
-								showError(err.message);
-							}
-							refresh();
-						}}
-					>
-						<T id="nginxions.crowdsec.apply" />
-					</button>
-				</Alert>
-			)}
+			{nodeId ? (
+				<NodeServiceView nodeId={nodeId} service="crowdsec" />
+			) : (
+				<>
+					{!data.lapi.healthy && (
+						<Alert variant="danger" className="mb-0">
+							<T id="nginxions.crowdsec.lapi.down.text" data={{ error: data.lapi.error }} />{" "}
+							<Link to="/system/services">
+								<T id="nginxions.crowdsec.open-services" />
+							</Link>
+						</Alert>
+					)}
+					{data.pending.length > 0 && can("crowdsec", "manage") && (
+						<Alert variant="warning" className="mb-0 d-flex align-items-center gap-3">
+							<span>
+								<T id="nginxions.crowdsec.settings.pending" data={{ files: data.pending.join(", ") }} />
+							</span>
+							<button
+								type="button"
+								className="btn btn-sm ms-auto"
+								onClick={async () => {
+									try {
+										await applySettings();
+										showSuccess(t("nginxions.crowdsec.settings.applied"));
+									} catch (err: any) {
+										showError(err.message);
+									}
+									refresh();
+								}}
+							>
+								<T id="nginxions.crowdsec.apply" />
+							</button>
+						</Alert>
+					)}
 
-			{place === "agent" && <Summary data={data} />}
+					{place === "agent" && <Summary data={data} />}
 
-			<ul className="nav nav-tabs flex-nowrap overflow-auto">
-				{tabs.map((x) => (
-					<li className="nav-item" key={x}>
-						<button
-							type="button"
-							className={cn("nav-link text-nowrap", { active: tab === x })}
-							onClick={() => go(x)}
-						>
-							<T id={`nginxions.crowdsec.tab.${x}`} />
-						</button>
-					</li>
-				))}
-			</ul>
+					<ul className="nav nav-tabs flex-nowrap overflow-auto">
+						{tabs.map((x) => (
+							<li className="nav-item" key={x}>
+								<button
+									type="button"
+									className={cn("nav-link text-nowrap", { active: tab === x })}
+									onClick={() => go(x)}
+								>
+									<T id={`nginxions.crowdsec.tab.${x}`} />
+								</button>
+							</li>
+						))}
+					</ul>
 
-			{tab === "overview" && <OverviewTab data={data} go={go} />}
-			{tab === "decisions" && <DecisionsTab refresh={refresh} />}
-			{tab === "alerts" && <AlertsTab initialQuery={params.get("q") ?? ""} refresh={refresh} />}
-			{tab === "triggers" && <AgentTriggersTab refresh={refresh} />}
-			{tab === "blocklists" && <BlocklistsTab shareEnabled={!!settings.data?.shareEnabled} refresh={refresh} />}
-			{tab === "hub" && <HubTab onlineHub={!!settings.data?.onlineHub} refresh={refresh} />}
-			{tab === "settings" && settings.data && (
-				<SettingsView data={settings.data} refresh={refresh} manage={can("crowdsec", "manage")} />
+					{tab === "overview" && <OverviewTab data={data} go={go} />}
+					{tab === "decisions" && <DecisionsTab refresh={refresh} />}
+					{tab === "alerts" && <AlertsTab initialQuery={params.get("q") ?? ""} refresh={refresh} />}
+					{tab === "triggers" && <AgentTriggersTab refresh={refresh} />}
+					{tab === "blocklists" && (
+						<BlocklistsTab shareEnabled={!!settings.data?.shareEnabled} refresh={refresh} />
+					)}
+					{tab === "hub" && <HubTab onlineHub={!!settings.data?.onlineHub} refresh={refresh} />}
+					{tab === "settings" && settings.data && (
+						<SettingsView data={settings.data} refresh={refresh} manage={can("crowdsec", "manage")} />
+					)}
+					{tab === "registry" && <RegistryTab />}
+				</>
 			)}
-			{tab === "registry" && <RegistryTab />}
 		</div>
 	);
 }
