@@ -217,6 +217,8 @@ export interface LearningSnapshot {
 	userId: number;
 	size: number;
 	files: number;
+	/** files of the learning put together from the nodes (a manager with nodes), restored with the snapshot */
+	cluster?: number;
 	assets: { asset: string; params: number; values: number }[];
 	shift: LearningShift[];
 	comparedWith: string | null;

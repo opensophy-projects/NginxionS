@@ -11,9 +11,9 @@ import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { setWafHost, simulateWafHost } from "../api";
 import { showConfirmModal } from "../modals/ConfirmModal";
-import { SimulationNote } from "../policy/Review";
-import eventStyles from "../pages/WafEvents/Events.module.css";
 import hostStyles from "../pages/Hosts/Hosts.module.css";
+import eventStyles from "../pages/WafEvents/Events.module.css";
+import { SimulationNote } from "../policy/Review";
 import { useCan } from "../rbac/hooks";
 import { SearchField } from "../ui/SearchField";
 import { dateTime, timeAgo } from "../ui/time";
@@ -21,9 +21,9 @@ import {
 	type Decision,
 	getLabels,
 	getLearningHosts,
+	getLearningSnapshots,
 	getQueue,
 	type LearningHost,
-	getLearningSnapshots,
 	type QueueGroup,
 	type Reason,
 	recentShift,
@@ -32,9 +32,9 @@ import {
 } from "./api";
 import { showLabelModal } from "./LabelModal";
 import { showLearnedModal } from "./LearnedModal";
+import styles from "./Learning.module.css";
 import { ShiftList, SNAPSHOTS_KEY, showSnapshotsModal } from "./SnapshotsModal";
 import { showStartTrialModal, showTrialReportModal } from "./TrialModal";
-import styles from "./Learning.module.css";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 25;
