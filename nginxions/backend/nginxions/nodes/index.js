@@ -21,6 +21,7 @@ import {
 	newToken,
 	newUid,
 	normalizeInfo,
+	rolloutOf,
 	normalizeLabels,
 	sameHash,
 	stateOf,
@@ -94,6 +95,10 @@ const issueCode = async (id, uid) => {
 		.update({ code_hash: hash(code), code_expires_on: expires, modified_on: new Date() });
 	return { code, code_expires_on: expires };
 };
+
+const ROLLOUT_TABLE = "nginxions_node_rollout";
+/** the rollout is kept this long */
+const ROLLOUT_KEEP_DAYS = 180;
 
 /** a node with this token, active; null otherwise */
 const nodeOfToken = async (token) => {
@@ -286,13 +291,22 @@ const internalNodes = {
 		const row = await nodeOfToken(token);
 		if (!row) return null;
 		const now = new Date();
+		const next = normalizeInfo(info);
 		await db()(TABLE)
 			.where({ id: row.id })
 			.update({
 				last_seen_on: now,
 				address: String(address).slice(0, 64),
-				info: JSON.stringify(normalizeInfo(info)),
+				info: JSON.stringify(next),
 			});
+		// what the node applied (or failed) since its heartbeat before: the rollout in "Agents → Nodes"
+		const rollout = rolloutOf(parse(row.info) ?? {}, next);
+		if (rollout.length) {
+			await db()(ROLLOUT_TABLE).insert(rollout.map((r) => ({ ...r, node_id: row.id, created_on: now })));
+			await db()(ROLLOUT_TABLE)
+				.where("created_on", "<", new Date(now.getTime() - ROLLOUT_KEEP_DAYS * 86400000))
+				.delete();
+		}
 		const pkg = await packageOf(row.id);
 		return {
 			uid: row.uid,
@@ -371,6 +385,24 @@ const internalNodes = {
 	learningSync: async (token, body) => {
 		const row = await nodeOfToken(token);
 		return row ? forwardSync(body) : null;
+	},
+
+	/**
+	 * The rollout to the nodes, the newest first: what each applied of this manager (a package, the model of the agent,
+	 * a learning profile) or what failed.
+	 * @param {Access} access
+	 * @param {{node_id?: number, limit?: number}} [query]
+	 */
+	rollout: async (access, query = {}) => {
+		await access.can("nodes:view");
+		let rows = db()(ROLLOUT_TABLE)
+			.join(TABLE, `${TABLE}.id`, `${ROLLOUT_TABLE}.node_id`)
+			.select(`${ROLLOUT_TABLE}.*`, `${TABLE}.name as node_name`)
+			.orderBy(`${ROLLOUT_TABLE}.created_on`, "desc")
+			.orderBy(`${ROLLOUT_TABLE}.id`, "desc")
+			.limit(Math.min(Math.max(Number(query.limit) || 200, 1), 1000));
+		if (query.node_id) rows = rows.where(`${ROLLOUT_TABLE}.node_id`, query.node_id);
+		return rows;
 	},
 
 	/** the proxy hosts a node serves (ids of this manager) */

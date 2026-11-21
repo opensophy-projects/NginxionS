@@ -718,52 +718,66 @@ export interface ClusterNode {
 		hosts?: number | null;
 		uptime?: number | null;
 		agent?: string;
-		package_version?: string;
-		package_skipped?: number | null;
-		package_error?: string;
+		packageVersion?: string;
+		packageSkipped?: number | null;
+		packageError?: string;
 	};
-	host_ids: number[];
-	created_on: string;
-	registered_on: string | null;
-	last_seen_on: string | null;
-	code_expires_on: string | null;
+	hostIds: number[];
+	createdOn: string;
+	registeredOn: string | null;
+	lastSeenOn: string | null;
+	codeExpiresOn: string | null;
 }
 
 export interface NodeCode {
 	node: ClusterNode;
 	code: string;
-	code_expires_on: string;
+	codeExpiresOn: string;
 }
 
 export interface ClusterMember {
 	joined: boolean;
-	manager_url?: string;
+	managerUrl?: string;
 	uid?: string;
 	name?: string;
 	fingerprint?: string;
-	joined_on?: string;
-	last_ok_on?: string | null;
-	last_error?: string;
+	joinedOn?: string;
+	lastOkOn?: string | null;
+	lastError?: string;
 	disabled?: boolean;
 	/** the learning of the agent through the manager: what the relay of this node did last */
-	learning?: { requests: number; last_ok_on: string | null; last_error: string };
+	learning?: { requests: number; lastOkOn: string | null; lastError: string };
 	/** the learning profile for new nodes of the manager (step 15.5): its version, the sites it filled, its error */
-	profile_version?: string;
-	profile_assets?: number;
-	profile_error?: string;
+	profileVersion?: string;
+	profileAssets?: number;
+	profileError?: string;
 	/** the model of the agent taken from the manager (its SHA-256), its last error */
-	model_sha256?: string;
-	model_error?: string;
+	modelSha256?: string;
+	modelError?: string;
 }
 
 export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });
+
+/** what a node applied of this manager, or what failed (step 15.6) */
+export interface NodeRollout {
+	id: number;
+	nodeId: number;
+	nodeName: string;
+	kind: "package" | "model" | "profile";
+	version: string;
+	result: "applied" | "failed";
+	error: string;
+	createdOn: string;
+}
+export const getNodeRollout = (nodeId?: number): Promise<NodeRollout[]> =>
+	api.get({ url: "/nginxions/nodes/rollout", params: nodeId ? { nodeId: nodeId } : {} });
 export const addNode = (data: { name: string; labels?: string[] }): Promise<NodeCode> =>
 	api.post({ url: "/nginxions/nodes", data });
 export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/nginxions/nodes/${id}/code` });
 export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
 export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });
-export const joinCluster = (data: { manager_url: string; code: string }): Promise<ClusterMember> =>
+export const joinCluster = (data: { managerUrl: string; code: string }): Promise<ClusterMember> =>
 	api.put({ url: "/nginxions/cluster/member", data });
 export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
 

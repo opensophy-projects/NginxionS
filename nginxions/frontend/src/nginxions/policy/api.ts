@@ -114,7 +114,9 @@ export interface Simulation {
 	samples?: {
 		host: string;
 		uri: string;
-		source_ip: string;
+		/** the policy API answers in snake case; the client of the WAF of a host (learning, trial) in camel case */
+		source_ip?: string;
+		sourceIp?: string;
 		time: string;
 		confidence: string;
 		before: Verdict;

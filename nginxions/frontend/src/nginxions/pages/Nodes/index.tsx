@@ -18,6 +18,7 @@ import {
 	deleteNode,
 	getClusterLearning,
 	getClusterMember,
+	getNodeRollout,
 	getNodes,
 	joinCluster,
 	leaveCluster,
@@ -66,7 +67,7 @@ function CodeBox({ result, onClose }: { result: NodeCode; onClose: () => void })
 			<div className="small">
 				<T
 					id="nginxions.nodes.code.how"
-					data={{ address: window.location.origin, time: formatDateTime(result.code_expires_on, locale) }}
+					data={{ address: window.location.origin, time: formatDateTime(result.codeExpiresOn, locale) }}
 				/>
 			</div>
 		</Alert>
@@ -112,14 +113,14 @@ function HostsPicker({ hosts, picked }: { hosts: ProxyHost[]; picked: Set<number
 /** the package of a node: applied, refused, or not there yet */
 function PackageState({ node }: { node: ClusterNode }) {
 	if (node.status !== "active") return <>—</>;
-	if (node.info.package_error) {
+	if (node.info.packageError) {
 		return (
-			<span className="text-danger small" title={node.info.package_error}>
-				<T id="nginxions.nodes.package.error" data={{ error: node.info.package_error.slice(0, 80) }} />
+			<span className="text-danger small" title={node.info.packageError}>
+				<T id="nginxions.nodes.package.error" data={{ error: node.info.packageError.slice(0, 80) }} />
 			</span>
 		);
 	}
-	if (!node.info.package_version) {
+	if (!node.info.packageVersion) {
 		return (
 			<span className="text-secondary small">
 				<T id="nginxions.nodes.package.waiting" />
@@ -131,10 +132,10 @@ function PackageState({ node }: { node: ClusterNode }) {
 			<span className="badge bg-green-lt me-1">
 				<T id="nginxions.nodes.package.applied" />
 			</span>
-			<span className="text-secondary font-monospace">{node.info.package_version.slice(0, 12)}</span>
-			{!!node.info.package_skipped && (
+			<span className="text-secondary font-monospace">{node.info.packageVersion.slice(0, 12)}</span>
+			{!!node.info.packageSkipped && (
 				<div className="text-warning">
-					<T id="nginxions.nodes.package.skipped" data={{ count: node.info.package_skipped }} />
+					<T id="nginxions.nodes.package.skipped" data={{ count: node.info.packageSkipped }} />
 				</div>
 			)}
 		</span>
@@ -163,7 +164,7 @@ function NodesCard() {
 	});
 
 	const onHosts = (node: ClusterNode) => {
-		const picked = new Set(node.host_ids);
+		const picked = new Set(node.hostIds);
 		showConfirmModal({
 			tTitle: "nginxions.nodes.hosts.title",
 			tConfirm: "save",
@@ -342,11 +343,11 @@ function NodesCard() {
 										<span className={`badge bg-${STATE_COLORS[node.state]}-lt`}>
 											<T id={`nginxions.nodes.state.${node.state}`} />
 										</span>
-										{node.state === "pending" && node.code_expires_on && (
+										{node.state === "pending" && node.codeExpiresOn && (
 											<div className="text-secondary small mt-1">
 												<T
 													id="nginxions.nodes.code.until"
-													data={{ time: formatDateTime(node.code_expires_on, locale) }}
+													data={{ time: formatDateTime(node.codeExpiresOn, locale) }}
 												/>
 											</div>
 										)}
@@ -374,7 +375,7 @@ function NodesCard() {
 										<PackageState node={node} />
 									</td>
 									<td data-label={t("nginxions.nodes.last-seen")}>
-										{node.last_seen_on ? formatDateTime(node.last_seen_on, locale) : "—"}
+										{node.lastSeenOn ? formatDateTime(node.lastSeenOn, locale) : "—"}
 									</td>
 									<td className="text-nowrap nx-actions-row">
 										{node.status === "active" && (
@@ -387,7 +388,7 @@ function NodesCard() {
 												<IconServer size={16} className="me-1" />
 												<T
 													id="nginxions.nodes.hosts.button"
-													data={{ count: node.host_ids.length }}
+													data={{ count: node.hostIds.length }}
 												/>
 											</Button>
 										)}
@@ -440,7 +441,7 @@ function MemberCard() {
 		e.preventDefault();
 		setJoining(true);
 		try {
-			await joinCluster({ manager_url: managerUrl.trim(), code: code.trim() });
+			await joinCluster({ managerUrl: managerUrl.trim(), code: code.trim() });
 			setCode("");
 			showSuccess(t("nginxions.cluster.joined"));
 			refresh();
@@ -491,7 +492,7 @@ function MemberCard() {
 						<dt className="col-md-3">
 							<T id="nginxions.cluster.manager" />
 						</dt>
-						<dd className="col-md-9 font-monospace">{data.manager_url}</dd>
+						<dd className="col-md-9 font-monospace">{data.managerUrl}</dd>
 						<dt className="col-md-3">
 							<T id="nginxions.cluster.node" />
 						</dt>
@@ -506,8 +507,8 @@ function MemberCard() {
 							<T id="nginxions.cluster.last-ok" />
 						</dt>
 						<dd className="col-md-9">
-							{data.last_ok_on ? formatDateTime(data.last_ok_on, locale) : "—"}
-							{data.last_error && <div className="text-danger small">{data.last_error}</div>}
+							{data.lastOkOn ? formatDateTime(data.lastOkOn, locale) : "—"}
+							{data.lastError && <div className="text-danger small">{data.lastError}</div>}
 						</dd>
 						{data.learning && (
 							<>
@@ -515,18 +516,18 @@ function MemberCard() {
 									<T id="nginxions.cluster.learning" />
 								</dt>
 								<dd className="col-md-9">
-									{data.learning.last_ok_on ? (
+									{data.learning.lastOkOn ? (
 										<T
 											id="nginxions.cluster.learning-ok"
-											data={{ time: formatDateTime(data.learning.last_ok_on, locale) }}
+											data={{ time: formatDateTime(data.learning.lastOkOn, locale) }}
 										/>
 									) : (
 										<span className="text-secondary">
 											<T id="nginxions.cluster.learning-waiting" />
 										</span>
 									)}
-									{data.learning.last_error && (
-										<div className="text-danger small">{data.learning.last_error}</div>
+									{data.learning.lastError && (
+										<div className="text-danger small">{data.learning.lastError}</div>
 									)}
 									<div className="form-hint">
 										<T id="nginxions.cluster.learning-hint" />
@@ -534,37 +535,35 @@ function MemberCard() {
 								</dd>
 							</>
 						)}
-						{(data.model_sha256 || data.model_error) && (
+						{(data.modelSha256 || data.modelError) && (
 							<>
 								<dt className="col-md-3">
 									<T id="nginxions.cluster.model" />
 								</dt>
 								<dd className="col-md-9">
-									{data.model_sha256 && (
+									{data.modelSha256 && (
 										<T
 											id="nginxions.cluster.model-applied"
-											data={{ sha: data.model_sha256.slice(0, 12) }}
+											data={{ sha: data.modelSha256.slice(0, 12) }}
 										/>
 									)}
-									{data.model_error && <div className="text-danger small">{data.model_error}</div>}
+									{data.modelError && <div className="text-danger small">{data.modelError}</div>}
 								</dd>
 							</>
 						)}
-						{(data.profile_version || data.profile_error) && (
+						{(data.profileVersion || data.profileError) && (
 							<>
 								<dt className="col-md-3">
 									<T id="nginxions.cluster.profile" />
 								</dt>
 								<dd className="col-md-9">
-									{data.profile_version && (
+									{data.profileVersion && (
 										<T
 											id="nginxions.cluster.profile-applied"
-											data={{ count: data.profile_assets ?? 0 }}
+											data={{ count: data.profileAssets ?? 0 }}
 										/>
 									)}
-									{data.profile_error && (
-										<div className="text-danger small">{data.profile_error}</div>
-									)}
+									{data.profileError && <div className="text-danger small">{data.profileError}</div>}
 								</dd>
 							</>
 						)}
@@ -694,9 +693,110 @@ function LearningCard() {
 	);
 }
 
+/** the rollout to the nodes: what each applied of this manager (packages, the model, profiles), or what failed */
+function RolloutCard() {
+	const { locale } = useLocaleState();
+	const [nodeId, setNodeId] = useState(0);
+	const nodes = useQuery({ queryKey: ["nginxions-nodes"], queryFn: getNodes });
+	const { data, isLoading } = useQuery({
+		queryKey: ["nginxions-nodes-rollout", nodeId],
+		queryFn: () => getNodeRollout(nodeId || undefined),
+		refetchInterval: 30000,
+	});
+	if (!nodes.data?.length) return null;
+	return (
+		<div className="card mt-4">
+			<div className="card-header">
+				<h3 className="card-title">
+					<T id="nginxions.nodes.rollout.title" />
+				</h3>
+				<div className="card-actions">
+					<select
+						className="form-select form-select-sm"
+						aria-label={t("nginxions.nodes.rollout.node")}
+						value={nodeId}
+						onChange={(e) => setNodeId(Number(e.target.value))}
+					>
+						<option value={0}>{t("nginxions.nodes.rollout.all")}</option>
+						{nodes.data.map((n) => (
+							<option key={n.id} value={n.id}>
+								{n.name}
+							</option>
+						))}
+					</select>
+				</div>
+			</div>
+			<div className="card-body">
+				<p className="text-secondary">
+					<T id="nginxions.nodes.rollout.hint" />
+				</p>
+				{isLoading ? (
+					<LoadingPage noLogo />
+				) : !data?.length ? (
+					<p className="text-secondary mb-0">
+						<T id="nginxions.nodes.rollout.empty" />
+					</p>
+				) : (
+					<div className="table-responsive">
+						<table className="table table-vcenter table-sm">
+							<thead>
+								<tr>
+									<th>
+										<T id="nginxions.nodes.rollout.time" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.rollout.node" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.rollout.what" />
+									</th>
+									<th>
+										<T id="nginxions.nodes.rollout.result" />
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{data.map((r) => (
+									<tr key={r.id}>
+										<td className="text-nowrap">{formatDateTime(r.createdOn, locale)}</td>
+										<td>{r.nodeName}</td>
+										<td>
+											<T id={`nginxions.nodes.rollout.kind.${r.kind}`} />
+											{r.version && (
+												<span className="text-secondary font-monospace ms-2">
+													{r.version.slice(0, 12)}
+												</span>
+											)}
+										</td>
+										<td>
+											{r.result === "applied" ? (
+												<span className="badge bg-green-lt">
+													<T id="nginxions.nodes.rollout.applied" />
+												</span>
+											) : (
+												<>
+													<span className="badge bg-red-lt">
+														<T id="nginxions.nodes.rollout.failed" />
+													</span>
+													<div className="text-danger small">{r.error}</div>
+												</>
+											)}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 const Nodes = () => (
 	<HasPermission rbac="nodes" permission={VIEW} pageLoading loadingNoLogo>
 		<NodesCard />
+		<RolloutCard />
 		<LearningCard />
 		<MemberCard />
 	</HasPermission>

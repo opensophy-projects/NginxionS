@@ -254,6 +254,13 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await member.beat();
 		assert.equal((await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" })).length, 2);
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
+		// the rollout: the package the node applied, once (later heartbeats with the same version add nothing)
+		const rollout = await nodes.rollout(VIEWER);
+		assert.deepEqual(
+			rollout.map((r) => [r.kind, r.result, r.version, r.node_name]),
+			[["package", "applied", state.applied_version, "edge-1"]],
+		);
+		assert.deepEqual(await nodes.rollout(VIEWER, { node_id: row.id + 1000 }), []);
 	});
 
 	test("the agent of the node learns through the manager: its relay, the storage and smartsync there", async () => {
