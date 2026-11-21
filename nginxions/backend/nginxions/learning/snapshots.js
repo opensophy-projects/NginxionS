@@ -274,6 +274,8 @@ const internalLearningSnapshots = {
 	restore: async (access, id) => {
 		await canManage(access);
 		const payload = await loadSnapshot(id);
+		// the state of the cluster goes back too: the learning of every node changes
+		if (payload.cluster?.length) await access.can("waf_learning:sync");
 		const before = await takeSnapshot("before-restore", access.token.getUserId(0));
 		// the state of the cluster first (smartsync and the nodes read it from the storage), then this agent
 		const cluster = payload.cluster?.length ? await restoreClusterState(payload.cluster) : 0;

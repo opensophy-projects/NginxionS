@@ -77,7 +77,7 @@ function Hosts({
 	manage: boolean;
 	label: boolean;
 	restore: boolean;
-	/** the profile for new nodes (nodes:manage) */
+	/** the profile for new nodes (waf_learning:sync) */
 	nodes: boolean;
 }) {
 	const refresh = useRefresh();
@@ -853,7 +853,7 @@ export function LearningTab() {
 				manage={can("proxy_hosts", "manage")}
 				label={label}
 				restore={label && can("waf_policy", "manage")}
-				nodes={can("nodes", "manage")}
+				nodes={can("waf_learning", "sync")}
 			/>
 			<History label={label} />
 		</div>

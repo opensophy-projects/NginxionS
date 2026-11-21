@@ -6713,6 +6713,12 @@
 	"nginxions.rbac.action.revoke.desc": {
 		"defaultMessage": "Revoke certificates"
 	},
+	"nginxions.rbac.action.sync": {
+		"defaultMessage": "Learning of the cluster"
+	},
+	"nginxions.rbac.action.sync.desc": {
+		"defaultMessage": "The thresholds of smartsync, the learning profile for new nodes, a snapshot restored with the state of the cluster"
+	},
 	"nginxions.rbac.action.view": {
 		"defaultMessage": "View"
 	},

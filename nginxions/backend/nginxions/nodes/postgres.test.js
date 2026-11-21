@@ -184,7 +184,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			ratioThreshold: 0.8,
 		});
 		const next = { minSources: 4, minSourcesTypes: 12, minIntervals: 6, ratioThreshold: 0.7 };
-		await assert.rejects(() => clusterSettings.set(VIEWER, next), /forbidden: nodes:manage/);
+		await assert.rejects(() => clusterSettings.set(VIEWER, next), /forbidden: waf_learning:sync/);
 		assert.deepEqual(await clusterSettings.set(ADMIN, next), next);
 		assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "appsec", "nginxions-smartsync.json"), "utf8")), next);
 		await assert.rejects(() => clusterSettings.set(ADMIN, { ...next, minSources: 1 }), /sources 2–1000/);
