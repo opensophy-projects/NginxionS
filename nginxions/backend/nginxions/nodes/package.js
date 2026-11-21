@@ -77,7 +77,9 @@ export const hostIdsOf = async (nodeId) =>
 
 /** the content of the package of a node */
 export const contentOf = async (nodeId) => {
-	const hostIds = await hostIdsOf(nodeId);
+	// a node taken out of work serves nothing: no hosts (they stay given to it for when it is back)
+	const node = await db()("nginxions_node").where({ id: nodeId }).first("drained");
+	const hostIds = node?.drained ? [] : await hostIdsOf(nodeId);
 	const hosts = hostIds.length
 		? (await db()("proxy_host").whereIn("id", hostIds).where({ is_deleted: 0 }).orderBy("id")).map((r) =>
 				parsed("proxy_host", r),

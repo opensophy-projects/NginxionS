@@ -58,6 +58,8 @@ const toNode = (row, now = Date.now(), hostIds = []) => ({
 	last_seen_on: row.last_seen_on,
 	code_expires_on: row.status === "pending" ? row.code_expires_on : null,
 	host_ids: hostIds,
+	// taken out of work: its package has no hosts (step 15.6)
+	drained: Boolean(row.drained),
 	// a command waiting for the next heartbeat of the node (step 15.6)
 	command: row.command ? { action: row.command, on: row.command_on } : null,
 });
@@ -235,6 +237,23 @@ const internalNodes = {
 			.where({ id })
 			.update({ command: action, command_id: randomBytes(8).toString("hex"), command_on: new Date() });
 		await audit(access, "updated", id, { name: row.name, command: action });
+		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
+	},
+
+	/**
+	 * A node out of work and back (step 15.6): drained, its next package has no hosts and the node removes them; back,
+	 * the hosts given to it come back with the next package.
+	 * @param {Access} access
+	 * @param {number} id
+	 * @param {boolean} drained
+	 */
+	drain: async (access, id, drained) => {
+		await access.can("nodes:manage");
+		const row = await rowOf(id);
+		await db()(TABLE)
+			.where({ id })
+			.update({ drained: Boolean(drained), modified_on: new Date() });
+		await audit(access, "updated", id, { name: row.name, drained: Boolean(drained) });
 		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
 	},
 
