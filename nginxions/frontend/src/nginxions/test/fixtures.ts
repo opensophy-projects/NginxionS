@@ -650,6 +650,7 @@ export const node = {
 	registeredOn: now,
 	lastSeenOn: now,
 	codeExpiresOn: null,
+	drained: false,
 	command: null,
 };
 
