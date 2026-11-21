@@ -9,13 +9,14 @@
 #   waf-score        GoTestWAF against a protected host (scripts/test-waf-score.sh)
 #   upgrade          update from the published develop (scripts/test-upgrade.sh)
 #   chaos            failures of the parts of the stack (scripts/test-chaos.sh)
+#   cluster          a manager and two nodes on this machine (scripts/test-cluster.sh, step 15.7)
 #   dast             ZAP, Nuclei, testssl.sh, gixy (scripts/test-dast.sh)
 #
 #   NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/ci-stack.sh smoke-waf
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-suite="${1:?the test: smoke-waf, smoke-crowdsec, smoke-core, gui, waf-score, upgrade, chaos, dast}"
+suite="${1:?the test: smoke-waf, smoke-crowdsec, smoke-core, gui, waf-score, upgrade, chaos, cluster, dast}"
 # volumes and networks named after the test
 export COMPOSE_PROJECT_NAME="nginxions-$suite"
 
@@ -27,6 +28,7 @@ case "$suite" in
   waf-score) OUT="${OUT:-reports/waf}" exec scripts/test-waf-score.sh ;;
   upgrade) exec scripts/test-upgrade.sh ;;
   chaos) exec scripts/test-chaos.sh ;;
+  cluster) OUT="${OUT:-reports/cluster}" exec scripts/test-cluster.sh ;;
   dast) OUT="${OUT:-reports/dast}" exec scripts/test-dast.sh ;;
   *) echo "unknown test: $suite" >&2; exit 2 ;;
 esac
