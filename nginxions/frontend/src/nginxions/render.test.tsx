@@ -256,6 +256,7 @@ const MODALS: Record<string, unknown[]> = {
 	showCsrModal: [],
 	showAcmeLogModal: [],
 	showSnapshotsModal: [{ label: true, manage: true }],
+	showProfilesModal: [{ label: true, manage: true, nodes: true }],
 	showLabelModal: [{ group: f.queueGroup, decision: "benign", onDone: noop }],
 	showStartTrialModal: [{ host: f.learningHost, onDone: noop }],
 	showTrialReportModal: [{ host: f.learningHost, manage: true, onDone: noop }],

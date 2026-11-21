@@ -735,6 +735,10 @@ export interface ClusterMember {
 	disabled?: boolean;
 	/** the learning of the agent through the manager: what the relay of this node did last */
 	learning?: { requests: number; last_ok_on: string | null; last_error: string };
+	/** the learning profile for new nodes of the manager (step 15.5): its version, the sites it filled, its error */
+	profile_version?: string;
+	profile_assets?: number;
+	profile_error?: string;
 }
 
 export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });

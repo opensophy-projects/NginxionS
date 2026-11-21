@@ -84,6 +84,7 @@ const ROUTES: [RegExp, unknown][] = [
 	[/\/nginxions\/block-page$/, f.blockPage],
 	[/\/nginxions\/mtls\/[a-z_]+\/\d+$/, f.mtlsHost],
 	[/\/nginxions\/learning\/snapshots$/, f.snapshots],
+	[/\/nginxions\/learning\/profiles$/, f.profiles],
 	[/\/nginxions\/learning\/hosts\/\d+\/learned$/, f.learned],
 ];
 
