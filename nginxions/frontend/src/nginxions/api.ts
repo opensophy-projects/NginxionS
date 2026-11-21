@@ -727,6 +727,8 @@ export interface ClusterNode {
 	registeredOn: string | null;
 	lastSeenOn: string | null;
 	codeExpiresOn: string | null;
+	/** a command waiting for the next heartbeat of the node */
+	command: { action: string; on: string } | null;
 }
 
 export interface NodeCode {
@@ -763,7 +765,7 @@ export interface NodeRollout {
 	id: number;
 	nodeId: number;
 	nodeName: string;
-	kind: "package" | "model" | "profile";
+	kind: "package" | "model" | "profile" | "command";
 	version: string;
 	result: "applied" | "failed";
 	error: string;
@@ -788,6 +790,8 @@ export const addNode = (data: { name: string; labels?: string[] }): Promise<Node
 	api.post({ url: "/nginxions/nodes", data });
 export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/nginxions/nodes/${id}/code` });
 export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
+export const nodeCommand = (id: number, action: "restart_agent"): Promise<ClusterNode> =>
+	api.post({ url: `/nginxions/nodes/${id}/command`, data: { action } });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
 export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });
 export const joinCluster = (data: { managerUrl: string; code: string }): Promise<ClusterMember> =>

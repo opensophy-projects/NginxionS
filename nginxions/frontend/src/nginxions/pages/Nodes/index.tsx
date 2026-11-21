@@ -1,7 +1,16 @@
 // Agents → Nodes (docs/ROADMAP.md, phase 15; docs/adr/0012-nodes.md): the servers of NginxionS connected to this
 // one, and this server as a node of a manager. A node is added here and gets a one-time join code; on the new server
 // the code and the address of this one are entered in "This server".
-import { IconCopy, IconKey, IconPlugConnected, IconPlus, IconServer, IconTrash, IconUnlink } from "@tabler/icons-react";
+import {
+	IconCopy,
+	IconKey,
+	IconPlugConnected,
+	IconPlus,
+	IconRefresh,
+	IconServer,
+	IconTrash,
+	IconUnlink,
+} from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -26,6 +35,7 @@ import {
 	type NodeCode,
 	type NodeState,
 	newNodeCode,
+	nodeCommand,
 	revokeNode,
 	setClusterLearning,
 	setNodeHosts,
@@ -225,6 +235,22 @@ function NodesCard() {
 			},
 		});
 
+	const onRestartAgent = (node: ClusterNode) =>
+		showConfirmModal({
+			tTitle: "nginxions.nodes.restart-agent",
+			tConfirm: "nginxions.nodes.restart-agent",
+			children: (
+				<p>
+					<T id="nginxions.nodes.restart-agent.confirm" data={{ name: node.name }} />
+				</p>
+			),
+			onConfirm: async () => {
+				await nodeCommand(node.id, "restart_agent");
+				showSuccess(t("nginxions.nodes.command.sent"));
+				refresh();
+			},
+		});
+
 	const onDelete = (node: ClusterNode) =>
 		showConfirmModal({
 			tTitle: "nginxions.nodes.delete",
@@ -397,6 +423,23 @@ function NodesCard() {
 											<Button size="sm" className="me-2" onClick={() => onNewCode(node)}>
 												<IconKey size={16} className="me-1" />
 												<T id="nginxions.nodes.new-code" />
+											</Button>
+										)}
+										{manage && node.status === "active" && (
+											<Button
+												size="sm"
+												className="me-2"
+												disabled={!!node.command}
+												onClick={() => onRestartAgent(node)}
+											>
+												<IconRefresh size={16} className="me-1" />
+												<T
+													id={
+														node.command
+															? "nginxions.nodes.command.waiting"
+															: "nginxions.nodes.restart-agent"
+													}
+												/>
 											</Button>
 										)}
 										{manage && node.status === "active" && (
@@ -849,10 +892,16 @@ function RolloutCard() {
 										<td>{r.nodeName}</td>
 										<td>
 											<T id={`nginxions.nodes.rollout.kind.${r.kind}`} />
-											{r.version && (
-												<span className="text-secondary font-monospace ms-2">
-													{r.version.slice(0, 12)}
+											{r.kind === "command" ? (
+												<span className="text-secondary ms-2">
+													<T id={`nginxions.nodes.command.${r.version}`} />
 												</span>
+											) : (
+												r.version && (
+													<span className="text-secondary font-monospace ms-2">
+														{r.version.slice(0, 12)}
+													</span>
+												)
 											)}
 										</td>
 										<td>
