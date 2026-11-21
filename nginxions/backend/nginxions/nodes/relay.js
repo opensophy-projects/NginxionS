@@ -9,7 +9,7 @@ import http from "node:http";
 import { global as logger } from "../../logger.js";
 import { decrypt } from "../secrets.js";
 import { MAX_LEARNING_BODY, storageTarget, syncTarget } from "./learning-model.js";
-import { managerExchange, readState } from "./member.js";
+import { clientOf, managerExchange, readState } from "./member.js";
 
 const STORAGE_PORT = Number(process.env.NGINXIONS_RELAY_STORAGE_PORT || 7817);
 const SYNC_PORT = Number(process.env.NGINXIONS_RELAY_SYNC_PORT || 7818);
@@ -66,6 +66,7 @@ export const relayHandler = (targetOf) => async (req, res) => {
 			headers: body.length ? { "Content-Type": "application/octet-stream" } : {},
 			token: decrypt(state.token_enc),
 			pin: state.fingerprint,
+			client: clientOf(state),
 			maxAnswer: MAX_LEARNING_BODY,
 			timeoutMs: TIMEOUT_MS,
 		});
