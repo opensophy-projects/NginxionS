@@ -10,7 +10,7 @@
 //     then learns on together with the others (step 15.4).
 // The pure part (the form, the signature, the merge): profile-model.js.
 // RBAC: who sees learning sees the profiles; who labels takes and downloads them; apply, upload and delete also need
-// waf_policy:manage (they change what the WAF blocks), the profile for new nodes nodes:manage.
+// waf_policy:manage (they change what the WAF blocks), the profile for new nodes waf_learning:sync.
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
@@ -289,7 +289,7 @@ const internalLearningProfiles = {
 	 * @param {boolean} on
 	 */
 	setForNewNodes: async (access, id, on) => {
-		await access.can("nodes:manage");
+		await access.can("waf_learning:sync");
 		const meta = await loadMeta(id);
 		for (const other of await listProfiles()) {
 			if (other.forNewNodes && other.id !== id) await saveMeta({ ...other, forNewNodes: false });

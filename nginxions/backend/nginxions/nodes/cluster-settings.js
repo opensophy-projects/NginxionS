@@ -41,7 +41,7 @@ const internalClusterSettings = {
 	 * @param {{minSources: number, minSourcesTypes: number, minIntervals: number, ratioThreshold: number}} data
 	 */
 	set: async (access, data) => {
-		await access.can("nodes:manage");
+		await access.can("waf_learning:sync");
 		const value = {
 			minSources: Number(data?.minSources),
 			minSourcesTypes: Number(data?.minSourcesTypes),
