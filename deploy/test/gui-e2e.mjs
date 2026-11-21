@@ -155,6 +155,8 @@ async function panelRestarted(within = 45000) {
 	const end = Date.now() + within;
 	while (Date.now() < end && (await answers())) await sleep(1000);
 	await panelUp();
+	// the page asked the panel while it was away (502, refused): expected, not an error of the page
+	pageErrors.length = 0;
 }
 
 const go = async (path) => {

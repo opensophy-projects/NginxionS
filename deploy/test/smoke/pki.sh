@@ -335,5 +335,28 @@ for _ in $(seq 1 25); do
   sleep 2
 done
 [ -n "$disabled" ] || fail "the node did not learn it was disabled: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
+# disabled on the manager (no active node: no smartsync here) and told so (no learning through a manager): each change
+# of the learning role restarts the agent, and nginxions with it, a few seconds later. Settled: the agent runs the
+# settings of the role now, and nginxions has stayed up for three checks in a row. The groups after this one need the
+# panel (a restart in the middle of the next group refused its requests)
+settled() {
+  last=""
+  same=0
+  for _ in $(seq 1 60); do
+    agent=$($CURL "$ADMIN/api/nginxions/waf/agent" 2>/dev/null || true)
+    now=$($CURL "$ADMIN/api/nginxions/services/nginxions" 2>/dev/null | grep -o '"startedAt": *"[^"]*"' || true)
+    if echo "$agent" | grep -q '"restartRequired": *false' && [ -n "$now" ] && [ "$now" = "$last" ]; then
+      same=$((same + 1))
+      [ "$same" -ge 3 ] && return 0
+    else
+      same=0
+    fi
+    last=$now
+    sleep 5
+  done
+  fail "the agent and nginxions did not settle after $1"
+}
+settled "the node was disabled"
 $CURL -X DELETE "$ADMIN/api/nginxions/cluster/member" | json | grep -q '"joined":false' || fail "leaving the manager failed"
 $CURL -X DELETE "$ADMIN/api/nginxions/nodes/$node_id" | grep -q true || fail "the disabled node was not deleted"
+settled "the node left"
