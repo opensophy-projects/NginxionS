@@ -27,6 +27,7 @@ import {
 	TOKEN,
 	uidOfCode,
 } from "./model.js";
+import { profileBytes, profileForNewNodes } from "../learning/profile-store.js";
 import { hostIdsOf, packageOf, signingKey } from "./package.js";
 
 const TABLE = "nginxions_node";
@@ -329,6 +330,19 @@ const internalNodes = {
 	package: async (token) => {
 		const row = await nodeOfToken(token);
 		return row ? packageOf(row.id) : null;
+	},
+
+	/**
+	 * Without login: the learning profile for new nodes (step 15.5), the signed file; null for an unknown or disabled
+	 * node, {none: true} when this manager has none.
+	 * @returns {Promise<{bytes: Buffer}|{none: true}|null>}
+	 */
+	learningProfile: async (token) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		const ref = await profileForNewNodes();
+		if (!ref) return { none: true };
+		return { bytes: await profileBytes(ref.id) };
 	},
 
 	/**

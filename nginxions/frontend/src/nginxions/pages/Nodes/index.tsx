@@ -534,6 +534,24 @@ function MemberCard() {
 								</dd>
 							</>
 						)}
+						{(data.profile_version || data.profile_error) && (
+							<>
+								<dt className="col-md-3">
+									<T id="nginxions.cluster.profile" />
+								</dt>
+								<dd className="col-md-9">
+									{data.profile_version && (
+										<T
+											id="nginxions.cluster.profile-applied"
+											data={{ count: data.profile_assets ?? 0 }}
+										/>
+									)}
+									{data.profile_error && (
+										<div className="text-danger small">{data.profile_error}</div>
+									)}
+								</dd>
+							</>
+						)}
 					</dl>
 					{manage && (
 						<Button size="sm" actionType="danger" className="mt-3" onClick={onLeave}>

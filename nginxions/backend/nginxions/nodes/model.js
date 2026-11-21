@@ -58,6 +58,9 @@ export const normalizeInfo = (info) => {
 		package_version: /^[0-9a-f]{64}$/.test(src.package_version ?? "") ? src.package_version : "",
 		package_skipped: int(src.package_skipped),
 		package_error: text(src.package_error, 300),
+		// the learning profile for new nodes it started with (step 15.5), its last error
+		profile_version: /^[0-9a-f]{64}$/.test(src.profile_version ?? "") ? src.profile_version : "",
+		profile_error: text(src.profile_error, 300),
 	};
 };
 

@@ -282,3 +282,10 @@
 	font-family: var(--tblr-font-monospace, monospace);
 	font-size: 0.8125rem;
 }
+
+/* the sites of a new learning profile: a column of checkboxes, scrolled when there are many */
+.profileSites {
+	max-height: 14rem;
+	overflow-y: auto;
+	columns: 2 16rem;
+}

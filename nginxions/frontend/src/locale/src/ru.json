@@ -1385,6 +1385,12 @@
 	"nginxions.cluster.node": {
 		"defaultMessage": "Этот узел"
 	},
+	"nginxions.cluster.profile": {
+		"defaultMessage": "Профиль обучения"
+	},
+	"nginxions.cluster.profile-applied": {
+		"defaultMessage": "Начал с профиля manager: {count, plural, =0 {заполнять нечего, этот сервер уже выучил свои сайты} one {заполнен # сайт} few {заполнено # сайта} other {заполнено # сайтов}}"
+	},
 	"nginxions.cluster.standalone": {
 		"defaultMessage": "Этот сервер работает самостоятельно."
 	},
@@ -3406,6 +3412,93 @@
 	},
 	"nginxions.learning.prevent.done": {
 		"defaultMessage": "{name}: включена блокировка"
+	},
+	"nginxions.learning.profiles.applied": {
+		"defaultMessage": "Профиль применён, агент перезапускается"
+	},
+	"nginxions.learning.profiles.applied-on": {
+		"defaultMessage": "применён {time}"
+	},
+	"nginxions.learning.profiles.apply": {
+		"defaultMessage": "Применить"
+	},
+	"nginxions.learning.profiles.apply.text": {
+		"defaultMessage": "Выученное агентом по сайтам профиля «{name}» ({sites} сайт(ов)) заменится профилем, остальные сайты не изменятся. Сначала будет снят снимок текущего состояния. Агент перезапустится: около минуты WAF не отвечает."
+	},
+	"nginxions.learning.profiles.apply.title": {
+		"defaultMessage": "Применить профиль обучения?"
+	},
+	"nginxions.learning.profiles.create": {
+		"defaultMessage": "Снять профиль"
+	},
+	"nginxions.learning.profiles.created": {
+		"defaultMessage": "Профиль снят"
+	},
+	"nginxions.learning.profiles.delete.text": {
+		"defaultMessage": "Профиль «{name}» будет удалён. Узлы, которые начали с него, сохранят полученное."
+	},
+	"nginxions.learning.profiles.delete.title": {
+		"defaultMessage": "Удалить профиль?"
+	},
+	"nginxions.learning.profiles.empty": {
+		"defaultMessage": "Профилей пока нет."
+	},
+	"nginxions.learning.profiles.for-new-nodes": {
+		"defaultMessage": "для новых узлов"
+	},
+	"nginxions.learning.profiles.for-new-nodes.off": {
+		"defaultMessage": "Не выдавать новым узлам"
+	},
+	"nginxions.learning.profiles.for-new-nodes.on": {
+		"defaultMessage": "Выдавать новым узлам"
+	},
+	"nginxions.learning.profiles.from": {
+		"defaultMessage": "Выученное состояние"
+	},
+	"nginxions.learning.profiles.from.now": {
+		"defaultMessage": "Текущее состояние агента"
+	},
+	"nginxions.learning.profiles.from.snapshot": {
+		"defaultMessage": "Снимок от {time}"
+	},
+	"nginxions.learning.profiles.key": {
+		"defaultMessage": "Ключ этого сервера: {fingerprint}"
+	},
+	"nginxions.learning.profiles.name": {
+		"defaultMessage": "Название"
+	},
+	"nginxions.learning.profiles.new": {
+		"defaultMessage": "Новый профиль"
+	},
+	"nginxions.learning.profiles.open": {
+		"defaultMessage": "Профили обучения"
+	},
+	"nginxions.learning.profiles.origin": {
+		"defaultMessage": "Откуда"
+	},
+	"nginxions.learning.profiles.origin.import": {
+		"defaultMessage": "Загружен, снят на {server}"
+	},
+	"nginxions.learning.profiles.origin.own": {
+		"defaultMessage": "Этот сервер ({server})"
+	},
+	"nginxions.learning.profiles.signed": {
+		"defaultMessage": "Подпись: {fingerprint}…"
+	},
+	"nginxions.learning.profiles.sites": {
+		"defaultMessage": "Сайты"
+	},
+	"nginxions.learning.profiles.text": {
+		"defaultMessage": "Профиль — то, чему агент научился на выбранных сайтах, с подписью этого сервера. Его можно применить здесь, перенести файлом на другой NginxionS (в том числе в закрытом контуре) или выдавать новым узлам: они начинают с выученной нормы, а не с нуля, и дальше учатся вместе со всеми. Новый узел заполняет только те сайты, по которым сам ещё ничего не выучил."
+	},
+	"nginxions.learning.profiles.title": {
+		"defaultMessage": "Профили обучения"
+	},
+	"nginxions.learning.profiles.upload": {
+		"defaultMessage": "Загрузить профиль"
+	},
+	"nginxions.learning.profiles.uploaded": {
+		"defaultMessage": "Профиль загружен: подпись верна"
 	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Очередь разметки"

@@ -168,8 +168,11 @@ export const takeSnapshot = async (reason, userId = 0) => {
 	return meta;
 };
 
+/** the size of what was learned per asset, for files of a bundle (a snapshot, a profile) */
+export const summaryOf = (files) => summarize(parsedFiles(files));
+
 /** the files of a kept snapshot */
-const loadSnapshot = async (id) => {
+export const loadSnapshot = async (id) => {
 	let content;
 	try {
 		content = await readFile(fileOf(id, "json.gz"));

@@ -33,6 +33,7 @@ import {
 import { showLabelModal } from "./LabelModal";
 import { showLearnedModal } from "./LearnedModal";
 import styles from "./Learning.module.css";
+import { showProfilesModal } from "./ProfilesModal";
 import { ShiftList, SNAPSHOTS_KEY, showSnapshotsModal } from "./SnapshotsModal";
 import { showStartTrialModal, showTrialReportModal } from "./TrialModal";
 
@@ -67,7 +68,18 @@ function Readiness({ host }: { host: LearningHost }) {
 	);
 }
 
-function Hosts({ manage, label, restore }: { manage: boolean; label: boolean; restore: boolean }) {
+function Hosts({
+	manage,
+	label,
+	restore,
+	nodes,
+}: {
+	manage: boolean;
+	label: boolean;
+	restore: boolean;
+	/** the profile for new nodes (nodes:manage) */
+	nodes: boolean;
+}) {
 	const refresh = useRefresh();
 	const { data, isLoading, isError, error } = useQuery({
 		queryKey: ["nginxions-learning-hosts"],
@@ -117,13 +129,22 @@ function Hosts({ manage, label, restore }: { manage: boolean; label: boolean; re
 						<T id="nginxions.learning.hosts.text" />
 					</p>
 				</div>
-				<button
-					type="button"
-					className="btn btn-sm"
-					onClick={() => showSnapshotsModal({ label, manage: restore })}
-				>
-					<T id="nginxions.learning.snapshots.open" />
-				</button>
+				<div className="d-flex gap-2">
+					<button
+						type="button"
+						className="btn btn-sm"
+						onClick={() => showProfilesModal({ label, manage: restore, nodes })}
+					>
+						<T id="nginxions.learning.profiles.open" />
+					</button>
+					<button
+						type="button"
+						className="btn btn-sm"
+						onClick={() => showSnapshotsModal({ label, manage: restore })}
+					>
+						<T id="nginxions.learning.snapshots.open" />
+					</button>
+				</div>
 			</div>
 			{shifted && (
 				<Alert variant="warning">
@@ -828,7 +849,12 @@ export function LearningTab() {
 				<T id="nginxions.learning.description" />
 			</p>
 			<Queue label={label} />
-			<Hosts manage={can("proxy_hosts", "manage")} label={label} restore={label && can("waf_policy", "manage")} />
+			<Hosts
+				manage={can("proxy_hosts", "manage")}
+				label={label}
+				restore={label && can("waf_policy", "manage")}
+				nodes={can("nodes", "manage")}
+			/>
 			<History label={label} />
 		</div>
 	);
