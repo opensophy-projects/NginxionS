@@ -4517,6 +4517,15 @@
 	"nginxions.nodes.delete.confirm": {
 		"defaultMessage": "Delete the node {name} from the list?"
 	},
+	"nginxions.nodes.drain": {
+		"defaultMessage": "Take out of work"
+	},
+	"nginxions.nodes.drain.confirm": {
+		"defaultMessage": "\"{name}\" removes its hosts with its next package and serves nothing; its hosts stay given to it. Point the traffic (DNS, balancer) away from it first."
+	},
+	"nginxions.nodes.drained": {
+		"defaultMessage": "Out of work"
+	},
 	"nginxions.nodes.events": {
 		"defaultMessage": "Events"
 	},
@@ -4651,6 +4660,12 @@
 	},
 	"nginxions.nodes.state.revoked": {
 		"defaultMessage": "Disabled"
+	},
+	"nginxions.nodes.undrain": {
+		"defaultMessage": "Put back to work"
+	},
+	"nginxions.nodes.undrain.confirm": {
+		"defaultMessage": "The hosts given to \"{name}\" come back to it with its next package."
 	},
 	"nginxions.nodes.version": {
 		"defaultMessage": "version {version}"

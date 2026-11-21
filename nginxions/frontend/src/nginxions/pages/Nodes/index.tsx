@@ -25,6 +25,7 @@ import {
 	type ClusterLearning,
 	type ClusterNode,
 	deleteNode,
+	drainNode,
 	getClusterLearning,
 	getClusterLearningSites,
 	getClusterMember,
@@ -124,6 +125,13 @@ function HostsPicker({ hosts, picked }: { hosts: ProxyHost[]; picked: Set<number
 /** the package of a node: applied, refused, or not there yet */
 function PackageState({ node }: { node: ClusterNode }) {
 	if (node.status !== "active") return <>—</>;
+	if (node.drained) {
+		return (
+			<span className="badge bg-yellow-lt">
+				<T id="nginxions.nodes.drained" />
+			</span>
+		);
+	}
 	if (node.info.packageError) {
 		return (
 			<span className="text-danger small" title={node.info.packageError}>
@@ -247,6 +255,25 @@ function NodesCard() {
 			onConfirm: async () => {
 				await nodeCommand(node.id, "restart_agent");
 				showSuccess(t("nginxions.nodes.command.sent"));
+				refresh();
+			},
+		});
+
+	const onDrain = (node: ClusterNode) =>
+		showConfirmModal({
+			tTitle: node.drained ? "nginxions.nodes.undrain" : "nginxions.nodes.drain",
+			tConfirm: node.drained ? "nginxions.nodes.undrain" : "nginxions.nodes.drain",
+			danger: !node.drained,
+			children: (
+				<p>
+					<T
+						id={node.drained ? "nginxions.nodes.undrain.confirm" : "nginxions.nodes.drain.confirm"}
+						data={{ name: node.name }}
+					/>
+				</p>
+			),
+			onConfirm: async () => {
+				await drainNode(node.id, !node.drained);
 				refresh();
 			},
 		});
@@ -438,6 +465,17 @@ function NodesCard() {
 														node.command
 															? "nginxions.nodes.command.waiting"
 															: "nginxions.nodes.restart-agent"
+													}
+												/>
+											</Button>
+										)}
+										{manage && node.status === "active" && (
+											<Button size="sm" className="me-2" onClick={() => onDrain(node)}>
+												<T
+													id={
+														node.drained
+															? "nginxions.nodes.undrain"
+															: "nginxions.nodes.drain"
 													}
 												/>
 											</Button>

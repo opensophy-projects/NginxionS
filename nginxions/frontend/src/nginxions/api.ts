@@ -727,6 +727,8 @@ export interface ClusterNode {
 	registeredOn: string | null;
 	lastSeenOn: string | null;
 	codeExpiresOn: string | null;
+	/** taken out of work: its package has no hosts */
+	drained: boolean;
 	/** a command waiting for the next heartbeat of the node */
 	command: { action: string; on: string } | null;
 }
@@ -790,6 +792,8 @@ export const addNode = (data: { name: string; labels?: string[] }): Promise<Node
 	api.post({ url: "/nginxions/nodes", data });
 export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/nginxions/nodes/${id}/code` });
 export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
+export const drainNode = (id: number, drained: boolean): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/drain`, data: { drained } });
 export const nodeCommand = (id: number, action: "restart_agent"): Promise<ClusterNode> =>
 	api.post({ url: `/nginxions/nodes/${id}/command`, data: { action } });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });

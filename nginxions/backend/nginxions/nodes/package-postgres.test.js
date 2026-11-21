@@ -134,7 +134,13 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal(a.version, b.version);
 		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
 		assert.notEqual((await pkg.packageOf(node.id)).version, a.version);
+		// out of work: no hosts in its package, its hosts stay given to it; back: they are in the package again
+		assert.equal((await nodes.drain(ADMIN, node.id, true)).drained, true);
+		assert.deepEqual((await pkg.contentOf(node.id)).hosts, []);
+		assert.deepEqual((await nodes.hosts(ADMIN, node.id)).sort(), [shop, blog].sort());
+		await nodes.drain(ADMIN, node.id, false);
 		content = await pkg.contentOf(node.id);
+		assert.equal(content.hosts.length, 2);
 
 		// this database becomes "the node": the rows of the manager are gone, only the package is left
 		await knex("nginxions_waf_host").delete();

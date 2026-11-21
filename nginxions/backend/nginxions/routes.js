@@ -3327,6 +3327,28 @@ router
 	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
 
 /**
+ * PUT /api/nginxions/nodes/:node_id/drain — {drained}: out of work (its package has no hosts) or back
+ */
+router
+	.route("/nodes/:node_id/drain")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["drained"],
+					properties: { drained: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.drain(res.locals.access, nodeId(req), data.drained);
+		}),
+	);
+
+/**
  * POST /api/nginxions/nodes/:node_id/command — {action: "restart_agent"}: done by the node with its next heartbeat
  */
 router
