@@ -13,7 +13,7 @@ services:
     container_name: ${CLUSTER_STACK:?}-openappsec
     ports: !reset []
     environment:
-      # windows of learning of a minute, not two hours: the agent (waapParameters of its policy) and smartsync read it,
+      # windows of learning of a minute, not two hours: the WAF of the agent (learning.intervalDuration) and smartsync read it,
       # so the learning of the three servers is put together within the test (scripts/test-cluster.sh)
       NGINXIONS_LEARNING_INTERVAL_MINUTES: "1"
     networks:
