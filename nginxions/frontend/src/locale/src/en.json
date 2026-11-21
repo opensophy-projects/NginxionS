@@ -3494,6 +3494,9 @@
 	"nginxions.learning.severity": {
 		"defaultMessage": "Severity"
 	},
+	"nginxions.learning.snapshots.cluster": {
+		"defaultMessage": "with the learning of the nodes ({count} files), restored with it"
+	},
 	"nginxions.learning.snapshots.delete.text": {
 		"defaultMessage": "The snapshot of {time} is removed for good."
 	},

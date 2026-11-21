@@ -3494,6 +3494,9 @@
 	"nginxions.learning.severity": {
 		"defaultMessage": "Важность"
 	},
+	"nginxions.learning.snapshots.cluster": {
+		"defaultMessage": "с общим обучением узлов ({count} файлов), откатывается вместе с ним"
+	},
 	"nginxions.learning.snapshots.delete.text": {
 		"defaultMessage": "Снимок от {time} будет удалён насовсем."
 	},
