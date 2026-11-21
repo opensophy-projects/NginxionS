@@ -769,6 +769,19 @@ export interface NodeRollout {
 	error: string;
 	createdOn: string;
 }
+/** the learning of the cluster on a manager: per site, the data of windows of each node and of this server */
+export interface ClusterLearningSite {
+	asset: string;
+	local: { windows: number; lastOn: string | null };
+	nodes: { uid: string; name: string; windows: number; lastOn: string | null }[];
+	mergedOn: string | null;
+}
+export const getClusterLearningSites = (): Promise<{
+	available: boolean;
+	assets: ClusterLearningSite[];
+	error?: string;
+}> => api.get({ url: "/nginxions/nodes/cluster-learning" });
+
 export const getNodeRollout = (nodeId?: number): Promise<NodeRollout[]> =>
 	api.get({ url: "/nginxions/nodes/rollout", params: nodeId ? { nodeId: nodeId } : {} });
 export const addNode = (data: { name: string; labels?: string[] }): Promise<NodeCode> =>

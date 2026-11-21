@@ -58,3 +58,71 @@ export const restoreClusterState = async (files) => {
 	}
 	return files.length;
 };
+
+// ---------------------------------------------------------------------------- the learning of the cluster (15.6)
+// What the shared storage of a manager shows of the learning of each site: the data of windows each node sent (under
+// its id, nodes/learning-model.js), those of the agent of this server, and when smartsync last put them together
+// (the files under remote/). Shown in "Agents → Nodes → Learning of the cluster".
+
+/** the entries of a listing of the storage: [{key, modified}] (modified: ISO time or null) */
+export const entriesOfListing = (xml) =>
+	[...String(xml).matchAll(/<Contents>([\s\S]{0,4096}?)<\/Contents>/g)].map((m) => {
+		const key = /<Key>([^<]{1,1024})<\/Key>/.exec(m[1])?.[1] ?? "";
+		const modified = /<LastModified>([^<]{1,64})<\/LastModified>/.exec(m[1])?.[1] ?? null;
+		return { key: key.startsWith("/") ? key : `/${key}`, modified };
+	});
+
+const WINDOW_FILE = /^\/([^/]+)\/(.+)\/window_\d{1,6}(?:_\d{1,6})?\/([^/]+)(?:\/.+)?\/data\.data\d{0,6}$/;
+const MERGED_FILE = /^\/([^/]+)\/(.+)\/remote\/[^/]+$/;
+
+const later = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
+
+/**
+ * The learning of each asset of the cluster from the entries of the storage.
+ * @param {{key: string, modified: string|null}[]} entries
+ * @param {{uid: string, name: string}[]} nodes  the nodes of this manager
+ * @returns {{asset: string, local: {windows: number, lastOn: string|null},
+ *   nodes: {uid: string, name: string, windows: number, lastOn: string|null}[], mergedOn: string|null}[]}
+ */
+export const clusterLearningOf = (entries, nodes) => {
+	const names = new Map(nodes.map((n) => [n.uid, n.name]));
+	const assets = new Map();
+	const assetOf = (asset) => {
+		if (!assets.has(asset)) {
+			assets.set(asset, { asset, local: { windows: 0, lastOn: null }, nodes: new Map(), mergedOn: null });
+		}
+		return assets.get(asset);
+	};
+	for (const { key, modified } of entries) {
+		const merged = MERGED_FILE.exec(key);
+		if (merged) {
+			const a = assetOf(merged[1]);
+			a.mergedOn = later(a.mergedOn, modified);
+			continue;
+		}
+		const window = WINDOW_FILE.exec(key);
+		if (!window) continue;
+		const a = assetOf(window[1]);
+		const owner = window[3];
+		// a node writes under its id; anything else is an agent of this server
+		const slot = names.has(owner)
+			? (a.nodes.get(owner) ??
+				a.nodes.set(owner, { uid: owner, name: names.get(owner), windows: 0, lastOn: null }).get(owner))
+			: a.local;
+		slot.windows += 1;
+		slot.lastOn = later(slot.lastOn, modified);
+	}
+	return [...assets.values()]
+		.map((a) => ({ ...a, nodes: [...a.nodes.values()].sort((x, y) => x.name.localeCompare(y.name)) }))
+		.sort((x, y) => x.asset.localeCompare(y.asset));
+};
+
+/** the learning of the cluster as the storage of this server shows it */
+export const readClusterLearning = async (nodes) => {
+	const list = await fetch(`${STORAGE_URL}/api/?list-type=2&prefix=/`, {
+		headers,
+		signal: AbortSignal.timeout(TIMEOUT_MS),
+	});
+	if (!list.ok) throw new Error(`the shared storage answered ${list.status} to its listing`);
+	return clusterLearningOf(entriesOfListing(await list.text()), nodes);
+};

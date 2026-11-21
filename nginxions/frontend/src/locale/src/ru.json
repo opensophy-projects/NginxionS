@@ -4463,6 +4463,30 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Добавить узел"
 	},
+	"nginxions.nodes.cluster-learning.empty": {
+		"defaultMessage": "Данных обучения в хранилище пока нет: агенты присылают их вместе с трафиком сайтов."
+	},
+	"nginxions.nodes.cluster-learning.hint": {
+		"defaultMessage": "По каждому сайту общего хранилища этого сервера: сколько окон обучения прислали этот сервер и каждый узел и когда smartsync последний раз свёл их в общую норму. Узел, который долго ничего не присылает, в обучении не участвует."
+	},
+	"nginxions.nodes.cluster-learning.merged": {
+		"defaultMessage": "Последняя сводка"
+	},
+	"nginxions.nodes.cluster-learning.nodes": {
+		"defaultMessage": "Узлы"
+	},
+	"nginxions.nodes.cluster-learning.site": {
+		"defaultMessage": "Сайт (asset)"
+	},
+	"nginxions.nodes.cluster-learning.this-server": {
+		"defaultMessage": "Этот сервер"
+	},
+	"nginxions.nodes.cluster-learning.title": {
+		"defaultMessage": "Обучение кластера"
+	},
+	"nginxions.nodes.cluster-learning.windows": {
+		"defaultMessage": "{count, plural, one {# окно} few {# окна} other {# окон}}"
+	},
 	"nginxions.nodes.code.how": {
 		"defaultMessage": "На новом сервере откройте «Агенты → Узлы → Этот сервер», введите адрес {address} и этот код. Код действует до {time} и срабатывает один раз."
 	},
