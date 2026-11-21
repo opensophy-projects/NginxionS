@@ -461,6 +461,7 @@ export const profiles = {
 			fingerprint: Array(32).fill("AB").join(":"),
 			own: true,
 			forNewNodes: true,
+			policy: { sites: 1, objects: 2 },
 			appliedOn: null,
 		},
 	],

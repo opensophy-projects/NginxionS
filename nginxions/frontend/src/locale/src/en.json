@@ -3434,6 +3434,9 @@
 	"nginxions.learning.profiles.apply.title": {
 		"defaultMessage": "Apply the learning profile?"
 	},
+	"nginxions.learning.profiles.apply.with-policy": {
+		"defaultMessage": "Apply the WAF policy of the sites too (missing objects are created, existing ones of the same name are kept)"
+	},
 	"nginxions.learning.profiles.create": {
 		"defaultMessage": "Make the profile"
 	},
@@ -3467,6 +3470,9 @@
 	"nginxions.learning.profiles.from.snapshot": {
 		"defaultMessage": "Snapshot of {time}"
 	},
+	"nginxions.learning.profiles.has-policy": {
+		"defaultMessage": "WAF policy"
+	},
 	"nginxions.learning.profiles.key": {
 		"defaultMessage": "Key of this server: {fingerprint}"
 	},
@@ -3488,6 +3494,9 @@
 	"nginxions.learning.profiles.origin.own": {
 		"defaultMessage": "This server ({server})"
 	},
+	"nginxions.learning.profiles.policy.partial": {
+		"defaultMessage": "Applied, but not all of the WAF policy: objects not found here: {missing}; sites not found here: {notFound}."
+	},
 	"nginxions.learning.profiles.signed": {
 		"defaultMessage": "Signed: {fingerprint}…"
 	},
@@ -3505,6 +3514,12 @@
 	},
 	"nginxions.learning.profiles.uploaded": {
 		"defaultMessage": "The profile is uploaded: its signature is valid"
+	},
+	"nginxions.learning.profiles.with-policy": {
+		"defaultMessage": "With the WAF policy of the sites"
+	},
+	"nginxions.learning.profiles.with-policy.hint": {
+		"defaultMessage": "The modes of the WAF of the sites and the policy objects they use go with the profile, to protect them the same way on another cluster."
 	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Queue"

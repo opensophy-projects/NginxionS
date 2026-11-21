@@ -274,6 +274,8 @@ export interface LearningProfile {
 	origin: "taken" | "import";
 	source: { server: string; snapshot: string | null } | null;
 	sites: { domains: string[] }[];
+	/** the WAF of its sites it carries (sites, policy objects), or null */
+	policy: { sites: number; objects: number } | null;
 	assets: { asset: string; params: number; values: number }[];
 	files: number;
 	size: number;
@@ -293,12 +295,28 @@ export const createLearningProfile = (data: {
 	name: string;
 	host_ids: number[];
 	snapshot_id?: string;
+	/** the WAF of the sites goes with it (to move them to another cluster) */
+	with_policy?: boolean;
 }): Promise<LearningProfile> => api.post({ url: "/nginxions/learning/profiles", data });
 
-export const applyLearningProfile = (id: string, hostIds?: number[]): Promise<{ assets: string[] }> =>
+/** what applying the WAF of a profile did */
+export interface ProfilePolicyResult {
+	sites: number;
+	created: string[];
+	missing: string[];
+	notFound: string[];
+}
+
+export const applyLearningProfile = (
+	id: string,
+	opts: { hostIds?: number[]; withPolicy?: boolean } = {},
+): Promise<{ assets: string[]; policy: ProfilePolicyResult | null }> =>
 	api.post({
 		url: `/nginxions/learning/profiles/${encodeURIComponent(id)}/apply`,
-		data: hostIds?.length ? { host_ids: hostIds } : {},
+		data: {
+			...(opts.hostIds?.length ? { host_ids: opts.hostIds } : {}),
+			...(opts.withPolicy ? { with_policy: true } : {}),
+		},
 	});
 
 export const setProfileForNewNodes = (id: string, on: boolean): Promise<LearningProfile> =>
