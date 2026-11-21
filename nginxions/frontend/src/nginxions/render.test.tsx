@@ -101,6 +101,7 @@ const PROPS: Record<string, Record<string, unknown>> = {
 		onChange: noop,
 	},
 	AddMenu: { types: ["proxy", "redirect", "stream", "dead"], onAdd: noop },
+	HostsPicker: { hosts: [{ id: 1, domainNames: ["app.example.com"] }], picked: new Set([1]) },
 	RequestFilters: { filters: trafficFilters, set: noop },
 	FilterChips: { filters: trafficFilters, remove: noop, clear: noop },
 	DefaultPolicyTab: {
@@ -258,6 +259,7 @@ const MODALS: Record<string, unknown[]> = {
 	showSnapshotsModal: [{ label: true, manage: true }],
 	showProfilesModal: [{ label: true, manage: true, nodes: true }],
 	showNodeLogs: [f.node, "openappsec"],
+	showPackages: [f.node],
 	showLabelModal: [{ group: f.queueGroup, decision: "benign", onDone: noop }],
 	showStartTrialModal: [{ host: f.learningHost, onDone: noop }],
 	showTrialReportModal: [{ host: f.learningHost, manage: true, onDone: noop }],
