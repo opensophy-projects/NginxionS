@@ -1,0 +1,76 @@
+// The state of the learning of the cluster in a snapshot (step 15.4): which files, read and put back.
+import assert from "node:assert/strict";
+import http from "node:http";
+import { after, before, describe, test } from "node:test";
+
+describe("the state of the cluster in a snapshot of learning", () => {
+	const files = new Map([
+		["/shop/Indicators/Confidence/remote/confidence.data", '{"c":1}'],
+		["/shop/Type/remote/data.data", '{"t":2}'],
+		["/shop/Indicators/Confidence/window_0_1/n-1/a/data.data0", "{}"],
+		["/shop/tuning/decisions.data", "[]"],
+	]);
+	const puts = [];
+	let server;
+	let mod;
+	before(async () => {
+		server = http.createServer((req, res) => {
+			const chunks = [];
+			req.on("data", (d) => chunks.push(d));
+			req.on("end", () => {
+				const url = new URL(req.url, "http://storage");
+				if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
+					const keys = [...files.keys()].map((k) => `<Contents><Key>${k}</Key></Contents>`).join("");
+					res.end(`<ListBucketResult>${keys}</ListBucketResult>`);
+					return;
+				}
+				const file = url.pathname.slice(4);
+				if (req.method === "PUT") {
+					puts.push([file, Buffer.concat(chunks).toString(), req.headers["x-tenant-id"]]);
+					res.end();
+					return;
+				}
+				if (!files.has(file)) {
+					res.statusCode = 404;
+					res.end();
+					return;
+				}
+				res.end(files.get(file));
+			});
+		});
+		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+		process.env.NGINXIONS_APPSEC_STORAGE_URL = `http://127.0.0.1:${server.address().port}`;
+		mod = await import("./cluster-learning.js");
+	});
+	after(() => server?.close());
+
+	test("files of the state put together only: remote/ of an asset, clean paths", () => {
+		assert.equal(mod.isClusterStatePath("/shop/Indicators/Confidence/remote/confidence.data"), true);
+		assert.equal(mod.isClusterStatePath("/shop/Type/window_0_1/n-1/data.data"), false);
+		assert.equal(mod.isClusterStatePath("/shop/tuning/decisions.data"), false);
+		assert.equal(mod.isClusterStatePath("/shop/../etc/remote/x"), false);
+		assert.equal(mod.isClusterStatePath("//shop/Type/remote/x"), false);
+		assert.equal(mod.isClusterStatePath(undefined), false);
+		assert.deepEqual(mod.keysOfListing("<Key>a/b</Key><Key>/c/d</Key>"), ["/a/b", "/c/d"]);
+	});
+
+	test("read from the storage and put back as they were", async () => {
+		const state = await mod.readClusterState();
+		assert.deepEqual(
+			state.map((f) => [f.path, Buffer.from(f.content, "base64").toString()]),
+			[
+				["/shop/Indicators/Confidence/remote/confidence.data", '{"c":1}'],
+				["/shop/Type/remote/data.data", '{"t":2}'],
+			],
+		);
+		assert.equal(await mod.restoreClusterState(state), 2);
+		assert.deepEqual(puts, [
+			["/shop/Indicators/Confidence/remote/confidence.data", '{"c":1}', "local"],
+			["/shop/Type/remote/data.data", '{"t":2}', "local"],
+		]);
+		await assert.rejects(
+			() => mod.restoreClusterState([{ path: "/shop/tuning/decisions.data", content: "" }]),
+			/not a file of the state/,
+		);
+	});
+});
