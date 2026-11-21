@@ -6,6 +6,7 @@
 // What a node cannot serve on its own is left out and told: a certificate of ACME (its renewal is on the manager).
 // The hosts of a node are its own and those of its labels. A node can be held on a package it was given before
 // (a rollback, or a staged rollout that has not reached it yet): the last 20 are kept per node.
+// Every node also gets the block page and the settings of CrowdSec of its manager (nodes/settings-apply.js).
 // A node with sites also gets the id and version of the learning profile for new nodes (step 15.5), if there is one,
 // and every node the SHA-256 of the model of the agent uploaded on the manager.
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
@@ -14,7 +15,9 @@ import path from "node:path";
 import db from "../../db.js";
 import { profileForNewNodes } from "../learning/profile-store.js";
 import { modelRef } from "../waf/model-file.js";
+import { getSetting } from "../settings.js";
 import { accessListIdsOf, PACKAGE_SCHEMA, signPackage } from "./package-model.js";
+import { crowdsecForNodes } from "./settings-apply.js";
 
 export const SIGNING_KEY_FILE = process.env.NGINXIONS_SIGNING_KEY_FILE || "/data/nginxions/cluster/manager-signing.key";
 
@@ -174,6 +177,9 @@ export const contentOf = async (nodeId) => {
 		learning_profile: hostIds.length ? ((await profileForNewNodes()) ?? undefined) : undefined,
 		// the advanced model of the agent uploaded on the manager (step 15.5): the node takes the file of this hash
 		waf_model: (await modelRef()) ?? undefined,
+		// the block page and the settings of CrowdSec of the manager (without the secret of a captcha)
+		block_page: await getSetting("block.page"),
+		crowdsec: crowdsecForNodes(await getSetting("crowdsec")),
 	};
 };
 
