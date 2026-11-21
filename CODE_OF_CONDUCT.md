@@ -339,6 +339,7 @@ flowchart LR
   - `usr/local/nginx/conf/nginx.conf` — главный конфиг nginx, в том числе формат лога запросов `nginxions_requests`
   - `usr/local/nginx/conf/conf.d/nginxions-block-page.conf` — страница блокировки NginxionS для отказов 403
   - `usr/local/nginx/conf/conf.d/nginxions-crowdsec-hub.conf` — локальная раздача снимка hub CrowdSec
+  - `usr/local/nginx/conf/conf.d/nginxions-cluster.conf` — сертификат узла на его канале к manager (сервер `nginxions-cluster` в `npmplus.conf`) для backend, пустой на любом другом имени
   - `usr/local/nginx/conf/conf.d/nginxions-geo.conf` — страны по GeoIP (переписывается backend при загрузке базы)
   - `usr/local/nginx/conf/conf.d/nginxions-methods.conf` — отладочные методы TRACK, DEBUG и TRACE получают 405 на всех хостах и в интерфейсе (DAST: Proxy Disclosure)
   - `usr/local/nginx/conf/conf.d/nginxions-mtls-log.conf` — лог отказов mTLS
