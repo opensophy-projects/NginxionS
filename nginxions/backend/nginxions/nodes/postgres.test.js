@@ -278,6 +278,20 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			[["package", "applied", state.applied_version, "edge-1"]],
 		);
 		assert.deepEqual(await nodes.rollout(VIEWER, { node_id: row.id + 1000 }), []);
+		// a package the node refused, then undone on the manager: the package offered is the one applied here again,
+		// the error goes (the node does not wait for a new version to say all is well)
+		const memberFile = process.env.NGINXIONS_MEMBER_FILE;
+		const refused = {
+			...(await member.readState()),
+			failed_version: "f".repeat(64),
+			package_error: "nginx: refused",
+		};
+		writeFileSync(memberFile, JSON.stringify(refused));
+		await member.beat();
+		const cleared = await member.readState();
+		assert.equal(cleared.package_error, "");
+		assert.equal(cleared.failed_version, "");
+		assert.equal(cleared.applied_version, state.applied_version);
 		// a command: waits for the heartbeat, the node does it (restarts its agent), the next heartbeat tells it
 		await assert.rejects(() => nodes.command(VIEWER, row.id, "restart_agent"), /forbidden: nodes:manage/);
 		await assert.rejects(() => nodes.command(ADMIN, row.id, "format_disk"), /Unknown command/);

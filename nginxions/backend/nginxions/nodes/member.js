@@ -486,6 +486,9 @@ export const beat = async () => {
 			const version = answer.body?.package_version;
 			if (version && version !== next.applied_version && version !== next.failed_version) {
 				next = { ...next, ...(await sync(next)) };
+			} else if (version && version === next.applied_version && next.failed_version) {
+				// the manager went back to the package applied here (the refused change undone): nothing is wrong now
+				next = { ...next, failed_version: "", package_error: "" };
 			}
 			// a profile that failed before (the manager was busy, the agent down): tried again with a later heartbeat
 			if (next.profile_error && next.applied_version) {

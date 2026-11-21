@@ -230,7 +230,9 @@ rollout_failed() {
 until_ok "the refused package is not in the rollout" 20 3 rollout_failed node1
 call manager PUT "/nginx/proxy-hosts/$host_id" '{"advanced_config": ""}' > /dev/null
 for s in node1 node2; do until_ok "$s did not apply the fixed package" 40 3 applied "$s"; done
-[ "$(node_field "${NODE_ID[node1]}" .info.package_version)" != "$version_before" ] || true
+# the fixed host is the host before: the package applied is the one before again, without its error
+[ "$(node_field "${NODE_ID[node1]}" .info.package_version)" = "$version_before" ] \
+  || fail "node1 does not run the package before the refused change again"
 
 step "drain: node2 out of work drops $DOMAIN, node1 keeps it; back in work node2 serves it again"
 call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/drain" '{"drained": true}' | jq -e '.drained == true' > /dev/null \
