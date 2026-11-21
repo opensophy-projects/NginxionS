@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	CODE,
+	rolloutOf,
 	hash,
 	newCode,
 	newToken,
@@ -97,4 +98,27 @@ test("the address of a manager: https, host and port only", () => {
 	assert.equal(normalizeManagerUrl("https://manager:81/api"), null);
 	assert.equal(normalizeManagerUrl("manager:81"), null);
 	assert.equal(normalizeManagerUrl(""), null);
+});
+
+test("the rollout a heartbeat tells: a new version applied, a new error, nothing twice", () => {
+	const v1 = "a".repeat(64);
+	const v2 = "b".repeat(64);
+	assert.deepEqual(rolloutOf({}, { package_version: v1 }), [
+		{ kind: "package", version: v1, result: "applied", error: "" },
+	]);
+	assert.deepEqual(rolloutOf({ package_version: v1 }, { package_version: v1 }), []);
+	assert.deepEqual(rolloutOf({ package_version: v1 }, { package_version: v1, package_error: "nginx refused" }), [
+		{ kind: "package", version: v1, result: "failed", error: "nginx refused" },
+	]);
+	// the same error again: told once
+	assert.deepEqual(
+		rolloutOf({ package_version: v1, package_error: "x" }, { package_version: v1, package_error: "x" }),
+		[],
+	);
+	assert.deepEqual(
+		rolloutOf({ model_sha256: v1, profile_version: "" }, { model_sha256: v2, profile_version: v1 }).map(
+			(r) => `${r.kind}:${r.result}`,
+		),
+		["model:applied", "profile:applied"],
+	);
 });

@@ -4550,6 +4550,45 @@
 	"nginxions.nodes.revoke.confirm": {
 		"defaultMessage": "Отключить узел {name}? Его сертификат будет отозван, и он перестанет управляться отсюда. Свои сайты он продолжит защищать самостоятельно."
 	},
+	"nginxions.nodes.rollout.all": {
+		"defaultMessage": "Все узлы"
+	},
+	"nginxions.nodes.rollout.applied": {
+		"defaultMessage": "применено"
+	},
+	"nginxions.nodes.rollout.empty": {
+		"defaultMessage": "Выкатки ещё не было."
+	},
+	"nginxions.nodes.rollout.failed": {
+		"defaultMessage": "ошибка"
+	},
+	"nginxions.nodes.rollout.hint": {
+		"defaultMessage": "Что и когда применил каждый узел с этого сервера: пакет конфигурации, модель агента, профиль обучения, — и что не удалось. Пакет, который отверг nginx, узел сам откатывает на прежний; модель возвращается кнопкой «Вернуть прежнюю модель» в «WAF → Агент»."
+	},
+	"nginxions.nodes.rollout.kind.model": {
+		"defaultMessage": "Модель агента"
+	},
+	"nginxions.nodes.rollout.kind.package": {
+		"defaultMessage": "Пакет конфигурации"
+	},
+	"nginxions.nodes.rollout.kind.profile": {
+		"defaultMessage": "Профиль обучения"
+	},
+	"nginxions.nodes.rollout.node": {
+		"defaultMessage": "Узел"
+	},
+	"nginxions.nodes.rollout.result": {
+		"defaultMessage": "Результат"
+	},
+	"nginxions.nodes.rollout.time": {
+		"defaultMessage": "Время"
+	},
+	"nginxions.nodes.rollout.title": {
+		"defaultMessage": "Выкатка"
+	},
+	"nginxions.nodes.rollout.what": {
+		"defaultMessage": "Что"
+	},
 	"nginxions.nodes.server": {
 		"defaultMessage": "Сервер"
 	},

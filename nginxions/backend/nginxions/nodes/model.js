@@ -92,3 +92,31 @@ export const normalizeManagerUrl = (value) => {
 	if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) return null;
 	return `https://${url.host}`;
 };
+
+/** what a node applies of its manager: the field of its version and of its error in the heartbeat */
+const ROLLOUT_KINDS = [
+	["package", "package_version", "package_error"],
+	["model", "model_sha256", "model_error"],
+	["profile", "profile_version", "profile_error"],
+];
+
+/**
+ * The rollout a heartbeat tells (step 15.6): a version applied that the node did not have, or a new error. Nothing
+ * when the info is the same as before.
+ * @param {object} before  the info of the heartbeat before (normalizeInfo)
+ * @param {object} after   the info of this heartbeat
+ * @returns {{kind: string, version: string, result: "applied"|"failed", error: string}[]}
+ */
+export const rolloutOf = (before, after) => {
+	const out = [];
+	for (const [kind, versionKey, errorKey] of ROLLOUT_KINDS) {
+		const version = after?.[versionKey] ?? "";
+		const error = after?.[errorKey] ?? "";
+		if (error && error !== (before?.[errorKey] ?? "")) {
+			out.push({ kind, version, result: "failed", error });
+		} else if (version && version !== (before?.[versionKey] ?? "")) {
+			out.push({ kind, version, result: "applied", error: "" });
+		}
+	}
+	return out;
+};

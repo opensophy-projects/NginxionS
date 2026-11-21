@@ -3278,6 +3278,23 @@ router.post("/nodes/learning/sync", express.raw({ type: () => true, limit: "16kb
 });
 
 /**
+ * GET /api/nginxions/nodes/rollout?node_id=&limit= — what the nodes applied of this manager (packages, the model of
+ *   the agent, learning profiles) or what failed, the newest first
+ */
+router
+	.route("/nodes/rollout")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(
+		handle((req, res) =>
+			internalNodes.rollout(res.locals.access, {
+				node_id: Number(req.query.node_id) || undefined,
+				limit: Number(req.query.limit) || undefined,
+			}),
+		),
+	);
+
+/**
  * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
  * DELETE /api/nginxions/nodes/:node_id — a node not active (waiting or disabled)
  */
@@ -3369,7 +3386,8 @@ router
 
 /**
  * GET /api/nginxions/cluster/learning — the thresholds of the learning of the nodes (smartsync on a manager)
- * PUT /api/nginxions/cluster/learning — {minSources, minSourcesTypes, minIntervals, ratioThreshold}
+ * PUT /api/nginxions/cluster/learning — {min_sources, min_sources_types, min_intervals, ratio_threshold} (the client
+ *   of the GUI sends the keys of a body in snake case)
  */
 router
 	.route("/cluster/learning")
@@ -3377,25 +3395,28 @@ router
 	.all(jwtdecode())
 	.get(handle((_, res) => internalClusterSettings.get(res.locals.access)))
 	.put(
-		handle(async (req, res) =>
-			internalClusterSettings.set(
-				res.locals.access,
-				await validator(
-					{
-						type: "object",
-						additionalProperties: false,
-						required: ["minSources", "minSourcesTypes", "minIntervals", "ratioThreshold"],
-						properties: {
-							minSources: { type: "integer", minimum: 2, maximum: 1000 },
-							minSourcesTypes: { type: "integer", minimum: 2, maximum: 1000 },
-							minIntervals: { type: "integer", minimum: 1, maximum: 100 },
-							ratioThreshold: { type: "number", minimum: 0.1, maximum: 1 },
-						},
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["min_sources", "min_sources_types", "min_intervals", "ratio_threshold"],
+					properties: {
+						min_sources: { type: "integer", minimum: 2, maximum: 1000 },
+						min_sources_types: { type: "integer", minimum: 2, maximum: 1000 },
+						min_intervals: { type: "integer", minimum: 1, maximum: 100 },
+						ratio_threshold: { type: "number", minimum: 0.1, maximum: 1 },
 					},
-					req.body,
-				),
-			),
-		),
+				},
+				req.body,
+			);
+			return internalClusterSettings.set(res.locals.access, {
+				minSources: data.min_sources,
+				minSourcesTypes: data.min_sources_types,
+				minIntervals: data.min_intervals,
+				ratioThreshold: data.ratio_threshold,
+			});
+		}),
 	);
 
 export default router;
