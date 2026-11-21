@@ -45,6 +45,7 @@ function NewProfile({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 	const snapshots = useQuery({ queryKey: [SNAPSHOTS_KEY], queryFn: getLearningSnapshots });
 	const [name, setName] = useState("");
 	const [snapshot, setSnapshot] = useState("");
+	const [withPolicy, setWithPolicy] = useState(false);
 	const [chosen, setChosen] = useState<number[]>([]);
 	const [busy, setBusy] = useState(false);
 	const [failure, setFailure] = useState<string | null>(null);
@@ -57,6 +58,7 @@ function NewProfile({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 				name: name.trim(),
 				host_ids: chosen,
 				...(snapshot ? { snapshot_id: snapshot } : {}),
+				...(withPolicy ? { with_policy: true } : {}),
 			});
 			showSuccess(t("nginxions.learning.profiles.created"));
 			onDone();
@@ -117,6 +119,20 @@ function NewProfile({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 					))}
 				</div>
 			)}
+			<label className="form-check mt-3">
+				<input
+					type="checkbox"
+					className="form-check-input"
+					checked={withPolicy}
+					onChange={(e) => setWithPolicy(e.target.checked)}
+				/>
+				<span className="form-check-label">
+					<T id="nginxions.learning.profiles.with-policy" />
+				</span>
+			</label>
+			<div className="text-secondary small">
+				<T id="nginxions.learning.profiles.with-policy.hint" />
+			</div>
 			<div className="d-flex gap-2 mt-3">
 				<Button onClick={onCancel} disabled={busy}>
 					<T id="cancel" />
@@ -157,19 +173,54 @@ const ProfilesModal = EasyModal.create(({ label, manage, nodes, visible, remove 
 		setBusy(null);
 	};
 
-	const apply = (p: LearningProfile) =>
+	const apply = (p: LearningProfile) => {
+		// the WAF of its sites too: on by default when the profile carries it
+		const choice = { withPolicy: !!p.policy };
 		showConfirmModal({
 			tTitle: "nginxions.learning.profiles.apply.title",
 			tConfirm: "nginxions.learning.profiles.apply",
 			danger: true,
 			onConfirm: () =>
-				run(`apply-${p.id}`, () => applyLearningProfile(p.id), "nginxions.learning.profiles.applied"),
+				run(
+					`apply-${p.id}`,
+					async () => {
+						const result = await applyLearningProfile(p.id, { withPolicy: choice.withPolicy });
+						const policy = result.policy;
+						if (policy && (policy.missing.length || policy.notFound.length)) {
+							setFailure(
+								t("nginxions.learning.profiles.policy.partial", {
+									missing: policy.missing.join(", ") || "—",
+									notFound: policy.notFound.join(", ") || "—",
+								}),
+							);
+						}
+					},
+					"nginxions.learning.profiles.applied",
+				),
 			children: (
-				<p className="mb-0">
-					<T id="nginxions.learning.profiles.apply.text" data={{ name: p.name, sites: p.sites.length }} />
-				</p>
+				<>
+					<p className={p.policy ? "" : "mb-0"}>
+						<T id="nginxions.learning.profiles.apply.text" data={{ name: p.name, sites: p.sites.length }} />
+					</p>
+					{p.policy && (
+						<label className="form-check mb-0">
+							<input
+								type="checkbox"
+								className="form-check-input"
+								defaultChecked
+								onChange={(e) => {
+									choice.withPolicy = e.target.checked;
+								}}
+							/>
+							<span className="form-check-label">
+								<T id="nginxions.learning.profiles.apply.with-policy" />
+							</span>
+						</label>
+					)}
+				</>
 			),
 		});
+	};
 
 	const removeProfile = (p: LearningProfile) =>
 		showConfirmModal({
@@ -248,6 +299,11 @@ const ProfilesModal = EasyModal.create(({ label, manage, nodes, visible, remove 
 											{p.forNewNodes && (
 												<span className="badge bg-blue-lt ms-2">
 													<T id="nginxions.learning.profiles.for-new-nodes" />
+												</span>
+											)}
+											{p.policy && (
+												<span className="badge bg-purple-lt ms-2">
+													<T id="nginxions.learning.profiles.has-policy" />
 												</span>
 											)}
 											<div className={styles.muted}>{dateTime(p.createdOn)}</div>

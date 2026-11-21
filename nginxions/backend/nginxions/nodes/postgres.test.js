@@ -558,6 +558,25 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		agentLearned.files = [];
 		const applied = await profiles.apply(ADMIN, meta.id, { host_ids: [shop] });
 		assert.deepEqual(applied.assets, ["shop.example.com"]);
+		await assert.rejects(() => profiles.apply(ADMIN, meta.id, { with_policy: true }), /carries no WAF policy/);
+
+		// with the WAF of its sites (step 15.5): the mode of the shop goes with it and comes back when applied
+		agentLearned.files = [{ asset: "shop.example.com", name: "5.data", content: gz({ learned: "shop" }) }];
+		await knex("nginxions_waf_host").insert({
+			proxy_host_id: shop,
+			enabled: true,
+			mode: "prevent-learn",
+			minimum_confidence: "high",
+			modified_on: new Date(),
+		});
+		const withPolicy = await profiles.create(ADMIN, { name: "Shop with WAF", host_ids: [shop], with_policy: true });
+		assert.deepEqual(withPolicy.policy, { sites: 1, objects: 0 });
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
+		agentLearned.files = [];
+		const back = await profiles.apply(ADMIN, withPolicy.id, { with_policy: true });
+		assert.deepEqual(back.policy, { sites: 1, created: [], missing: [], notFound: [] });
+		assert.equal((await knex("nginxions_waf_host").where({ proxy_host_id: shop }).first()).mode, "prevent-learn");
+		await profiles.remove(ADMIN, withPolicy.id);
 		await profiles.setForNewNodes(ADMIN, meta.id, false);
 		assert.equal(await nodes.learningProfile("x"), null);
 		await nodes.setHosts(ADMIN, row.id, []);

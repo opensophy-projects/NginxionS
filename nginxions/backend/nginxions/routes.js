@@ -2978,9 +2978,11 @@ router
  * Learning profiles (learning/profiles.js, step 15.5): what the agent learned of chosen sites, signed, applied here,
  * on another NginxionS (a file) or on new nodes
  * GET    /api/nginxions/learning/profiles — the profiles, the newest first, and the fingerprint of the key of this server
- * POST   /api/nginxions/learning/profiles — {name, host_ids, snapshot_id?}: a profile of these sites, now or of a snapshot
+ * POST   /api/nginxions/learning/profiles — {name, host_ids, snapshot_id?, with_policy?}: a profile of these sites, now or of a snapshot
+ *        (with_policy: their WAF too, step 15.5)
  * POST   /api/nginxions/learning/profiles/upload — body: a profile file (application/octet-stream), its signature checked
- * POST   /api/nginxions/learning/profiles/:profile_id/apply — {host_ids?}: in place of the learned state of its sites
+ * POST   /api/nginxions/learning/profiles/:profile_id/apply — {host_ids?, with_policy?}: in place of the learned state of its sites
+ *        (with_policy: their WAF too)
  *        (the agent and nginxions restart)
  * GET    /api/nginxions/learning/profiles/:profile_id/download — the signed file
  * PUT    /api/nginxions/learning/profiles/:profile_id — {for_new_nodes}: the profile new nodes start with
@@ -3006,6 +3008,7 @@ router
 								name: { type: "string", minLength: 1, maxLength: 100 },
 								host_ids: { ...hostIdsSchema, minItems: 1 },
 								snapshot_id: { type: "string", maxLength: 40 },
+								with_policy: { type: "boolean" },
 							},
 						},
 						req.body,
@@ -3034,7 +3037,11 @@ router
 				res.locals.access,
 				String(req.params.profile_id),
 				await validator(
-					{ type: "object", additionalProperties: false, properties: { host_ids: hostIdsSchema } },
+					{
+						type: "object",
+						additionalProperties: false,
+						properties: { host_ids: hostIdsSchema, with_policy: { type: "boolean" } },
+					},
 					req.body ?? {},
 				),
 			),

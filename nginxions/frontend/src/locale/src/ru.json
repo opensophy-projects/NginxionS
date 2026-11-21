@@ -3434,6 +3434,9 @@
 	"nginxions.learning.profiles.apply.title": {
 		"defaultMessage": "Применить профиль обучения?"
 	},
+	"nginxions.learning.profiles.apply.with-policy": {
+		"defaultMessage": "Применить и политику WAF сайтов (недостающие объекты создаются, существующие с тем же именем остаются как есть)"
+	},
 	"nginxions.learning.profiles.create": {
 		"defaultMessage": "Снять профиль"
 	},
@@ -3467,6 +3470,9 @@
 	"nginxions.learning.profiles.from.snapshot": {
 		"defaultMessage": "Снимок от {time}"
 	},
+	"nginxions.learning.profiles.has-policy": {
+		"defaultMessage": "политика WAF"
+	},
 	"nginxions.learning.profiles.key": {
 		"defaultMessage": "Ключ этого сервера: {fingerprint}"
 	},
@@ -3488,6 +3494,9 @@
 	"nginxions.learning.profiles.origin.own": {
 		"defaultMessage": "Этот сервер ({server})"
 	},
+	"nginxions.learning.profiles.policy.partial": {
+		"defaultMessage": "Применено, но политика WAF — не полностью: не найдены объекты: {missing}; не найдены сайты: {notFound}."
+	},
 	"nginxions.learning.profiles.signed": {
 		"defaultMessage": "Подпись: {fingerprint}…"
 	},
@@ -3505,6 +3514,12 @@
 	},
 	"nginxions.learning.profiles.uploaded": {
 		"defaultMessage": "Профиль загружен: подпись верна"
+	},
+	"nginxions.learning.profiles.with-policy": {
+		"defaultMessage": "С политикой WAF сайтов"
+	},
+	"nginxions.learning.profiles.with-policy.hint": {
+		"defaultMessage": "Режимы WAF сайтов и объекты политики, которые они используют, войдут в профиль: на другом кластере сайты будут защищены так же."
 	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Очередь разметки"
