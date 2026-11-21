@@ -662,6 +662,33 @@ const scenarios = [
 				await go("/agents/nodes");
 				return /Online/.test(await row().innerText());
 			});
+			// Rollout plan (step 15.2): the staged rollout switched on and off, hosts given to a label of the node
+			const plan = page.getByTestId("rollout-plan");
+			await plan.getByText("Staged rollout", { exact: true }).click();
+			await until("the staged rollout is on", async () => (await api("GET", "/nginxions/nodes/staged")).staged);
+			await go("/agents/nodes");
+			await plan.getByText("Staged rollout", { exact: true }).click();
+			await until("the staged rollout is off", async () => !(await api("GET", "/nginxions/nodes/staged")).staged);
+			await addProxyHost("gui-label.local");
+			const labelHost = await proxyHostId("gui-label.local");
+			await go("/agents/nodes");
+			await plan.locator("tr[data-label-row='gui']").getByRole("button", { name: "Hosts", exact: true }).click();
+			await modal().locator("label.form-check", { hasText: "gui-label.local" }).locator("input").check();
+			await modal().getByRole("button", { name: "Save", exact: true }).click();
+			await saved("the hosts of the label");
+			const given = (await api("GET", "/nginxions/nodes/label-hosts")).find((l) => l.label === "gui");
+			if (!given?.host_ids?.includes(labelHost)) throw new Error(`the label does not serve the host: ${JSON.stringify(given)}`);
+			// Packages: the node held on a package it was given, then it follows the configuration again
+			await row().getByRole("button", { name: "Packages", exact: true }).click();
+			await modal().getByRole("button", { name: "Back to this package" }).first().click();
+			await page.getByText("The node gets this package with its next heartbeat.").waitFor({ timeout: 15000 });
+			const held = (await api("GET", "/nginxions/nodes")).find((n) => n.name === "gui-node");
+			if (held?.pinned?.by !== "manual") throw new Error(`the node is not held: ${JSON.stringify(held?.pinned)}`);
+			await modal().getByRole("button", { name: "Follow the configuration" }).click();
+			await page.getByText("The node follows the configuration again.").waitFor({ timeout: 15000 });
+			await modal().getByRole("button", { name: "Close", exact: true }).click();
+			if ((await api("GET", "/nginxions/nodes")).find((n) => n.name === "gui-node")?.pinned)
+				throw new Error("the node still is held");
 			// Disable → its next heartbeat learns it
 			await row().getByRole("button", { name: "Disable" }).click();
 			await modal().getByRole("button", { name: "Disable", exact: true }).click();
@@ -690,11 +717,75 @@ const scenarios = [
 		},
 		async cleanup() {
 			await api("DELETE", "/nginxions/cluster/member").catch(() => {});
+			await api("PUT", "/nginxions/nodes/staged", { staged: false }).catch(() => {});
+			await api("PUT", "/nginxions/nodes/label-hosts/gui", { host_ids: [] }).catch(() => {});
+			await removeProxyHost("gui-label.local").catch(() => {});
 			for (const n of await api("GET", "/nginxions/nodes").catch(() => [])) {
 				if (n.name !== "gui-node") continue;
 				if (n.status === "active") await api("POST", `/nginxions/nodes/${n.id}/revoke`);
 				await api("DELETE", `/nginxions/nodes/${n.id}`);
 			}
+		},
+	},
+	{
+		name: "learning-profile",
+		title:
+			"Agents → open-appsec → Learning → Learning profiles: a profile of a site with its WAF policy is made, applied (the agent restarts) and removed",
+		async run() {
+			const d = "gui-profile.local";
+			const modal = () => page.locator(".modal.show").last();
+			await addProxyHost(d);
+			await setWaf(d, "Prevent");
+			const id = await proxyHostId(d);
+			// what the agent learns of the site: normal requests
+			const traffic = async () => {
+				for (let i = 0; i < 20; i++) {
+					await site(d, `/?item=${i}&q=good+day+${i}`);
+				}
+			};
+			await go("/agents/open-appsec?tab=learning");
+			await page.getByRole("button", { name: "Learning profiles" }).click();
+			await modal().getByRole("button", { name: "New profile" }).click();
+			await modal().locator("#profile-name").fill("gui profile");
+			await modal().locator("label.form-check", { hasText: d }).locator("input").check();
+			await modal().locator("label.form-check", { hasText: "With the WAF policy" }).locator("input").check();
+			// the agent writes what it learned from time to time: the profile is made once it has something of the site
+			await until(
+				"the profile is made",
+				async () => {
+					await traffic();
+					await modal().getByRole("button", { name: "Make the profile" }).click();
+					return page
+						.getByText("The profile is made")
+						.waitFor({ timeout: 5000 })
+						.then(
+							() => true,
+							() => false,
+						);
+				},
+				{ timeout: 360000, every: 15000 },
+			);
+			const row = modal().locator("tr", { hasText: "gui profile" });
+			await row.waitFor();
+			const made = (await api("GET", "/nginxions/learning/profiles")).profiles?.find((p) => p.name === "gui profile");
+			if (!made?.policy) throw new Error(`the profile carries no WAF policy: ${JSON.stringify(made)?.slice(0, 300)}`);
+			await row.getByRole("button", { name: "Apply", exact: true }).click();
+			await page.locator(".modal.show").last().getByRole("button", { name: "Apply", exact: true }).click();
+			await page.getByText("The profile is applied, the agent restarts").waitFor({ timeout: 30000 });
+			await panelRestarted(60000);
+			if ((await api("GET", `/nginxions/waf/hosts/${id}`)).mode !== "prevent-learn")
+				throw new Error("the WAF of the site changed");
+			await go("/agents/open-appsec?tab=learning");
+			await page.getByRole("button", { name: "Learning profiles" }).click();
+			await modal().locator("tr", { hasText: "gui profile" }).getByRole("button", { name: "Remove", exact: true }).click();
+			await page.locator(".modal.show").last().getByRole("button", { name: "Remove", exact: true }).click();
+			await modal().locator("tr", { hasText: "gui profile" }).waitFor({ state: "detached", timeout: 15000 });
+		},
+		async cleanup() {
+			for (const p of (await api("GET", "/nginxions/learning/profiles").catch(() => ({}))).profiles ?? []) {
+				if (p.name === "gui profile") await api("DELETE", `/nginxions/learning/profiles/${p.id}`).catch(() => {});
+			}
+			await removeProxyHost("gui-profile.local").catch(() => {});
 		},
 	},
 	{

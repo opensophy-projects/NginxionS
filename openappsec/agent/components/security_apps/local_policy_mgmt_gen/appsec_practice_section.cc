@@ -2,6 +2,11 @@
 
 #include "appsec_practice_section.h"
 #include <algorithm>
+// NginxionS: the parameters of the learning of the WAF (learningParameters below)
+#include <cctype>
+#include <cstdlib>
+#include <map>
+#include <cereal/types/map.hpp>
 
 using namespace std;
 
@@ -605,6 +610,26 @@ WebAppSection::WebAppSection(
 
 // LCOV_EXCL_STOP
 
+// NginxionS: the parameters of the learning of the WAF (waapParameters, read as Waap::Parameters::WaapParameters).
+// Empty, as upstream, unless NGINXIONS_LEARNING_INTERVAL_MINUTES is set in the environment of the agent: the length of
+// a window of learning in minutes (120 by default), only so that the learning of a test stack of several servers
+// (scripts/test-cluster.sh) takes minutes instead of hours. smartsync reads the same variable.
+static map<string, string>
+learningParameters()
+{
+    map<string, string> params;
+    const char *interval = getenv("NGINXIONS_LEARNING_INTERVAL_MINUTES");
+    if (interval == nullptr) return params;
+    string value(interval);
+    if (value.empty() || value.size() > 3) return params;
+    for (char c : value) {
+        if (!isdigit(static_cast<unsigned char>(c))) return params;
+    }
+    if (stoi(value) < 1) return params;
+    params["learning.intervalDuration"] = value;
+    return params;
+}
+
 void
 WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -633,7 +658,8 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("applicationUrls",                 application_urls),
         cereal::make_nvp("overrides",                       overrides),
         cereal::make_nvp("trustedSources",                  trusted_sources),
-        cereal::make_nvp("waapParameters",                  empty_list),
+        // NginxionS: the parameters of the learning (learningParameters above)
+        cereal::make_nvp("waapParameters",                  learningParameters()),
         cereal::make_nvp("botProtection",                   false),
         cereal::make_nvp("antiBot",                         anti_bots),
         cereal::make_nvp("botProtection_v2",                bot_protection != "" ? bot_protection : string("Detect"))
@@ -675,7 +701,8 @@ WebAPISection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("oas",                            empty_list),
         cereal::make_nvp("trustedSources",                 empty_list),
         cereal::make_nvp("triggers",                       empty_list),
-        cereal::make_nvp("waapParameters",                 empty_list),
+        // NginxionS: the parameters of the learning (learningParameters above)
+        cereal::make_nvp("waapParameters",                 learningParameters()),
         cereal::make_nvp("overrides",                      empty_list)
     );
 }
