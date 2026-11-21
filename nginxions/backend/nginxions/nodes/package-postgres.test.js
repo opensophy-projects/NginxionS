@@ -142,6 +142,53 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		content = await pkg.contentOf(node.id);
 		assert.equal(content.hosts.length, 2);
 
+		// a host given to a label: every node with the label serves it, the others do not
+		const only = await knex("proxy_host").whereRaw("domain_names::text like ?", ["%manager-only%"]).first();
+		await assert.rejects(() => nodes.setLabelHosts(ADMIN, "Not A Label!", [only.id]), /Not a label/);
+		assert.deepEqual(await nodes.setLabelHosts(ADMIN, "eu", [only.id]), [only.id]);
+		assert.deepEqual(await nodes.labelHosts(ADMIN), [{ label: "eu", host_ids: [only.id] }]);
+		assert.equal((await pkg.contentOf(node.id)).hosts.length, 2, "no label yet");
+		await nodes.update(ADMIN, node.id, { labels: ["eu"] });
+		assert.deepEqual(
+			await pkg.servedHostIdsOf(node.id),
+			[shop, blog, only.id].sort((x, y) => x - y),
+		);
+		await nodes.update(ADMIN, node.id, { labels: [] });
+
+		// held on a package given before (a rollback), then following the configuration again
+		await knex("nginxions_node").where({ id: node.id }).update({ status: "active" });
+		const first = await pkg.packageOf(node.id);
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "prevent-learn" });
+		const second = await pkg.packageOf(node.id);
+		assert.notEqual(first.version, second.version);
+		const kept = await nodes.packages(ADMIN, node.id);
+		assert.ok(kept.some((p) => p.version === first.version) && kept.some((p) => p.version === second.version));
+		await assert.rejects(() => nodes.hold(ADMIN, node.id, "0".repeat(64)), /never given/);
+		assert.deepEqual((await nodes.hold(ADMIN, node.id, first.version)).pinned, {
+			version: first.version,
+			by: "manual",
+		});
+		assert.equal((await pkg.packageOf(node.id)).version, first.version, "held on the package before");
+		assert.equal((await nodes.hold(ADMIN, node.id, null)).pinned, null);
+		assert.equal((await pkg.packageOf(node.id)).version, second.version);
+
+		// a staged rollout: a node that is not a canary keeps its package, a canary gets the change; promoted, all
+		await knex("nginxions_node")
+			.where({ id: node.id })
+			.update({ info: JSON.stringify({ package_version: second.version }) });
+		assert.deepEqual(await nodes.setStaged(ADMIN, true), { staged: true });
+		assert.equal((await nodes.list(ADMIN))[0].pinned.by, "staged");
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
+		assert.equal((await pkg.packageOf(node.id)).version, second.version, "the change waits");
+		assert.deepEqual(await nodes.promote(ADMIN), { promoted: 1 });
+		const third = await pkg.packageOf(node.id);
+		assert.notEqual(third.version, second.version, "promoted: the change reaches the node");
+		assert.equal((await nodes.setCanary(ADMIN, node.id, true)).pinned, null, "a canary follows the configuration");
+		await nodes.setCanary(ADMIN, node.id, false);
+		assert.equal((await nodes.setStaged(ADMIN, false)).staged, false);
+		assert.equal((await nodes.list(ADMIN))[0].pinned, null);
+		await knex("nginxions_node").where({ id: node.id }).update({ status: "pending" });
+
 		// this database becomes "the node": the rows of the manager are gone, only the package is left
 		await knex("nginxions_waf_host").delete();
 		await knex("access_list_auth").delete();

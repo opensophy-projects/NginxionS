@@ -3330,6 +3330,64 @@ router
 	);
 
 /**
+ * GET /api/nginxions/nodes/label-hosts — [{label, host_ids}]: every node with the label serves its hosts (step 15.2)
+ * PUT /api/nginxions/nodes/label-hosts/:label — {host_ids}
+ */
+router
+	.route("/nodes/label-hosts")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.labelHosts(res.locals.access)));
+router
+	.route("/nodes/label-hosts/:label")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["host_ids"],
+					properties: { host_ids: { type: "array", maxItems: 1000, items: { type: "integer", minimum: 1 } } },
+				},
+				req.body,
+			);
+			return internalNodes.setLabelHosts(res.locals.access, String(req.params.label), data.host_ids);
+		}),
+	);
+
+/**
+ * GET  /api/nginxions/nodes/staged — {staged}: a staged rollout (step 15.2)
+ * PUT  /api/nginxions/nodes/staged — {staged}: on (the nodes that are not canaries are held), off
+ * POST /api/nginxions/nodes/staged/promote — the change reaches every node
+ */
+router
+	.route("/nodes/staged")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.rolloutSettings(res.locals.access)))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["staged"],
+					properties: { staged: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.setStaged(res.locals.access, data.staged);
+		}),
+	);
+router
+	.route("/nodes/staged/promote")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((_req, res) => internalNodes.promote(res.locals.access)));
+
+/**
  * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
  * DELETE /api/nginxions/nodes/:node_id — a node not active (waiting or disabled)
  */
@@ -3364,6 +3422,55 @@ router
 /**
  * PUT /api/nginxions/nodes/:node_id/drain — {drained}: out of work (its package has no hosts) or back
  */
+/**
+ * PUT /api/nginxions/nodes/:node_id/canary — {canary}: reached first by a staged rollout (step 15.2)
+ */
+router
+	.route("/nodes/:node_id/canary")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["canary"],
+					properties: { canary: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.setCanary(res.locals.access, nodeId(req), data.canary);
+		}),
+	);
+
+/**
+ * GET /api/nginxions/nodes/:node_id/packages — the packages the node was given (the last 20), the newest first
+ * PUT /api/nginxions/nodes/:node_id/packages — {version}: held on that package (a rollback); {version: null}: it
+ *     follows the configuration again
+ */
+router
+	.route("/nodes/:node_id/packages")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.packages(res.locals.access, nodeId(req))))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["version"],
+					properties: {
+						version: { anyOf: [{ type: "string", pattern: "^[0-9a-f]{64}$" }, { type: "null" }] },
+					},
+				},
+				req.body,
+			);
+			return internalNodes.hold(res.locals.access, nodeId(req), data.version);
+		}),
+	);
+
 router
 	.route("/nodes/:node_id/drain")
 	.options((_, res) => res.sendStatus(204))

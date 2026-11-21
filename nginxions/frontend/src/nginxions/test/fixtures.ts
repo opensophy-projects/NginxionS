@@ -652,7 +652,14 @@ export const node = {
 	codeExpiresOn: null,
 	drained: false,
 	command: null,
+	canary: true,
+	pinned: { version: "b".repeat(64), by: "staged" },
 };
+
+export const nodePackages = [
+	{ version: "a".repeat(64), createdOn: now, applied: true, pinned: false },
+	{ version: "b".repeat(64), createdOn: now, applied: false, pinned: true },
+];
 
 export const rollout = [
 	{

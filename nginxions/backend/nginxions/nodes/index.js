@@ -35,7 +35,18 @@ import {
 import { profileBytes, profileForNewNodes } from "../learning/profile-store.js";
 import { MODEL_FILE, modelRef } from "../waf/model-file.js";
 import { readClusterLearning } from "./cluster-learning.js";
-import { hostIdsOf, packageOf, signingKey } from "./package.js";
+import {
+	contentOf,
+	hostIdsOf,
+	keepPackage,
+	keptContent,
+	labelHosts,
+	packageOf,
+	packagesOf,
+	signingKey,
+} from "./package.js";
+import { signPackage } from "./package-model.js";
+import { getSetting, setSetting } from "../settings.js";
 import { learningRole } from "./role.js";
 
 const TABLE = "nginxions_node";
@@ -65,6 +76,10 @@ const toNode = (row, now = Date.now(), hostIds = []) => ({
 	drained: Boolean(row.drained),
 	// a command waiting for the next heartbeat of the node (step 15.6)
 	command: row.command ? { action: row.command, on: row.command_on } : null,
+	// reached first by a staged rollout (step 15.2)
+	canary: Boolean(row.canary),
+	// held on a package it was given before: "manual" (a rollback) or "staged" (a staged rollout has not reached it)
+	pinned: row.pinned_version ? { version: row.pinned_version, by: row.pinned_by } : null,
 });
 
 const rowOf = async (id) => {
@@ -543,6 +558,167 @@ const internalNodes = {
 		await audit(access, "updated", id, { name: row.name, hosts: found });
 		return hostIdsOf(id);
 	},
+
+	/**
+	 * The proxy hosts given to labels: every node with a label serves them (step 15.2). A list (a label is not a key: the
+	 * client of the GUI would change its case): [{label, host_ids}], every label of a node or of hosts.
+	 */
+	labelHosts: async (access) => {
+		await access.can("nodes:view");
+		const given = await labelHosts();
+		const labels = new Set(Object.keys(given));
+		for (const row of await db()(TABLE).whereNot({ status: "revoked" }).select("labels")) {
+			for (const l of parse(row.labels) ?? []) labels.add(l);
+		}
+		return [...labels].sort().map((label) => ({ label, host_ids: given[label] ?? [] }));
+	},
+
+	/**
+	 * @param {Access} access
+	 * @param {string} label
+	 * @param {number[]} hostIds  the proxy hosts of this manager every node with the label serves from now on
+	 */
+	setLabelHosts: async (access, label, hostIds) => {
+		await access.can("nodes:manage");
+		const [name] = normalizeLabels([label]);
+		if (!name || name !== String(label)) throw new errs.ValidationError(`Not a label: ${label}`);
+		const found = await knownHosts(hostIds);
+		await db().transaction(async (trx) => {
+			await trx("nginxions_label_host").where({ label: name }).delete();
+			if (found.length)
+				await trx("nginxions_label_host").insert(found.map((h) => ({ label: name, proxy_host_id: h })));
+		});
+		await internalAuditLog.add(access, {
+			action: "updated",
+			object_type: "cluster",
+			meta: { name: `hosts of the label ${name}`, hosts: found },
+		});
+		return (await labelHosts())[name] ?? [];
+	},
+
+	/** the staged rollout: on or off (step 15.2) */
+	rolloutSettings: async (access) => {
+		await access.can("nodes:view");
+		return getSetting(ROLLOUT_KEY);
+	},
+
+	/**
+	 * A staged rollout on: the nodes that are not canaries are held on the package they run, a change reaches the
+	 * canaries only, until "Roll out to all nodes". Off: every node follows the configuration again.
+	 * @param {Access} access
+	 * @param {boolean} staged
+	 */
+	setStaged: async (access, staged) => {
+		await access.can("nodes:manage");
+		const settings = await setSetting(ROLLOUT_KEY, { staged: Boolean(staged) });
+		for (const row of await db()(TABLE).where({ status: "active" })) {
+			if (settings.staged && !row.canary && !row.pinned_version) await holdOnRunning(row);
+			if (!settings.staged && row.pinned_by === STAGED) await unpin(row.id);
+		}
+		await internalAuditLog.add(access, {
+			action: "updated",
+			object_type: "cluster",
+			meta: { name: "staged rollout", staged: settings.staged },
+		});
+		return settings;
+	},
+
+	/** the staged rollout reaches every node: the nodes held by it get the configuration now (and stay held on it) */
+	promote: async (access) => {
+		await access.can("nodes:manage");
+		const rows = await db()(TABLE).where({ status: "active", pinned_by: STAGED });
+		for (const row of rows) await holdOn(row.id, STAGED, await currentPackage(row.id));
+		await internalAuditLog.add(access, {
+			action: "updated",
+			object_type: "cluster",
+			meta: { name: "staged rollout", promoted: rows.map((r) => r.name) },
+		});
+		return { promoted: rows.length };
+	},
+
+	/** a canary is reached first by a staged rollout */
+	setCanary: async (access, id, canary) => {
+		await access.can("nodes:manage");
+		const row = await rowOf(id);
+		await db()(TABLE)
+			.where({ id })
+			.update({ canary: Boolean(canary), modified_on: new Date() });
+		const { staged } = await getSetting(ROLLOUT_KEY);
+		if (staged && canary && row.pinned_by === STAGED) await unpin(id);
+		if (staged && !canary && !row.pinned_version && row.status === "active") await holdOnRunning(row);
+		await audit(access, "updated", id, { name: row.name, canary: Boolean(canary) });
+		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
+	},
+
+	/** the packages kept for a node (the last ones it was given), the newest first */
+	packages: async (access, id) => {
+		await access.can("nodes:view");
+		const row = await rowOf(id);
+		const applied = parse(row.info)?.package_version ?? "";
+		return (await packagesOf(id)).map((p) => ({
+			version: p.version,
+			created_on: p.created_on,
+			applied: p.version === applied,
+			pinned: p.version === row.pinned_version,
+		}));
+	},
+
+	/**
+	 * A node held on a package it was given before (a rollback), or back to following the configuration (version
+	 * null; during a staged rollout a node that is not a canary is held on the configuration now).
+	 * @param {Access} access
+	 * @param {number} id
+	 * @param {string|null} version
+	 */
+	hold: async (access, id, version) => {
+		await access.can("nodes:manage");
+		const row = await rowOf(id);
+		if (version) {
+			if (!(await keptContent(id, version)))
+				throw new errs.ValidationError("This node was never given this package");
+			await holdOn(id, MANUAL, version);
+		} else {
+			const { staged } = await getSetting(ROLLOUT_KEY);
+			if (staged && !row.canary) await holdOn(id, STAGED, await currentPackage(id));
+			else await unpin(id);
+		}
+		await audit(access, "updated", id, { name: row.name, package: version ?? "follows the configuration" });
+		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
+	},
+};
+
+const ROLLOUT_KEY = "cluster.rollout";
+const STAGED = "staged";
+const MANUAL = "manual";
+
+/** the proxy hosts of this manager among these ids; an unknown one is refused */
+const knownHosts = async (hostIds) => {
+	const wanted = [...new Set((Array.isArray(hostIds) ? hostIds : []).map(Number))];
+	const found = wanted.length
+		? (await db()("proxy_host").whereIn("id", wanted).where({ is_deleted: 0 })).map((h) => h.id)
+		: [];
+	const unknown = wanted.filter((h) => !found.includes(h));
+	if (unknown.length) throw new errs.ValidationError(`Unknown proxy hosts: ${unknown.join(", ")}`);
+	return found.sort((a, b) => a - b);
+};
+
+/** the package of the configuration now for a node, kept; its version */
+const currentPackage = async (id) => {
+	const pkg = signPackage(await contentOf(id), (await signingKey()).privateKey);
+	await keepPackage(id, pkg);
+	return pkg.version;
+};
+
+const holdOn = (id, by, version) =>
+	db()(TABLE).where({ id }).update({ pinned_version: version, pinned_by: by, modified_on: new Date() });
+const unpin = (id) =>
+	db()(TABLE).where({ id }).update({ pinned_version: null, pinned_by: null, modified_on: new Date() });
+
+/** held on the package the node runs (kept), or on the configuration now when it runs none of the kept ones */
+const holdOnRunning = async (row) => {
+	const running = parse(row.info)?.package_version;
+	const version = running && (await keptContent(row.id, running)) ? running : await currentPackage(row.id);
+	await holdOn(row.id, STAGED, version);
 };
 
 export default internalNodes;
