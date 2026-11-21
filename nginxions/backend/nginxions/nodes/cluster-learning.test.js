@@ -74,3 +74,26 @@ describe("the state of the cluster in a snapshot of learning", () => {
 		);
 	});
 });
+
+test("the learning of the cluster: windows per node and of this server, the last merge of smartsync", async () => {
+	const { clusterLearningOf, entriesOfListing } = await import("./cluster-learning.js");
+	const xml = `<ListBucketResult><KeyCount>5</KeyCount>
+		<Contents><Key>/shop/Indicators/Confidence/window_0_1/n-0123456789abcdef/agent-a/data.data</Key><LastModified>2026-11-21T04:00:00Z</LastModified></Contents>
+		<Contents><Key>/shop/Indicators/Confidence/window_0_2/n-0123456789abcdef/agent-a/data.data1</Key><LastModified>2026-11-21T04:10:00Z</LastModified></Contents>
+		<Contents><Key>shop/Indicators/Confidence/window_0_2/local-agent/data.data</Key><LastModified>2026-11-21T04:05:00Z</LastModified></Contents>
+		<Contents><Key>/shop/Indicators/Confidence/remote/confidence.data</Key><LastModified>2026-11-21T04:11:00Z</LastModified></Contents>
+		<Contents><Key>/shop/tuning/decisions.data</Key><LastModified>2026-11-21T03:00:00Z</LastModified></Contents>
+	</ListBucketResult>`;
+	const entries = entriesOfListing(xml);
+	assert.equal(entries.length, 5);
+	assert.equal(entries[2].key, "/shop/Indicators/Confidence/window_0_2/local-agent/data.data");
+	assert.deepEqual(clusterLearningOf(entries, [{ uid: "n-0123456789abcdef", name: "edge-1" }]), [
+		{
+			asset: "shop",
+			local: { windows: 1, lastOn: "2026-11-21T04:05:00Z" },
+			nodes: [{ uid: "n-0123456789abcdef", name: "edge-1", windows: 2, lastOn: "2026-11-21T04:10:00Z" }],
+			mergedOn: "2026-11-21T04:11:00Z",
+		},
+	]);
+	assert.deepEqual(clusterLearningOf([], []), []);
+});

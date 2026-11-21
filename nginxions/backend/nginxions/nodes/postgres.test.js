@@ -261,6 +261,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			[["package", "applied", state.applied_version, "edge-1"]],
 		);
 		assert.deepEqual(await nodes.rollout(VIEWER, { node_id: row.id + 1000 }), []);
+		// a manager with a node: the learning of the cluster from its storage (empty here)
+		assert.deepEqual(await nodes.clusterLearning(VIEWER), { available: true, assets: [], error: "" });
 	});
 
 	test("the agent of the node learns through the manager: its relay, the storage and smartsync there", async () => {

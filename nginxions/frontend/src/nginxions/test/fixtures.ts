@@ -674,3 +674,16 @@ export const rollout = [
 		createdOn: now,
 	},
 ];
+
+export const clusterLearningSites = {
+	available: true,
+	error: "",
+	assets: [
+		{
+			asset: "app.example.com",
+			local: { windows: 3, lastOn: now },
+			nodes: [{ uid: "n-0123456789abcdef", name: "edge-1", windows: 5, lastOn: now }],
+			mergedOn: now,
+		},
+	],
+};
