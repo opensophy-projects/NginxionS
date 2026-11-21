@@ -8,10 +8,10 @@ import { Link } from "react-router-dom";
 import { T } from "src/locale";
 import { getEvents } from "../../api";
 import { showBanModal } from "../../crowdsec/BanModal";
+import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
 import { dateTime, timeAgo } from "../../ui/time";
 import { AGENT_OF } from "../WafEvents/filters";
-import styles from "../../pki/Pki.module.css";
 
 const LIMIT = 100;
 // open-appsec: Prevent; CrowdSec: the decision of an alert (a simulated one or an alert without one did not block)

@@ -74,6 +74,7 @@
 | tuning (в `openappsec`) | `QUERY_DB_HOST`, `QUERY_DB_USER` | `postgres`, роль `appsec` (CREATEDB) | Bootstrap |
 | tuning (в `openappsec`) | `QUERY_DB_PASSWORD` | `QUERY_DB_PASSWORD_FILE`, читает `nginxions-openappsec.sh`, секрет от `nginxions-init` | Bootstrap (секрет) ✅ |
 | tuning, shared storage (в `openappsec`) | `SERVER_PORT`, `SHARED_STORAGE_HOST` | 7813 и 7811 на 127.0.0.1 (задаёт `nginxions-openappsec.sh`) | Bootstrap |
+| smartsync (в `openappsec`) | пороги обучения (`MinSources`, `MinIntervals`, `RatioThreshold`) | были в коде; теперь GUI «Агенты → Узлы → Обучение узлов» → `/ext/appsec/nginxions-smartsync.json` | 15 ✅ |
 | smartsync (в `openappsec`) | `APPSEC_MODE`, `SERVER_PORT`, `SHARED_STORAGE_HOST`, `FLOCK_ROOT` | standalone, 7815 на 127.0.0.1, хранилище 7811, `/tmp/nginxions-smartsync/` (задаёт `nginxions-openappsec.sh`; запускается, когда у сервера есть узлы) | Bootstrap |
 
 smartsync (общее обучение нескольких агентов) работает в контейнере `openappsec` управляющего сервера, когда к нему подключены узлы: агент NginxionS шлёт запросы к локальным сервисам без токена облака, а smartsync в режиме standalone не нужны Kafka и Redis. Самостоятельный сервер учится локально, как раньше; разметку NginxionS агент читает из `tuning/decisions.data` shared storage. Подробно — `docs/adr/0011-learning.md` и `docs/adr/0012-nodes.md` (п. 5c).

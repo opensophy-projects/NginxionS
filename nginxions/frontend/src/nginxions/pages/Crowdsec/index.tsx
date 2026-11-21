@@ -3,8 +3,8 @@
 // blocklists, the hub, machines and bouncers, and every setting. Nothing here needs the internet.
 import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
-import Alert from "react-bootstrap/Alert";
 import { useState } from "react";
+import Alert from "react-bootstrap/Alert";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { HasPermission, LoadingPage } from "src/components";
 import { intl, T } from "src/locale";
@@ -21,11 +21,11 @@ import {
 } from "../../crowdsec/api";
 import { showBanModal } from "../../crowdsec/BanModal";
 import { originLabel, t } from "../../crowdsec/labels";
+import styles from "../../pki/Pki.module.css";
 import { CodePane } from "../../policy/CodePane";
 import { useCan } from "../../rbac/hooks";
 import agentStyles from "../AgentOpenappsec/Agent.module.css";
 import hostStyles from "../Hosts/Hosts.module.css";
-import styles from "../../pki/Pki.module.css";
 import { BlocklistsTab, RegistryTab } from "./Blocklists";
 import { AlertsTab, DecisionsTab } from "./Decisions";
 import { HubTab } from "./Hub";

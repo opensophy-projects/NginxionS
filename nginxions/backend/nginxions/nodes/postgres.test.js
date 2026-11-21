@@ -143,6 +143,21 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await knex?.destroy();
 	});
 
+	test("the thresholds of the learning of the nodes: saved in the GUI, written for smartsync", async () => {
+		const { default: clusterSettings } = await import("./cluster-settings.js");
+		assert.deepEqual(await clusterSettings.get(VIEWER), {
+			minSources: 3,
+			minSourcesTypes: 10,
+			minIntervals: 5,
+			ratioThreshold: 0.8,
+		});
+		const next = { minSources: 4, minSourcesTypes: 12, minIntervals: 6, ratioThreshold: 0.7 };
+		await assert.rejects(() => clusterSettings.set(VIEWER, next), /forbidden: nodes:manage/);
+		assert.deepEqual(await clusterSettings.set(ADMIN, next), next);
+		assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "appsec", "nginxions-smartsync.json"), "utf8")), next);
+		await assert.rejects(() => clusterSettings.set(ADMIN, { ...next, minSources: 1 }), /sources 2–1000/);
+	});
+
 	test("a viewer sees the list but adds no node", async () => {
 		assert.deepEqual(await nodes.list(VIEWER), []);
 		await assert.rejects(() => nodes.add(VIEWER, { name: "edge-1" }), /forbidden: nodes:manage/);

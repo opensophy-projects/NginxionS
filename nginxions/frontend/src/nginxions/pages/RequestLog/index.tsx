@@ -15,6 +15,7 @@ import { hostLabel, showRequestModal, statusTone } from "../../modals/RequestMod
 import { useCan } from "../../rbac/hooks";
 import { formatBytes, formatMs } from "../../ui/charts/format";
 import { Label } from "../../ui/InfoTip";
+import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 import { SearchField } from "../../ui/SearchField";
 import { dateTime } from "../../ui/time";
 import hostStyles from "../Hosts/Hosts.module.css";
@@ -26,7 +27,6 @@ import { PERIODS, type Period } from "../WafEvents/filters";
 import { RetentionPopover } from "../WafEvents/Retention";
 import { RequestFilters } from "./Filters";
 import logStyles from "./RequestLog.module.css";
-import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 
 const PERIOD_MS: Record<Exclude<Period, "custom">, number> = {
 	"1h": 3600e3,

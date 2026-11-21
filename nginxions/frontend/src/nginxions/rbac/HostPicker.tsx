@@ -3,9 +3,9 @@ import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
 import * as api from "src/api/backend/base";
 import { intl, T } from "src/locale";
+import { SearchField } from "../ui/SearchField";
 import type { RoleHost, RoleHostType } from "./api";
 import styles from "./RoleModal.module.css";
-import { SearchField } from "../ui/SearchField";
 
 const SOURCES: { type: RoleHostType; url: string; object: string }[] = [
 	{ type: "proxy_host", url: "/nginx/proxy-hosts", object: "proxy-host" },
