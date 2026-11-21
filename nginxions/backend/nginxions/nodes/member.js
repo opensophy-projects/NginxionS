@@ -221,6 +221,8 @@ const ownInfo = async (state) => {
 		profile_error: state?.profile_error ?? "",
 		model_sha256: state?.model_sha256 ?? "",
 		model_error: state?.model_error ?? "",
+		command_done: state?.command_done ?? "",
+		command_error: state?.command_error ?? "",
 	};
 };
 
@@ -356,6 +358,26 @@ export const syncModel = async (state, ref, io = {}) => {
 };
 
 /**
+ * A command of the manager (step 15.6), done once: its id is told back with the next heartbeat.
+ * @param {{id: string, action: string}} command
+ * @param {{restartAgent?: Function}} [io]  replaced in tests
+ * @returns {Promise<object>} what changes in the state
+ */
+export const runCommand = async (command, io = {}) => {
+	const restartAgent =
+		io.restartAgent ?? (async () => (await import("../control/client.js")).default.restartService("openappsec", 1));
+	try {
+		if (command.action !== "restart_agent") throw new Error(`unknown command: ${command.action}`);
+		await restartAgent();
+		logger.info("Cluster: the manager asked to restart the agent: done");
+		return { command_done: command.id, command_error: "" };
+	} catch (err) {
+		logger.warn(`Cluster: the command of the manager ${command.action}: ${err.message}`);
+		return { command_done: command.id, command_error: String(err.message).slice(0, 300) };
+	}
+};
+
+/**
  * The package of the manager: fetched, its signature checked against the pinned key, applied; a package nginx
  * refuses is replaced by the one before (the node keeps serving what worked) and is not tried again.
  * @returns {Promise<object>} what changes in the state
@@ -432,6 +454,11 @@ export const beat = async () => {
 					...(await syncModel(next, (await lastContent()).waf_model)),
 					model_tried_on: new Date(),
 				};
+			}
+			// a command of the manager, once per id
+			const command = answer.body?.command;
+			if (command?.id && /^[0-9a-f]{16}$/.test(command.id) && command.id !== next.command_done) {
+				next = { ...next, ...(await runCommand(command)) };
 			}
 			next = { ...next, ...(await forwardEvents(next)) };
 			await writeState(next);

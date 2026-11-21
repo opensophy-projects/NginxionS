@@ -261,6 +261,21 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			[["package", "applied", state.applied_version, "edge-1"]],
 		);
 		assert.deepEqual(await nodes.rollout(VIEWER, { node_id: row.id + 1000 }), []);
+		// a command: waits for the heartbeat, the node does it (restarts its agent), the next heartbeat tells it
+		await assert.rejects(() => nodes.command(VIEWER, row.id, "restart_agent"), /forbidden: nodes:manage/);
+		await assert.rejects(() => nodes.command(ADMIN, row.id, "format_disk"), /Unknown command/);
+		assert.deepEqual((await nodes.command(ADMIN, row.id, "restart_agent")).command.action, "restart_agent");
+		learned.length = 0;
+		await member.beat();
+		assert.ok(
+			learned.some((r) => r.name === "control" && r.method === "POST" && r.url.includes("openappsec")),
+			"the agent of the node was restarted",
+		);
+		assert.match((await member.readState()).command_done, /^[0-9a-f]{16}$/);
+		await member.beat();
+		assert.equal((await nodes.list(ADMIN))[0].command, null);
+		const [done] = await nodes.rollout(VIEWER);
+		assert.deepEqual([done.kind, done.version, done.result], ["command", "restart_agent", "applied"]);
 		// a manager with a node: the learning of the cluster from its storage (empty here)
 		assert.deepEqual(await nodes.clusterLearning(VIEWER), { available: true, assets: [], error: "" });
 	});

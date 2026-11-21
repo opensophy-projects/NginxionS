@@ -5,6 +5,7 @@
 //   - the node sends a heartbeat with its token every 30 s: version, hosts, the state of its agent;
 //   - "Disable": the certificate of the node is revoked, its token forgotten; its next heartbeat gets 403.
 // RBAC: nodes:view (the list), nodes:manage (add, new code, disable, delete).
+import { randomBytes } from "node:crypto";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
@@ -57,6 +58,8 @@ const toNode = (row, now = Date.now(), hostIds = []) => ({
 	last_seen_on: row.last_seen_on,
 	code_expires_on: row.status === "pending" ? row.code_expires_on : null,
 	host_ids: hostIds,
+	// a command waiting for the next heartbeat of the node (step 15.6)
+	command: row.command ? { action: row.command, on: row.command_on } : null,
 });
 
 const rowOf = async (id) => {
@@ -99,6 +102,8 @@ const issueCode = async (id, uid) => {
 };
 
 const ROLLOUT_TABLE = "nginxions_node_rollout";
+/** what a manager can ask of a node (done by the node with its next heartbeat) */
+export const NODE_COMMANDS = ["restart_agent"];
 /** the rollout is kept this long */
 const ROLLOUT_KEEP_DAYS = 180;
 
@@ -214,6 +219,25 @@ const internalNodes = {
 		return toNode(await rowOf(id));
 	},
 
+	/**
+	 * A command to an active node, done with its next heartbeat (step 15.6): restart_agent restarts its agent. One at a
+	 * time; a new one replaces the one that waits.
+	 * @param {Access} access
+	 * @param {number} id
+	 * @param {string} action
+	 */
+	command: async (access, id, action) => {
+		await access.can("nodes:manage");
+		if (!NODE_COMMANDS.includes(action)) throw new errs.ValidationError(`Unknown command: ${action}`);
+		const row = await rowOf(id);
+		if (row.status !== "active") throw new errs.ValidationError("The node is not active");
+		await db()(TABLE)
+			.where({ id })
+			.update({ command: action, command_id: randomBytes(8).toString("hex"), command_on: new Date() });
+		await audit(access, "updated", id, { name: row.name, command: action });
+		return toNode(await rowOf(id), Date.now(), await hostIdsOf(id));
+	},
+
 	/** a node that is not active (waits for its registration or is disabled) is removed */
 	remove: async (access, id) => {
 		await access.can("nodes:manage");
@@ -303,6 +327,17 @@ const internalNodes = {
 			});
 		// what the node applied (or failed) since its heartbeat before: the rollout in "Agents → Nodes"
 		const rollout = rolloutOf(parse(row.info) ?? {}, next);
+		// the command of the manager is done: told once in the rollout, then the node has none
+		if (row.command_id && next.command_done === row.command_id) {
+			rollout.push({
+				kind: "command",
+				version: row.command,
+				result: next.command_error ? "failed" : "applied",
+				error: next.command_error,
+			});
+			await db()(TABLE).where({ id: row.id }).update({ command: null, command_id: null, command_on: null });
+			row.command = null;
+		}
 		if (rollout.length) {
 			await db()(ROLLOUT_TABLE).insert(rollout.map((r) => ({ ...r, node_id: row.id, created_on: now })));
 			await db()(ROLLOUT_TABLE)
@@ -317,6 +352,7 @@ const internalNodes = {
 			server_time: now.toISOString(),
 			package_version: pkg.version,
 			signing_key: (await signingKey()).publicKeyPem,
+			...(row.command ? { command: { id: row.command_id, action: row.command } } : {}),
 		};
 	},
 

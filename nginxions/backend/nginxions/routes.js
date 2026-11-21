@@ -28,7 +28,7 @@ import internalLearningProfiles from "./learning/profiles.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
 import internalClusterSettings from "./nodes/cluster-settings.js";
-import internalNodes from "./nodes/index.js";
+import internalNodes, { NODE_COMMANDS } from "./nodes/index.js";
 import { MAX_LEARNING_BODY } from "./nodes/learning-model.js";
 import internalMember from "./nodes/member.js";
 import internalNotifications from "./notifications/index.js";
@@ -3325,6 +3325,28 @@ router
 	.options((_, res) => res.sendStatus(204))
 	.all(jwtdecode())
 	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
+
+/**
+ * POST /api/nginxions/nodes/:node_id/command — {action: "restart_agent"}: done by the node with its next heartbeat
+ */
+router
+	.route("/nodes/:node_id/command")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["action"],
+					properties: { action: { enum: NODE_COMMANDS } },
+				},
+				req.body,
+			);
+			return internalNodes.command(res.locals.access, nodeId(req), data.action);
+		}),
+	);
 
 /**
  * GET /api/nginxions/nodes/:node_id/hosts — the proxy hosts the node serves (ids of this server)

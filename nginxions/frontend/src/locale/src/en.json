@@ -4496,6 +4496,15 @@
 	"nginxions.nodes.code.until": {
 		"defaultMessage": "code valid until {time}"
 	},
+	"nginxions.nodes.command.restart_agent": {
+		"defaultMessage": "restart of the agent"
+	},
+	"nginxions.nodes.command.sent": {
+		"defaultMessage": "The command waits for the next heartbeat of the node"
+	},
+	"nginxions.nodes.command.waiting": {
+		"defaultMessage": "Waits for the node"
+	},
 	"nginxions.nodes.copied": {
 		"defaultMessage": "Copied"
 	},
@@ -4568,6 +4577,12 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Waits for the node"
 	},
+	"nginxions.nodes.restart-agent": {
+		"defaultMessage": "Restart the agent"
+	},
+	"nginxions.nodes.restart-agent.confirm": {
+		"defaultMessage": "The agent of \"{name}\" restarts with its next heartbeat (within half a minute): about a minute without the WAF answering on that server."
+	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Disable"
 	},
@@ -4588,6 +4603,9 @@
 	},
 	"nginxions.nodes.rollout.hint": {
 		"defaultMessage": "What each node applied of this server and when: the package of configuration, the model of the agent, the learning profile; and what failed. A package nginx refused is rolled back on the node to the one before; the model goes back with \"Back to the model before\" in WAF → Agent."
+	},
+	"nginxions.nodes.rollout.kind.command": {
+		"defaultMessage": "Command"
 	},
 	"nginxions.nodes.rollout.kind.model": {
 		"defaultMessage": "Model of the agent"

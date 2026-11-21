@@ -64,6 +64,9 @@ export const normalizeInfo = (info) => {
 		// the model of the agent it took from the manager, its last error
 		model_sha256: /^[0-9a-f]{64}$/.test(src.model_sha256 ?? "") ? src.model_sha256 : "",
 		model_error: text(src.model_error, 300),
+		// the last command of the manager the node did (step 15.6), its error
+		command_done: /^[0-9a-f]{16}$/.test(src.command_done ?? "") ? src.command_done : "",
+		command_error: text(src.command_error, 300),
 	};
 };
 
