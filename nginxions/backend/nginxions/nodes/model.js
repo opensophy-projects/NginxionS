@@ -44,6 +44,16 @@ export const normalizeLabels = (labels) =>
 	].slice(0, 20);
 
 /** what the node tells in a heartbeat, kept short and typed: nothing else is stored */
+/** {service: state} of a heartbeat: known names, short states, a few of them */
+const servicesOf = (value) => {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	const out = {};
+	for (const [name, state] of Object.entries(value).slice(0, 16)) {
+		if (/^[a-z0-9_-]{1,32}$/.test(name) && typeof state === "string") out[name] = state.slice(0, 16);
+	}
+	return out;
+};
+
 export const normalizeInfo = (info) => {
 	const src = info && typeof info === "object" ? info : {};
 	const text = (v, max = 64) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -67,6 +77,8 @@ export const normalizeInfo = (info) => {
 		// the last command of the manager the node did (step 15.6), its error
 		command_done: /^[0-9a-f]{16}$/.test(src.command_done ?? "") ? src.command_done : "",
 		command_error: text(src.command_error, 300),
+		// the containers of its stack and their state (step 15.6): what "open-appsec" and "CrowdSec" show of a node
+		services: servicesOf(src.services),
 	};
 };
 
@@ -120,6 +132,27 @@ export const rolloutOf = (before, after) => {
 		} else if (version && version !== (before?.[versionKey] ?? "")) {
 			out.push({ kind, version, result: "applied", error: "" });
 		}
+	}
+	return out;
+};
+
+/** the most of the logs of a node kept on its manager: lines per service, characters per line */
+export const NODE_LOG_LINES = 300;
+const NODE_LOG_LINE = 2000;
+
+/**
+ * The logs a node sent (step 15.6), checked: {service: [{stream, line}]}; null when it is not that.
+ * @param {any} logs
+ */
+export const nodeLogsOf = (logs) => {
+	if (!logs || typeof logs !== "object" || Array.isArray(logs)) return null;
+	const out = {};
+	for (const [service, lines] of Object.entries(logs).slice(0, 16)) {
+		if (!/^[a-z0-9_-]{1,32}$/.test(service) || !Array.isArray(lines)) return null;
+		out[service] = lines.slice(-NODE_LOG_LINES).map((l) => ({
+			stream: l?.stream === "stderr" ? "stderr" : "stdout",
+			line: String(l?.line ?? "").slice(0, NODE_LOG_LINE),
+		}));
 	}
 	return out;
 };

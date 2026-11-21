@@ -689,3 +689,11 @@ export const clusterLearningSites = {
 		},
 	],
 };
+
+export const nodeLogs = {
+	collectedOn: now,
+	logs: {
+		openappsec: [{ stream: "stdout", line: "agent started" }],
+		crowdsec: [{ stream: "stderr", line: "lapi ready" }],
+	},
+};

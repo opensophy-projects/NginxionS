@@ -6,6 +6,8 @@
 //   - "Disable": the certificate of the node is revoked, its token forgotten; its next heartbeat gets 403.
 // RBAC: nodes:view (the list), nodes:manage (add, new code, disable, delete).
 import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
@@ -21,6 +23,7 @@ import {
 	newCode,
 	newToken,
 	newUid,
+	nodeLogsOf,
 	normalizeInfo,
 	rolloutOf,
 	normalizeLabels,
@@ -105,7 +108,9 @@ const issueCode = async (id, uid) => {
 
 const ROLLOUT_TABLE = "nginxions_node_rollout";
 /** what a manager can ask of a node (done by the node with its next heartbeat) */
-export const NODE_COMMANDS = ["restart_agent"];
+export const NODE_COMMANDS = ["restart_agent", "collect_logs"];
+/** where a manager keeps the last logs each node sent (step 15.6) */
+const NODE_LOGS_DIR = process.env.NGINXIONS_NODE_LOGS_DIR || "/data/nginxions/cluster/node-logs";
 /** the rollout is kept this long */
 const ROLLOUT_KEEP_DAYS = 180;
 
@@ -402,6 +407,41 @@ const internalNodes = {
 	package: async (token) => {
 		const row = await nodeOfToken(token);
 		return row ? packageOf(row.id) : null;
+	},
+
+	/**
+	 * Without login: the logs a node collected for its manager (command collect_logs), kept until the next ones.
+	 * @returns {Promise<{stored: number}|null>} null: unknown or disabled node
+	 */
+	storeLogs: async (token, logs) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		const clean = nodeLogsOf(logs);
+		if (!clean) throw new errs.ValidationError("logs: {service: [{stream, line}]}");
+		await mkdir(NODE_LOGS_DIR, { recursive: true, mode: 0o700 });
+		const file = path.join(NODE_LOGS_DIR, `${row.uid}.json`);
+		await writeFile(`${file}.tmp`, JSON.stringify({ collectedOn: new Date().toISOString(), logs: clean }), {
+			mode: 0o600,
+		});
+		await rename(`${file}.tmp`, file);
+		return { stored: Object.keys(clean).length };
+	},
+
+	/**
+	 * The last logs a node sent: {collectedOn, logs: {service: [{stream, line}]}}, or null before any.
+	 * @param {Access} access
+	 * @param {number} id
+	 */
+	logs: async (access, id) => {
+		await access.can("nodes:view");
+		await access.can("services:view");
+		const row = await rowOf(id);
+		try {
+			return JSON.parse(await readFile(path.join(NODE_LOGS_DIR, `${row.uid}.json`), "utf8"));
+		} catch (err) {
+			if (err.code === "ENOENT") return null;
+			throw err;
+		}
 	},
 
 	/**

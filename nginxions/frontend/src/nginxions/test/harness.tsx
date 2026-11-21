@@ -76,6 +76,7 @@ const ROUTES: [RegExp, unknown][] = [
 	[/\/nginxions\/learning\/hosts$/, [f.learningHost]],
 	[/\/nginxions\/nodes$/, [f.node]],
 	[/\/nginxions\/nodes\/rollout$/, f.rollout],
+	[/\/nginxions\/nodes\/\d+\/logs$/, f.nodeLogs],
 	[/\/nginxions\/nodes\/cluster-learning$/, f.clusterLearningSites],
 	[/\/nginxions\/learning\/queue$/, { groups: [f.queueGroup], suggestions: [f.suggestion], total: 1 }],
 	[/\/nginxions\/waf\/policy\/objects$/, f.policyObjects],

@@ -257,6 +257,7 @@ const MODALS: Record<string, unknown[]> = {
 	showAcmeLogModal: [],
 	showSnapshotsModal: [{ label: true, manage: true }],
 	showProfilesModal: [{ label: true, manage: true, nodes: true }],
+	showNodeLogs: [f.node, "openappsec"],
 	showLabelModal: [{ group: f.queueGroup, decision: "benign", onDone: noop }],
 	showStartTrialModal: [{ host: f.learningHost, onDone: noop }],
 	showTrialReportModal: [{ host: f.learningHost, manage: true, onDone: noop }],

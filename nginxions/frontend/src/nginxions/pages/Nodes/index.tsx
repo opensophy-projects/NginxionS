@@ -42,6 +42,7 @@ import {
 	setNodeHosts,
 } from "../../api";
 import { showConfirmModal } from "../../modals/ConfirmModal";
+import { showNodeLogs } from "../../nodes/NodeView";
 import { useCan } from "../../rbac/hooks";
 
 const t = (id: string, values?: Record<string, string | number>) => intl.formatMessage({ id }, values);
@@ -467,6 +468,11 @@ function NodesCard() {
 															: "nginxions.nodes.restart-agent"
 													}
 												/>
+											</Button>
+										)}
+										{can("services", "view") && node.status === "active" && (
+											<Button size="sm" className="me-2" onClick={() => showNodeLogs(node)}>
+												<T id="nginxions.nodes.logs" />
 											</Button>
 										)}
 										{manage && node.status === "active" && (
