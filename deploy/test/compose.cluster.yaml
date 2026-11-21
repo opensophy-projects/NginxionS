@@ -1,0 +1,44 @@
+# Several servers of NginxionS on one machine (docs/ROADMAP.md 15.7, scripts/test-cluster.sh): a manager and two
+# nodes, each a whole stack of its own (a compose project), over deploy/compose.yaml and compose.airgap.yaml.
+#   - the names of the containers carry the name of the stack (CLUSTER_STACK: manager, node1, node2);
+#   - no port is published on the machine: the stacks and the test reach each other over the network "cluster"
+#     (created by the test, internal: no route outside Docker), where the container of the agent of each stack (its
+#     network namespace is the one of nginx and the panel) has a fixed address (CLUSTER_IP).
+
+services:
+  nginxions-init:
+    container_name: ${CLUSTER_STACK:?}-init
+
+  openappsec:
+    container_name: ${CLUSTER_STACK:?}-openappsec
+    ports: !reset []
+    networks:
+      cluster:
+        ipv4_address: ${CLUSTER_IP:?}
+
+  control:
+    container_name: ${CLUSTER_STACK:?}-control
+    networks:
+      control:
+        # the address the backend calls (NGINXIONS_CONTROL_URL), the name of the container elsewhere
+        aliases: [nginxions-control]
+
+  nginxions:
+    container_name: ${CLUSTER_STACK:?}-nginxions
+
+  postgres:
+    container_name: ${CLUSTER_STACK:?}-postgres
+
+  crowdsec:
+    container_name: ${CLUSTER_STACK:?}-crowdsec
+
+  clamav:
+    container_name: ${CLUSTER_STACK:?}-clamav
+
+  test-upstream:
+    container_name: ${CLUSTER_STACK:?}-test-upstream
+
+networks:
+  cluster:
+    external: true
+    name: ${CLUSTER_NETWORK:-nginxions-cluster}
