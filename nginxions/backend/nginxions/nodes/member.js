@@ -6,11 +6,14 @@
 //   - a heartbeat every 30 s; the manager down or slow (timeout) changes nothing here: the node protects as before;
 //   - disabled on the manager (403): the node says so in its GUI and stops calling.
 // The state (token and key encrypted with the secrets of NginxionS) is a file of the data volume.
+import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { isIP } from "node:net";
 import { hostname } from "node:os";
 import path from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import tls from "node:tls";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
@@ -46,7 +49,16 @@ const sameFingerprint = (a, b) => String(a).toUpperCase() === String(b).toUpperC
 export const managerExchange = (
 	managerUrl,
 	urlPath,
-	{ method = "POST", body = null, headers = {}, token, pin, maxAnswer = MAX_ANSWER, timeoutMs = TIMEOUT_MS } = {},
+	{
+		method = "POST",
+		body = null,
+		headers = {},
+		token,
+		pin,
+		maxAnswer = MAX_ANSWER,
+		timeoutMs = TIMEOUT_MS,
+		toFile = null,
+	} = {},
 ) =>
 	new Promise((resolve, reject) => {
 		const url = new URL(urlPath, managerUrl);
@@ -85,6 +97,28 @@ export const managerExchange = (
 					},
 				},
 				(res) => {
+					// a big file (the model of the agent): a 200 is written to the file as it comes, never kept in memory
+					if (toFile && res.statusCode === 200) {
+						let size = 0;
+						const limit = new Transform({
+							transform(chunk, _encoding, callback) {
+								size += chunk.length;
+								callback(
+									size > maxAnswer ? new Error("the answer of the manager is too big") : null,
+									chunk,
+								);
+							},
+						});
+						return pipeline(res, limit, createWriteStream(toFile, { mode: 0o600 }))
+							.then(() => {
+								socket.end();
+								done(null, { status: 200, headers: res.headers, body: Buffer.alloc(0), fingerprint });
+							})
+							.catch((err) => {
+								socket.destroy();
+								done(err);
+							});
+					}
 					const chunks = [];
 					let size = 0;
 					res.on("data", (chunk) => {
@@ -161,6 +195,8 @@ const statusOf = (state) =>
 				profile_version: state.profile_version ?? "",
 				profile_assets: state.profile_assets ?? 0,
 				profile_error: state.profile_error ?? "",
+				model_sha256: state.model_sha256 ?? "",
+				model_error: state.model_error ?? "",
 			}
 		: { joined: false };
 
@@ -183,6 +219,8 @@ const ownInfo = async (state) => {
 		package_error: state?.package_error ?? "",
 		profile_version: state?.profile_version ?? "",
 		profile_error: state?.profile_error ?? "",
+		model_sha256: state?.model_sha256 ?? "",
+		model_error: state?.model_error ?? "",
 	};
 };
 
@@ -272,6 +310,51 @@ export const fetchProfile = async (state, ref, now = Date.now()) => {
 	}
 };
 
+/** the most of a model of the agent (as an upload in WAF -> Agent) */
+const MAX_MODEL_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * The advanced model of the agent of the manager (step 15.5): the package names it by its SHA-256; a node whose model
+ * is another one fetches the file (pinned TLS, its token), checks the hash and puts it in place (the one before is
+ * kept), and the agent restarts. The manager without a model: the node goes back to the model of the image.
+ * @param {object} state
+ * @param {{sha256: string, size: number}|undefined} ref
+ * @param {{install?: Function, remove?: Function}} [io]  the files of the model (replaced in tests)
+ * @returns {Promise<object>} what changes in the state
+ */
+export const syncModel = async (state, ref, io = {}) => {
+	const settings = await import("../waf/agent-settings.js");
+	const install = io.install ?? settings.installManagerModel;
+	const remove = io.remove ?? settings.removeManagerModel;
+	try {
+		if (!ref?.sha256) {
+			if (!state.model_sha256) return {};
+			await remove();
+			logger.info("Cluster: the manager has no model of the agent any more: the model of the image again");
+			return { model_sha256: "", model_error: "" };
+		}
+		if (ref.sha256 === state.model_sha256) return {};
+		if (!(Number(ref.size) > 0 && ref.size <= MAX_MODEL_BYTES))
+			throw new Error("the size of the model is not valid");
+		await install(async (file) => {
+			const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/model", {
+				method: "GET",
+				token: decrypt(state.token_enc),
+				pin: state.fingerprint,
+				maxAnswer: ref.size,
+				timeoutMs: 600000,
+				toFile: file,
+			});
+			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the model`);
+		}, ref.sha256);
+		logger.info(`Cluster: the model of the agent ${ref.sha256.slice(0, 12)} of the manager is in place`);
+		return { model_sha256: ref.sha256, model_error: "" };
+	} catch (err) {
+		logger.warn(`Cluster: the model of the agent: ${err.message}`);
+		return { model_error: String(err.message).slice(0, 300) };
+	}
+};
+
 /**
  * The package of the manager: fetched, its signature checked against the pinned key, applied; a package nginx
  * refuses is replaced by the one before (the node keeps serving what worked) and is not tried again.
@@ -304,6 +387,7 @@ export const sync = async (state) => {
 			package_error: "",
 			package_skipped: result.skipped.length,
 			...(await fetchProfile(state, content.learning_profile)),
+			...(await syncModel(state, content.waf_model)),
 		};
 	} catch (err) {
 		return { package_error: String(err.message).slice(0, 300) };
@@ -340,6 +424,14 @@ export const beat = async () => {
 			// a profile that failed before (the manager was busy, the agent down): tried again with a later heartbeat
 			if (next.profile_error && next.applied_version) {
 				next = { ...next, ...(await fetchProfile(next, (await lastContent()).learning_profile)) };
+			}
+			// a model that failed before: tried again with the next heartbeats (each try is a new download)
+			if (next.model_error && next.applied_version && Date.now() - new Date(next.model_tried_on ?? 0) > 600000) {
+				next = {
+					...next,
+					...(await syncModel(next, (await lastContent()).waf_model)),
+					model_tried_on: new Date(),
+				};
 			}
 			next = { ...next, ...(await forwardEvents(next)) };
 			await writeState(next);

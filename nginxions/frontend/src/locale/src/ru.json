@@ -1382,6 +1382,12 @@
 	"nginxions.cluster.manager.placeholder": {
 		"defaultMessage": "https://manager.example.com:81"
 	},
+	"nginxions.cluster.model": {
+		"defaultMessage": "Модель агента"
+	},
+	"nginxions.cluster.model-applied": {
+		"defaultMessage": "Модель manager (SHA-256 {sha}…)"
+	},
 	"nginxions.cluster.node": {
 		"defaultMessage": "Этот узел"
 	},
@@ -8447,8 +8453,20 @@
 	"nginxions.waf.model.description": {
 		"defaultMessage": "В NginxionS встроена продвинутая модель (Advanced model, V2.0). Загруженная модель (open-appsec-advanced-model.tgz, например обученная NginxionS, см. docs/MODEL.md) заменяет её: распаковывается при старте агента; после загрузки агент перезапускается."
 	},
+	"nginxions.waf.model.managed": {
+		"defaultMessage": "Этот сервер — узел: его модель задаёт manager, меняется она там."
+	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Загружена: {size}, {date}"
+	},
+	"nginxions.waf.model.previous": {
+		"defaultMessage": "Вернуть прежнюю модель"
+	},
+	"nginxions.waf.model.previous-done": {
+		"defaultMessage": "Прежняя модель возвращена, агент перезапускается"
+	},
+	"nginxions.waf.model.previous-warning": {
+		"defaultMessage": "Вернётся модель, которая была до последней загрузки или удаления, а текущая станет прежней. Агент перезапустится. На manager узлы получат ту же модель со следующим пакетом."
 	},
 	"nginxions.waf.model.remove": {
 		"defaultMessage": "Удалить модель"

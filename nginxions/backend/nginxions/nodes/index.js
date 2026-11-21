@@ -28,6 +28,7 @@ import {
 	uidOfCode,
 } from "./model.js";
 import { profileBytes, profileForNewNodes } from "../learning/profile-store.js";
+import { MODEL_FILE, modelRef } from "../waf/model-file.js";
 import { hostIdsOf, packageOf, signingKey } from "./package.js";
 
 const TABLE = "nginxions_node";
@@ -330,6 +331,18 @@ const internalNodes = {
 	package: async (token) => {
 		const row = await nodeOfToken(token);
 		return row ? packageOf(row.id) : null;
+	},
+
+	/**
+	 * Without login: the file of the advanced model of the agent of this manager (step 15.5); null for an unknown or
+	 * disabled node, {none: true} without a model.
+	 * @returns {Promise<{file: string, size: number}|{none: true}|null>}
+	 */
+	wafModel: async (token) => {
+		const row = await nodeOfToken(token);
+		if (!row) return null;
+		const ref = await modelRef();
+		return ref ? { file: MODEL_FILE, size: ref.size } : { none: true };
 	},
 
 	/**

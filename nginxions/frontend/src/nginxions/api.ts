@@ -511,10 +511,18 @@ export const getEventsSettings = () => api.get({ url: "/nginxions/events/setting
 export const setEventsSettings = (retention: EventsSettings["retention"]) =>
 	api.put({ url: "/nginxions/events/settings", data: retention }) as Promise<EventsSettings>;
 
-interface WafAgentModel {
+interface WafAgentModelFile {
 	present: boolean;
 	size?: number;
 	modifiedOn?: string;
+	sha256?: string;
+}
+
+interface WafAgentModel extends WafAgentModelFile {
+	/** the model before the last upload or removal: "back" puts it in place */
+	previous?: WafAgentModelFile;
+	/** a node: its model is given by its manager (no upload here) */
+	managed?: boolean;
 }
 
 export interface WafAgentSettings {
@@ -543,6 +551,10 @@ export const getWafAgentMetrics = (): Promise<{ reachable: boolean; metrics: Age
 
 export const setWafAgent = (data: WafAgentSettings, apply = true): Promise<WafAgentState> =>
 	api.put({ url: "/nginxions/waf/agent", data: { ...data, apply } });
+
+/** back to the model before the last upload or removal; the agent restarts (on a manager the nodes follow) */
+export const previousWafModel = (): Promise<WafAgentModel & { restarting: boolean }> =>
+	api.post({ url: "/nginxions/waf/agent/model/previous" });
 
 /** back to the basic model of the image; the agent restarts */
 export const removeWafModel = (): Promise<WafAgentModel & { restarting: boolean }> =>
@@ -739,6 +751,9 @@ export interface ClusterMember {
 	profile_version?: string;
 	profile_assets?: number;
 	profile_error?: string;
+	/** the model of the agent taken from the manager (its SHA-256), its last error */
+	model_sha256?: string;
+	model_error?: string;
 }
 
 export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });

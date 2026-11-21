@@ -1,4 +1,6 @@
 // NginxionS API: /api/nginxions/*
+import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import express from "express";
 import db from "../db.js";
 import internalAuditLog from "../internal/audit-log.js";
@@ -652,6 +654,16 @@ router
 	.all(jwtdecode())
 	.put(handle((req, res) => internalWafAgent.uploadModel(res.locals.access, req, req.query.apply !== "false")))
 	.delete(handle((req, res) => internalWafAgent.removeModel(res.locals.access, req.query.apply !== "false")));
+
+/**
+ * POST /api/nginxions/waf/agent/model/previous?apply=false — back to the model before the last upload or removal (on a
+ * manager its nodes follow with their next package)
+ */
+router
+	.route("/waf/agent/model/previous")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalWafAgent.previousModel(res.locals.access, req.query.apply !== "false")));
 
 /**
  * GET /api/nginxions/waf/agent/metrics — metrics of the agent (its prometheus nano service), parsed
@@ -3170,6 +3182,27 @@ router.get("/nodes/package", async (req, res, next) => {
 		res.send(answer);
 	} catch (err) {
 		next(err);
+	}
+});
+
+/**
+ * GET /api/nginxions/nodes/model — without login: Authorization: Bearer <token of the node>; the advanced model of the
+ *   agent of this manager (step 15.5; its SHA-256 is in the signed package); 404 without one, 401 for an unknown or
+ *   disabled node
+ */
+router.get("/nodes/model", async (req, res, next) => {
+	try {
+		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const answer = await internalNodes.wafModel(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		if (answer.none) return res.status(404).send({ error: { code: 404, message: "No model on the manager" } });
+		res.type("application/gzip");
+		res.set("Content-Length", String(answer.size));
+		await pipeline(createReadStream(answer.file), res);
+	} catch (err) {
+		if (res.headersSent) res.destroy(err);
+		else next(err);
 	}
 });
 

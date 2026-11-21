@@ -8,7 +8,7 @@ import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
 import { MANAGE } from "src/modules/Permissions";
 import { showError, showSuccess } from "src/notifications";
-import { removeWafModel, setWafAgent, uploadWafModel, type WafAgentSettings } from "../../api";
+import { previousWafModel, removeWafModel, setWafAgent, uploadWafModel, type WafAgentSettings } from "../../api";
 import { useWafAgent } from "../../hooks";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 
@@ -137,6 +137,29 @@ function ModelCard() {
 		}
 	};
 
+	const back = () =>
+		showConfirmModal({
+			tTitle: "nginxions.waf.model.previous",
+			tConfirm: "nginxions.waf.model.previous",
+			children: (
+				<p>
+					<T id="nginxions.waf.model.previous-warning" />
+				</p>
+			),
+			onConfirm: async () => {
+				setRemoving(true);
+				try {
+					await previousWafModel();
+					showSuccess(intl.formatMessage({ id: "nginxions.waf.model.previous-done" }));
+				} catch (err: any) {
+					showError(err.message);
+				} finally {
+					setRemoving(false);
+					queryClient.invalidateQueries({ queryKey: ["nginxions-waf-agent"] });
+				}
+			},
+		});
+
 	const remove = () =>
 		showConfirmModal({
 			tTitle: "nginxions.waf.model.remove",
@@ -182,22 +205,37 @@ function ModelCard() {
 							<T id="nginxions.waf.model.basic" />
 						</span>
 					)}
+					{data?.model.sha256 && <div className="form-hint">SHA-256 {data.model.sha256.slice(0, 16)}…</div>}
+					{data?.model.managed && (
+						<div className="form-hint">
+							<T id="nginxions.waf.model.managed" />
+						</div>
+					)}
 				</div>
 				<HasPermission rbac="waf_policy" permission={MANAGE} hideError>
-					<input
-						ref={input}
-						type="file"
-						accept=".tgz,.tar.gz,application/gzip"
-						className="d-none"
-						onChange={(e) => upload(e.target.files?.[0])}
-					/>
-					<Button size="sm" isLoading={uploading} onClick={() => input.current?.click()}>
-						<T id="nginxions.waf.model.upload" />
-					</Button>
-					{data?.model.present && (
-						<Button size="sm" isLoading={removing} onClick={remove}>
-							<T id="nginxions.waf.model.remove" />
-						</Button>
+					{!data?.model.managed && (
+						<>
+							<input
+								ref={input}
+								type="file"
+								accept=".tgz,.tar.gz,application/gzip"
+								className="d-none"
+								onChange={(e) => upload(e.target.files?.[0])}
+							/>
+							<Button size="sm" isLoading={uploading} onClick={() => input.current?.click()}>
+								<T id="nginxions.waf.model.upload" />
+							</Button>
+							{data?.model.present && (
+								<Button size="sm" isLoading={removing} onClick={remove}>
+									<T id="nginxions.waf.model.remove" />
+								</Button>
+							)}
+							{data?.model.previous?.present && (
+								<Button size="sm" isLoading={removing} onClick={back}>
+									<T id="nginxions.waf.model.previous" />
+								</Button>
+							)}
+						</>
 					)}
 				</HasPermission>
 			</div>
