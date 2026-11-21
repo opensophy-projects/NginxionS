@@ -7706,6 +7706,9 @@
 	"nginxions.traffic.filter.mitigated.yes": {
 		"defaultMessage": "отклонённые"
 	},
+	"nginxions.traffic.filter.node": {
+		"defaultMessage": "Сервер"
+	},
 	"nginxions.traffic.filter.origin": {
 		"defaultMessage": "Сервер за хостом"
 	},
@@ -8042,6 +8045,9 @@
 	"nginxions.traffic.no-data": {
 		"defaultMessage": "Нет данных"
 	},
+	"nginxions.traffic.node.local": {
+		"defaultMessage": "Этот сервер"
+	},
 	"nginxions.traffic.note": {
 		"defaultMessage": "Запросы — журнал запросов nginx (интерфейс NginxionS не считается). Атаки — события open-appsec, CrowdSec и mTLS. Страны — база GeoIP NginxionS, без интернета."
 	},
@@ -8263,6 +8269,9 @@
 	},
 	"nginxions.traffic.top.mitigated-paths.info": {
 		"defaultMessage": "Пути отклонённых запросов."
+	},
+	"nginxions.traffic.top.nodes": {
+		"defaultMessage": "Серверы"
 	},
 	"nginxions.traffic.top.origin-paths": {
 		"defaultMessage": "Топ путей по запросам к серверам"

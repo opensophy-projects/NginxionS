@@ -178,8 +178,6 @@ const parseCursor = (value) => {
 const eventOnly = (f) =>
 	(f.agent.length > 0 && !f.nginx) ||
 	f.important ||
-	// the requests of nodes stay on the nodes (only their events come to the manager)
-	f.node.length > 0 ||
 	f.action.length > 0 ||
 	f.severity.length > 0 ||
 	f.type.length > 0 ||

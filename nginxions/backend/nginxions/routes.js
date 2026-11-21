@@ -3168,6 +3168,50 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
 });
 
 /**
+ * POST /api/nginxions/nodes/bans — without login: the token and certificate of the node; {bans}: its own bans (step
+ *   15.3) → {stored}
+ * GET  /api/nginxions/nodes/bans — the bans of the cluster for the node → {bans}
+ */
+router.post("/nodes/bans", express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const answer = await internalNodes.shareBans(nodeAuth(req), req.body?.bans);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+router.get("/nodes/bans", async (req, res, next) => {
+	try {
+		const answer = await internalNodes.clusterBans(nodeAuth(req));
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * POST /api/nginxions/nodes/requests — without login: the token and certificate of the node; {requests} (at most 1000):
+ *   rows of its request log (step 15.3) → {stored}
+ */
+router.post("/nodes/requests", express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const answer = await internalNodes.requests(nodeAuth(req), req.body?.requests);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
  * POST /api/nginxions/nodes/events — without login: Authorization: Bearer <token of the node>; {events} (at most 500)
  *   → {stored}; 401 for an unknown or disabled node
  */

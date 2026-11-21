@@ -378,6 +378,7 @@ flowchart LR
     - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
+      - `cluster-bans.js` — общие баны кластера (шаг 15.3): свои баны сервера, баны остальных через manager, решения CrowdSec с origin `nginxions-cluster`; `cluster-bans.test.js` — их тесты
       - `lapi.js` — клиент локального API CrowdSec (LAPI)
       - `config.js` — генерация файлов CrowdSec из настроек
       - `apply.js` — применение настроек: файлы, нужные элементы hub, перезапуск, откат при ошибке

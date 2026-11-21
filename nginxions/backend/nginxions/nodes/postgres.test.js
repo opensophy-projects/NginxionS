@@ -170,6 +170,13 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 					if (req.url === "/api/nginxions/nodes/register")
 						answer = await nodes.register(body, "198.51.100.7");
 					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
+					if (req.url === "/api/nginxions/nodes/requests")
+						answer = await nodes.requests(token(), body.requests);
+					if (req.url === "/api/nginxions/nodes/bans")
+						answer =
+							req.method === "GET"
+								? await nodes.clusterBans(token())
+								: await nodes.shareBans(token(), body.bans);
 					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
 					if (req.url === "/api/nginxions/nodes/logs") answer = await nodes.storeLogs(token(), body.logs);
 					if (req.url === "/api/nginxions/nodes/model") {
@@ -295,6 +302,54 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		// sent once: the next heartbeat sends nothing again
 		await member.beat();
 		assert.equal((await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" })).length, 2);
+		// a request of this server after the join: its row and its hourly counts come to the manager with the id of
+		// the node (step 15.3)
+		const reqTime = new Date();
+		await store({
+			events: [],
+			telemetry: [],
+			cursors: [],
+			requestLog: [
+				{ time: reqTime, host: "shop.example.com", ip: "198.51.100.21", path: "/", status: 200, bytes: 10 },
+			],
+			requests: [],
+			countries: [],
+		});
+		await member.beat();
+		const reqCopies = await knex("nginxions_request_log").where({ ip: "198.51.100.21" });
+		assert.deepEqual(reqCopies.map((r) => r.node_id).sort(), ["local", node.uid].sort());
+		const hourly = await knex("nginxions_request_hourly").where({ node_id: node.uid, host: "shop.example.com" });
+		assert.equal(Number(hourly[0]?.requests), 1);
+		assert.equal((await member.readState()).requests_error, "");
+		await member.beat();
+		assert.equal((await knex("nginxions_request_log").where({ ip: "198.51.100.21" })).length, 2, "sent once");
+		// shared bans (step 15.3): a ban of CrowdSec here goes to the manager, which holds it, and comes back to the
+		// node as a ban of the cluster (one CrowdSec in the test, replaced)
+		const bansIo = (await import("../crowdsec/cluster-bans.js")).io;
+		const pushed = [];
+		Object.assign(bansIo, {
+			decisions: async () => [
+				{
+					id: 1,
+					origin: "crowdsec",
+					scope: "Ip",
+					value: "198.51.100.30",
+					type: "ban",
+					duration: "3h59m0s",
+					scenario: "crowdsecurity/ssh-bf",
+				},
+			],
+			push: async (list) => pushed.push(...list),
+			remove: async () => {},
+		});
+		await member.beat();
+		const shared = await knex("nginxions_cluster_ban").where({ origin: node.uid });
+		assert.deepEqual(
+			shared.map((b) => b.value),
+			["198.51.100.30"],
+		);
+		assert.ok(pushed.some((p) => p.value === "198.51.100.30" && p.type === "ban"));
+		assert.equal((await member.readState()).bans_error, "");
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
 		// the rollout: the package the node applied, once (later heartbeats with the same version add nothing)
 		const rollout = await nodes.rollout(VIEWER);

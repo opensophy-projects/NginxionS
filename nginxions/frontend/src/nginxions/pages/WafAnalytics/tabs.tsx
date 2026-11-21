@@ -337,6 +337,15 @@ function RequestsTab({ data, period, filter }: TabProps) {
 				<Panel title={<T id="nginxions.traffic.top.protocols" />}>
 					<TopList rows={rows(data, "protocols")} filter={(v) => filter("protocol", v)} />
 				</Panel>
+				{rows(data, "nodes").some((r) => r.value !== "local") && (
+					<Panel title={<T id="nginxions.traffic.top.nodes" />}>
+						<TopList
+							rows={rows(data, "nodes")}
+							filter={(v) => filter("node", v)}
+							label={(v) => (v === "local" ? t("nginxions.traffic.node.local") : v)}
+						/>
+					</Panel>
+				)}
 				<Panel title={<T id="nginxions.traffic.top.agents" />} wide>
 					<TopList rows={rows(data, "agents")} />
 				</Panel>

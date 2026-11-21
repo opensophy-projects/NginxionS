@@ -415,6 +415,8 @@ export interface TrafficFilters {
 	maxBytes?: string;
 	/** a part of the host, path, IP, user agent or referer (the request log) */
 	q?: string;
+	/** the server: "local" (this one) or the id of a node of this manager */
+	node?: string;
 }
 
 export interface Traffic {
