@@ -534,6 +534,22 @@ function MemberCard() {
 								</dd>
 							</>
 						)}
+						{(data.model_sha256 || data.model_error) && (
+							<>
+								<dt className="col-md-3">
+									<T id="nginxions.cluster.model" />
+								</dt>
+								<dd className="col-md-9">
+									{data.model_sha256 && (
+										<T
+											id="nginxions.cluster.model-applied"
+											data={{ sha: data.model_sha256.slice(0, 12) }}
+										/>
+									)}
+									{data.model_error && <div className="text-danger small">{data.model_error}</div>}
+								</dd>
+							</>
+						)}
 						{(data.profile_version || data.profile_error) && (
 							<>
 								<dt className="col-md-3">

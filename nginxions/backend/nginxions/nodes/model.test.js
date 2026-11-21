@@ -70,6 +70,8 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 		"agent",
 		"hostname",
 		"hosts",
+		"model_error",
+		"model_sha256",
 		"package_error",
 		"package_skipped",
 		"package_version",
