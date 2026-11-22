@@ -38,9 +38,10 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
-  # a label other than security-scan gets a group of its own: it must not cancel the run of the pull request
+  # PR runs are authoritative for branches with an open PR; standalone branch pushes still run CI.
   group: >-
     ${{ github.workflow }}-${{ github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'security-scan'
     && format('-{0}', github.run_id) || '' }}
@@ -96,15 +97,31 @@ jobs:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           INPUT: ${{ inputs.level }}
           MESSAGE: ${{ github.event.head_commit.message }}
-        run: node scripts/ci-level.mjs
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          # A branch push is superseded by its PR run. Keep standalone branch pushes and work/tag pushes.
+          if [ "$EVENT" = push ] && [[ "$REF" == refs/heads/* ]] && [ "$REF" != refs/heads/work ]; then
+            open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq 'length')
+            if [ "$open_prs" -gt 0 ]; then
+              echo "level=none" >> "$GITHUB_OUTPUT"
+              echo 'suites=[]' >> "$GITHUB_OUTPUT"
+              echo "cpp=false" >> "$GITHUB_OUTPUT"
+              echo "go=false" >> "$GITHUB_OUTPUT"
+              echo "dast=false" >> "$GITHUB_OUTPUT"
+              echo "### CI skipped: this commit is already validated by its pull request." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          node scripts/ci-level.mjs
 
-  checks:
-    name: Lint, types, tests
+  checks-backend:
+    name: Backend (Biome, unit + PostgreSQL tests)
     needs: level
     if: needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
-    # PostgreSQL for the tests of the SQL of NginxionS (nginxions/test/postgres.js); its tag is POSTGRES_VERSION of
-    # deploy/.env (checked in "version consistency")
     services:
       postgres:
         image: docker.io/library/postgres:18.7-alpine@sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015
@@ -119,14 +136,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: lts/*
-          # no dependency cache: a cache written by one branch must not reach the build of another
-          package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: latest
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: nginxions/backend/pnpm-lock.yaml
       - name: backend
         working-directory: nginxions/backend
         env:
@@ -142,6 +159,24 @@ jobs:
           pnpm biome ci . --assist-enabled=false
           # unit tests of NginxionS modules (upstream has none); the SQL ones on the postgres service
           node --test 'nginxions/**/*.test.js'
+
+  checks-frontend:
+    name: Frontend (Biome, locales, TypeScript, Vitest)
+    needs: level
+    if: needs.level.outputs.level != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: latest
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: nginxions/frontend/pnpm-lock.yaml
       - name: frontend
         working-directory: nginxions/frontend
         run: |
@@ -152,6 +187,20 @@ jobs:
           pnpm formatjs compile-folder src/locale/src src/locale/lang
           pnpm tsc --noEmit
           pnpm vitest run
+
+  checks-agent:
+    name: Agent (Go, Snort converter, Lua)
+    needs: level
+    if: needs.level.outputs.level != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
       - name: Go services of the agent (vet, tests)
         # shared storage and tuning (built into nginxions-openappsec) and smartsync, in the Go image of its Dockerfile
         run: scripts/test-go.sh
@@ -161,6 +210,20 @@ jobs:
         run: |
           sudo apt-get install -y -qq luajit > /dev/null
           scripts/test-lua.sh
+
+  checks-repository:
+    name: Repository (scripts, model, shell, Compose, versions)
+    needs: level
+    if: needs.level.outputs.level != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          package-manager-cache: false
       - name: scripts of CI (audit of the logs, depth of the run, report of smoke)
         run: node --test scripts/*.test.mjs
       - name: file tree
@@ -191,7 +254,6 @@ jobs:
           fi
       - name: version consistency
         run: |
-          # the PostgreSQL of the tests is the one of the stack
           env_pg=$(sed -n 's/^POSTGRES_VERSION=//p' deploy/.env)
           for f in .github/workflows/ci.yml .github/workflows/security.yml; do
             while read -r tag; do
@@ -200,24 +262,19 @@ jobs:
           done
           env_cs=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)
           for f in nginxions/Dockerfile deploy/dev/Dockerfile; do
-            # the image of the CrowdSec seed is pinned by tag and digest (OpenSSF Scorecard): its tag is deploy/.env's
             from_cs=$(sed -n 's|^FROM docker.io/crowdsecurity/crowdsec:\([^@ ]*\)@sha256:.*|\1|p' "$f")
             [ "$env_cs" = "$from_cs" ] || { echo "::error file=$f::FROM crowdsec:$from_cs != deploy/.env $env_cs"; exit 1; }
           done
-          # the upstream commits of the sources in openappsec/ are full commits
           . deploy/openappsec/sources.env
           for ref in "$OPENAPPSEC_REF" "$ATTACHMENT_REF" "$SHARED_FILES_REF" "$TUNING_REF" "$SMARTSYNC_REF" "$CROWDSEC_HUB_REF"; do
             echo "$ref" | grep -qE '^[0-9a-f]{40}$' || { echo "::error file=deploy/openappsec/sources.env::not a full commit: $ref"; exit 1; }
           done
-          # the IPS signatures of the agent come from that commit of the CrowdSec hub (scripts/update-ips-signatures.mjs)
           ips_ref=$(jq -r '.source.ref' openappsec/agent/nginxions/ips-protections.json)
           [ "$ips_ref" = "$CROWDSEC_HUB_REF" ] || { echo "::error file=deploy/openappsec/sources.env::CROWDSEC_HUB_REF $CROWDSEC_HUB_REF != the hub of ips-protections.json $ips_ref"; exit 1; }
-          # a rule of renovate.json for a file that was moved stops matching without a word
           for f in $(jq -r '.packageRules[].matchFileNames[]? | select(test("[*?]") | not)' renovate.json); do
             [ -e "$f" ] || { echo "::error file=renovate.json::matchFileNames: $f does not exist"; exit 1; }
           done
       - name: registry credentials
-        # validates DOCKERHUB_USERNAME / DOCKERHUB_TOKEN on every push, also when nothing is published
         if: vars.DOCKERHUB_NAMESPACE != '' && github.event_name == 'push'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -277,7 +334,7 @@ jobs:
 
   images:
     name: "Images (amd64): build, policy contract, image scan"
-    needs: [level, checks]
+    needs: [level]
     # the full and the extended run (see the head of this file); other branches stop after the fast checks
     if: needs.level.outputs.level == 'full' || needs.level.outputs.level == 'extended'
     runs-on: ubuntu-latest
@@ -456,7 +513,7 @@ jobs:
 
   publish:
     name: Security gate${{ github.event_name == 'push' && ' + publish' || '' }}
-    needs: [level, images, stack]
+    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository, contract, security, images, stack]
     runs-on: ubuntu-latest
     permissions:
       contents: read
