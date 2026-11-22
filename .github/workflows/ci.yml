@@ -8,7 +8,7 @@
 #   other events  -> build and test only (registry login is still checked when secrets exist)
 #
 # Three depths (docs/DEVSECOPS.md), chosen by the job "level":
-#   fast            every push: lint, types, tests, and security.yml (SAST, secrets, SCA, IaC, the workflows)
+#   fast            standalone pushes and PRs: lint, types, tests, and security.yml (SAST, secrets, SCA, IaC, the workflows)
 #   full            also the images: build, closed-network test, image scan, DAST, the security gate before a push.
 #                   On work, tags v*, pull requests, by hand (Run workflow, level "full") and on any push whose commit
 #                   message holds [full].
@@ -644,7 +644,7 @@ jobs:
           push-to-registry: true
   nginxions-arm64:
     name: nginxions image (arm64)
-    needs: [level, checks]
+    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository]
     if: >-
       github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v')) ||
       github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/security/') &&
@@ -767,7 +767,7 @@ jobs:
 
   report:
     name: Security report
-    needs: [level, checks, security, images, stack]
+    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository, security, images, stack]
     if: always() && needs.level.outputs.level != 'none'
     runs-on: ubuntu-latest
     permissions:
