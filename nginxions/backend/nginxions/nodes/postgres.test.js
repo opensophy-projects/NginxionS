@@ -235,7 +235,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await assert.rejects(() => nodes.add(VIEWER, { name: "edge-1" }), /forbidden: nodes:manage/);
 	});
 
-	test("a node joins with its code: certificate from the PKI, token, heartbeat, the code works once", async () => {
+	test("a node joins with its code: certificate from the PKI, token, heartbeat, the code works once", async (t) => {
 		const { node, code } = await nodes.add(ADMIN, { name: "edge-1", labels: ["EU", "edge"] });
 		assert.equal(node.state, "pending");
 		assert.deepEqual(node.labels, ["eu", "edge"]);
@@ -325,7 +325,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.equal((await knex("nginxions_request_log").where({ ip: "198.51.100.21" })).length, 2, "sent once");
 		// shared bans (step 15.3): a ban of CrowdSec here goes to the manager, which holds it, and comes back to the
 		// node as a ban of the cluster (one CrowdSec in the test, replaced)
-		const bansIo = (await import("../crowdsec/cluster-bans.js")).io;
+		const { CLUSTER_ORIGIN, io: bansIo, versionOfBans } = await import("../crowdsec/cluster-bans.js");
 		const pushed = [];
 		Object.assign(bansIo, {
 			decisions: async () => [
@@ -350,6 +350,25 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		);
 		assert.ok(pushed.some((p) => p.value === "198.51.100.30" && p.type === "ban"));
 		assert.equal((await member.readState()).bans_error, "");
+		// The manager advertised an empty list, then returned a ban created before the fetch. A subsequent
+		// empty list must be fetched again if that ban is lifted before the next heartbeat.
+		const emptyBansVersion = versionOfBans([]);
+		const bansState = await member.readState();
+		const synced = await member.syncBans(bansState, emptyBansVersion);
+		assert.equal(synced.bans_error, "");
+		assert.notEqual(synced.bans_version, emptyBansVersion);
+		const held = { ...pushed.at(-1), id: 2, origin: CLUSTER_ORIGIN };
+		const decisions = t.mock.method(bansIo, "decisions", async () => [held]);
+		const remove = t.mock.method(bansIo, "remove", async () => {});
+		const unbanned = await member.syncBans(
+			{ ...bansState, ...synced, bans_sent: emptyBansVersion },
+			emptyBansVersion,
+		);
+		assert.equal(unbanned.bans_error, "");
+		assert.equal(unbanned.bans_version, emptyBansVersion);
+		assert.deepEqual(remove.mock.calls.map(({ arguments: args }) => args), [[held.id]]);
+		decisions.mock.restore();
+		remove.mock.restore();
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
 		// the rollout: the package the node applied, once (later heartbeats with the same version add nothing)
 		const rollout = await nodes.rollout(VIEWER);
