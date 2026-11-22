@@ -502,6 +502,7 @@ function MemberCard() {
 	});
 	const [managerUrl, setManagerUrl] = useState("");
 	const [code, setCode] = useState("");
+	const [managerFingerprint, setManagerFingerprint] = useState("");
 	const [joining, setJoining] = useState(false);
 	const refresh = () => queryClient.invalidateQueries({ queryKey: ["nginxions-cluster-member"] });
 
@@ -509,8 +510,13 @@ function MemberCard() {
 		e.preventDefault();
 		setJoining(true);
 		try {
-			await joinCluster({ managerUrl: managerUrl.trim(), code: code.trim() });
+			await joinCluster({
+				managerUrl: managerUrl.trim(),
+				code: code.trim(),
+				managerFingerprint: managerFingerprint.trim(),
+			});
 			setCode("");
+			setManagerFingerprint("");
 			showSuccess(t("nginxions.cluster.joined"));
 			refresh();
 		} catch (err) {
@@ -645,7 +651,7 @@ function MemberCard() {
 				</div>
 			) : manage ? (
 				<form className="card-body row g-2 align-items-end" onSubmit={onJoin}>
-					<div className="col-md-4">
+					<div className="col-md-6">
 						<label className="form-label" htmlFor="cluster-manager">
 							<T id="nginxions.cluster.manager" />
 						</label>
@@ -658,7 +664,7 @@ function MemberCard() {
 							onChange={(e) => setManagerUrl(e.target.value)}
 						/>
 					</div>
-					<div className="col-md-5">
+					<div className="col-md-6">
 						<label className="form-label" htmlFor="cluster-code">
 							<T id="nginxions.cluster.code" />
 						</label>
@@ -671,11 +677,28 @@ function MemberCard() {
 							onChange={(e) => setCode(e.target.value)}
 						/>
 					</div>
+					<div className="col-md-9">
+						<label className="form-label" htmlFor="cluster-fingerprint">
+							<T id="nginxions.cluster.fingerprint" />
+						</label>
+						<input
+							id="cluster-fingerprint"
+							className="form-control font-monospace"
+							value={managerFingerprint}
+							required
+							spellCheck={false}
+							aria-describedby="cluster-fingerprint-hint"
+							onChange={(e) => setManagerFingerprint(e.target.value)}
+						/>
+					</div>
 					<div className="col-md-3">
 						<Button type="submit" actionType="primary" isLoading={joining}>
 							<IconPlugConnected size={16} className="me-1" />
 							<T id="nginxions.cluster.join" />
 						</Button>
+					</div>
+					<div className="col-12 form-hint" id="cluster-fingerprint-hint">
+						<T id="nginxions.cluster.fingerprint.hint" />
 					</div>
 				</form>
 			) : (

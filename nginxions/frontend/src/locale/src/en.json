@@ -1322,6 +1322,9 @@
 	"nginxions.cluster.fingerprint": {
 		"defaultMessage": "Certificate of the manager (SHA-256)"
 	},
+	"nginxions.cluster.fingerprint.hint": {
+		"defaultMessage": "Enter the SHA-256 fingerprint of the manager’s TLS certificate that you verified over a trusted channel."
+	},
 	"nginxions.cluster.hint": {
 		"defaultMessage": "Connect this server to a manager: it will be managed from there and keep protecting its sites if the manager is unreachable."
 	},

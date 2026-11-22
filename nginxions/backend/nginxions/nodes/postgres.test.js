@@ -2,6 +2,7 @@
 // through member.js against a real HTTPS server in front of it (the pin of the certificate of the manager included).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { X509Certificate } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import http from "node:http";
@@ -25,6 +26,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let member;
 	let server;
 	let managerUrl;
+	let managerFingerprint;
+	let registrationRequests = 0;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
 	// the shared storage and smartsync of the manager (step 15.4): what reaches them
 	const learned = [];
@@ -114,15 +117,18 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			"-subj",
 			"/CN=manager.test",
 		]);
+		const panelCert = readFileSync(path.join(dir, "panel.crt"));
+		managerFingerprint = new X509Certificate(panelCert).fingerprint256;
 		server = https.createServer(
 			{
 				key: readFileSync(path.join(dir, "panel.key")),
-				cert: readFileSync(path.join(dir, "panel.crt")),
+				cert: panelCert,
 				// as nginx on the channel of the nodes: the certificate is asked for, the backend judges it
 				requestCert: true,
 				rejectUnauthorized: false,
 			},
 			(req, res) => {
+				if (req.method === "POST" && req.url === "/api/nginxions/nodes/register") registrationRequests++;
 				const chunks = [];
 				req.on("data", (d) => chunks.push(d));
 				req.on("end", async () => {
@@ -235,17 +241,52 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await assert.rejects(() => nodes.add(VIEWER, { name: "edge-1" }), /forbidden: nodes:manage/);
 	});
 
-	test("a node joins with its code: certificate from the PKI, token, heartbeat, the code works once", async (t) => {
+	test("join sends no registration request when the Manager fingerprint is missing or malformed", async () => {
+		const { newCode, newUid } = await import("./model.js");
+		const data = { manager_url: managerUrl, code: newCode(newUid()) };
+		await assert.rejects(() => member.default.join(ADMIN, data), /verified SHA-256 fingerprint/);
+		for (const fingerprint of ["", "AA:BB", "G".repeat(64), 123]) {
+			await assert.rejects(
+				() => member.default.join(ADMIN, { ...data, manager_fingerprint: fingerprint }),
+				/verified SHA-256 fingerprint/,
+			);
+		}
+		assert.equal(registrationRequests, 0);
+		assert.equal(await member.readState(), null);
+	});
+
+	test("join sends no registration request when the Manager fingerprint differs", async () => {
+		const { newCode, newUid } = await import("./model.js");
+		const differentFingerprint = (managerFingerprint[0] === "0" ? "1" : "0") + managerFingerprint.slice(1);
+		await assert.rejects(
+			() =>
+				member.default.join(ADMIN, {
+					manager_url: managerUrl,
+					code: newCode(newUid()),
+					manager_fingerprint: differentFingerprint,
+				}),
+			/the certificate of the manager changed/,
+		);
+		assert.equal(registrationRequests, 0);
+		assert.equal(await member.readState(), null);
+	});
+
+	test("a node joins with a matching Manager fingerprint: certificate from the PKI, token, heartbeat, one-time code", async (t) => {
 		const { node, code } = await nodes.add(ADMIN, { name: "edge-1", labels: ["EU", "edge"] });
 		assert.equal(node.state, "pending");
 		assert.deepEqual(node.labels, ["eu", "edge"]);
 		await assert.rejects(() => nodes.add(ADMIN, { name: "edge-1" }), /exists/);
 
-		const status = await member.default.join(ADMIN, { manager_url: managerUrl, code });
+		const status = await member.default.join(ADMIN, {
+			manager_url: managerUrl,
+			code,
+			manager_fingerprint: managerFingerprint.replaceAll(":", "").toLowerCase(),
+		});
+		assert.equal(registrationRequests, 1);
 		assert.equal(status.joined, true);
 		assert.equal(status.uid, node.uid);
 		assert.equal(status.name, "edge-1");
-		assert.match(status.fingerprint, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+		assert.equal(status.fingerprint, managerFingerprint);
 
 		const [row] = await nodes.list(ADMIN);
 		assert.equal(row.status, "active");
@@ -261,7 +302,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 
 		// the code is spent
 		await assert.rejects(
-			() => member.default.join(ADMIN, { manager_url: managerUrl, code }),
+			() =>
+				member.default.join(ADMIN, { manager_url: managerUrl, code, manager_fingerprint: managerFingerprint }),
 			/joined|node of a manager/,
 		);
 		assert.equal(await nodes.register({ code, csr_pem: "x" }), null);

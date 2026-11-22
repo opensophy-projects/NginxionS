@@ -6,6 +6,7 @@
 //   ADMIN   the interface (https://nginxions:81)      HTTP   the sites (http://nginxions)
 //   JAR     the cookie jar of smoke                    OUT    screenshots of failures, gui-e2e.json and .md
 //   ONLY    a comma list of scenarios to run (all by default)
+//   MANAGER_FINGERPRINT   SHA-256 of the panel certificate for the nodes scenario
 //
 // A failed scenario does not stop the others; the test fails at its end. Every scenario cleans up what it made.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -674,8 +675,11 @@ const scenarios = [
 			// "This server": the backend calls its own panel as its manager
 			await page.locator("#cluster-manager").fill("https://127.0.0.1:81");
 			await page.locator("#cluster-code").fill(code);
+			const fingerprint = process.env.MANAGER_FINGERPRINT;
+			if (!fingerprint) throw new Error("the test Manager fingerprint is required");
+			await page.locator("#cluster-fingerprint").fill(fingerprint);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await page.getByText("Certificate of the manager (SHA-256)").waitFor({ timeout: 30000 });
+			await page.locator("dt").filter({ hasText: "Certificate of the manager (SHA-256)" }).waitFor({ timeout: 30000 });
 			await panelRestarted();
 			await until("the node is online in the list", async () => {
 				await go("/agents/nodes");

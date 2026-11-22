@@ -112,7 +112,13 @@ echo "==> waiting for nginxions to become healthy"
 wait_healthy
 echo "==> smoke (groups: $SMOKE_GROUPS)"
 smoke_status=0
-"${compose[@]}" run --rm -T tester || smoke_status=$?
+# Read the panel certificate from the Manager container so the tests can verify it independently of enrollment.
+manager_fingerprint=$("${compose[@]}" exec -T nginxions sh -c '
+  openssl s_client -connect 127.0.0.1:81 -noservername </dev/null 2>/dev/null |
+    openssl x509 -noout -sha256 -fingerprint
+')
+manager_fingerprint=${manager_fingerprint#*=}
+"${compose[@]}" run --rm -T -e MANAGER_FINGERPRINT="$manager_fingerprint" tester || smoke_status=$?
 mkdir -p reports/smoke
 for f in smoke-steps.tsv smoke-groups.tsv; do
   "${compose[@]}" run --rm -T --entrypoint cat tester "/state/$f" > "reports/smoke/$f" 2> /dev/null || true
@@ -155,7 +161,7 @@ if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
   gui_status=0
   if [ "${GUI_E2E:-0}" = 1 ]; then
     echo "==> the interface driven like a user: each action checked by its effect"
-    docker exec -e OUT=/out-gui "$pw" node gui-e2e.mjs || gui_status=$?
+    docker exec -e OUT=/out-gui -e MANAGER_FINGERPRINT="$manager_fingerprint" "$pw" node gui-e2e.mjs || gui_status=$?
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s reports/gui/gui-e2e.md ]; then cat reports/gui/gui-e2e.md >> "$GITHUB_STEP_SUMMARY"; fi
   fi
   docker rm -f "$pw" > /dev/null 2>&1 || true
