@@ -206,17 +206,28 @@ panels_up "${STACKS[@]}"
 online() { [ "$(node_field "${NODE_ID[$1]}" .state)" = online ]; }
 for s in node1 node2; do until_ok "$s is not online on the manager" 60 3 online "$s"; done
 
+# the package of a node: applied, nothing left out, no error; its version
+applied_version() {
+  node_field "${NODE_ID[$1]}" '.info | select((.package_version // "" | length) == 64 and .package_skipped == 0
+    and (.package_error // "") == "") | .package_version'
+}
+applied() { [ -n "$(applied_version "$1")" ]; }
+changed_package() {
+  local version
+  version=$(applied_version "$1")
+  [ -n "$version" ] && [ "$version" != "$2" ]
+}
+
 step "rollout: $DOMAIN given to both nodes comes in their signed packages; proxied there, an attack blocked"
+declare -A version_before
 for s in node1 node2; do
+  until_ok "$s did not report its initial package" 40 3 applied "$s"
+  initial_version=$(applied_version "$s")
   call manager PUT "/nginxions/nodes/${NODE_ID[$s]}/hosts" "{\"host_ids\": [$host_id]}" | jq -e ". == [$host_id]" \
     > /dev/null || fail "$DOMAIN was not given to $s"
+  until_ok "$s did not report applying the package with $DOMAIN" 40 3 changed_package "$s" "$initial_version"
+  version_before[$s]=$(applied_version "$s")
 done
-# the package of a node: applied, nothing left out, no error; its version
-applied() {
-  node_field "${NODE_ID[$1]}" '.info | select((.package_version // "" | length) == 64 and .package_skipped == 0
-    and (.package_error // "") == "") | .package_version' | grep -q .
-}
-for s in node1 node2; do until_ok "the package of $s was not applied: $(node_field "${NODE_ID[$s]}" .info)" 40 3 applied "$s"; done
 for s in node1 node2; do
   until_ok "$s does not proxy $DOMAIN" 30 2 proxied "$s"
   answers "$s" "$SQLI" 403 || fail "$s does not block an SQL injection on $DOMAIN (its WAF mode came in the package)"
@@ -232,25 +243,24 @@ event_of() { # stack (node), text in the event
 until_ok "no event of node1 on the manager" 45 2 event_of node1 "$DOMAIN"
 
 step "rollback: a package nginx refuses is rolled back on the nodes and told; fixed, it is applied"
-version_before=$(node_field "${NODE_ID[node1]}" .info.package_version)
 call manager PUT "/nginx/proxy-hosts/$host_id" '{"advanced_config": "nginxions_cluster_test_not_a_directive on;"}' \
   > /dev/null
-package_failed() { [ -n "$(node_field "${NODE_ID[$1]}" '.info.package_error // ""')" ]; }
-for s in node1 node2; do until_ok "$s did not refuse the package nginx cannot load" 40 3 package_failed "$s"; done
-# the package before is in place: the site is served as before
-for s in node1 node2; do proxied "$s" || fail "$s does not serve $DOMAIN after the rollback"; done
-[ "$(node_field "${NODE_ID[node1]}" .info.package_version)" = "$version_before" ] \
-  || fail "node1 does not keep the package before"
+package_failed() { [[ "$(node_field "${NODE_ID[$1]}" '.info.package_error // ""')" == "nginx refused "* ]]; }
+for s in node1 node2; do
+  until_ok "$s did not refuse the package nginx cannot load" 40 3 package_failed "$s"
+  proxied "$s" || fail "$s does not serve $DOMAIN after the rollback"
+  [ "$(node_field "${NODE_ID[$s]}" .info.package_version)" = "${version_before[$s]}" ] \
+    || fail "$s does not keep the package before"
+done
 rollout_failed() {
   call manager GET "/nginxions/nodes/rollout?node_id=${NODE_ID[$1]}" \
     | jq -e '[.. | objects | select(.kind == "package" and .result == "failed")] | length > 0' > /dev/null
 }
 until_ok "the refused package is not in the rollout" 20 3 rollout_failed node1
 call manager PUT "/nginx/proxy-hosts/$host_id" '{"advanced_config": ""}' > /dev/null
-for s in node1 node2; do until_ok "$s did not apply the fixed package" 40 3 applied "$s"; done
 # the fixed host is the host before: the package applied is the one before again, without its error
-[ "$(node_field "${NODE_ID[node1]}" .info.package_version)" = "$version_before" ] \
-  || fail "node1 does not run the package before the refused change again"
+restored_package() { [ "$(applied_version "$1")" = "${version_before[$1]}" ]; }
+for s in node1 node2; do until_ok "$s did not report the restored package" 40 3 restored_package "$s"; done
 
 step "drain: node2 out of work drops $DOMAIN, node1 keeps it; back in work node2 serves it again"
 call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/drain" '{"drained": true}' | jq -e '.drained == true' > /dev/null \
@@ -260,6 +270,7 @@ until_ok "node2 still serves $DOMAIN out of work" 40 3 not_proxied node2
 proxied node1 || fail "node1 stopped serving $DOMAIN while node2 was out of work"
 call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/drain" '{"drained": false}' > /dev/null
 until_ok "node2 does not serve $DOMAIN back in work" 40 3 proxied node2
+until_ok "node2 did not report its package back in work" 40 3 restored_package node2
 
 step "plan: hosts of a label, a staged rollout to the canary first, a node held on its package before"
 lab_id=$(call manager POST /nginx/proxy-hosts '{"domain_names": ["lab.local"], "forward_scheme": "http",
