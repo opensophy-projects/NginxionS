@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: scan
+      - name: Gitleaks — scan history and current files
         env:
           LEVEL: ${{ inputs.level }}
         run: |
@@ -183,7 +183,7 @@ jobs:
           if-no-files-found: ignore
 
   secrets:
-    name: Secrets (Gitleaks, whole history)
+    name: Gitleaks (git history + working tree)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -212,6 +212,12 @@ jobs:
         with:
           sarif_file: out/gitleaks.sarif
           category: gitleaks
+      # The working-tree scan was previously only an artifact, not visible in Code Scanning.
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        if: always() && hashFiles('out/gitleaks-files.sarif') != ''
+        with:
+          sarif_file: out/gitleaks-files.sarif
+          category: gitleaks-files
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
