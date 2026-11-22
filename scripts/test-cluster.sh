@@ -368,15 +368,27 @@ kill "$traffic_pid" 2> /dev/null
 traffic_pid=""
 
 step "bans: a ban on node1 is held by the manager and node2; its unban there lifts it everywhere"
+# Enable enforcement in the isolated stack and include the private probe addresses in it.
+# The manager distributes these settings in the same packages as the hosts.
+cs_settings=$(call manager GET /nginxions/crowdsec/settings |
+  jq -ce '.bouncer.enabled = true | .allowlist.private = false')
+call manager PUT /nginxions/crowdsec/settings "$cs_settings" | jq -e '.result.applied == true' > /dev/null \
+  || fail "the manager did not apply the CrowdSec settings for the test"
+bouncer_active() {
+  call "$1" GET /nginxions/crowdsec/settings |
+    jq -e '.bouncer.enabled == true and .allowlist.private == false and (.pending | length) == 0' > /dev/null
+}
+for s in "${STACKS[@]}"; do until_ok "CrowdSec enforcement was not enabled on $s" 60 3 bouncer_active "$s"; done
+
 answers_from_c() { [ "$(code_from c "$1" /)" = "$2" ]; }
 answers_from_c node2 200 || fail "client c is refused by node2 before any ban"
 call node1 POST /nginxions/crowdsec/decisions "{\"values\": [\"${CLIENT[c]}\"], \"duration\": \"1h\", \"reason\": \"cluster test\"}" \
   | jq -e '.count == 1' > /dev/null || fail "the ban on node1 was not made"
-until_ok "node2 does not refuse the client banned on node1" 40 3 answers_from_c node2 403
-until_ok "the manager does not refuse the client banned on node1" 40 3 answers_from_c manager 403
+for s in node1 manager node2; do until_ok "$s does not refuse the client banned on node1" 60 3 answers_from_c "$s" 403; done
 [ "$(code_from b node2 /)" = 200 ] || fail "node2 refuses a client nobody banned"
-call node1 POST /nginxions/crowdsec/decisions/delete "{\"values\": [\"${CLIENT[c]}\"]}" > /dev/null
-until_ok "the unban on node1 did not reach node2" 40 3 answers_from_c node2 200
+call node1 POST /nginxions/crowdsec/decisions/delete "{\"values\": [\"${CLIENT[c]}\"]}" \
+  | jq -e '.deleted > 0' > /dev/null || fail "the ban on node1 was not removed"
+for s in node1 manager node2; do until_ok "the unban on node1 did not reach $s" 60 3 answers_from_c "$s" 200; done
 
 step "link down: without the manager the nodes keep proxying and blocking; the event of the outage arrives later"
 docker network disconnect "$NET" manager-openappsec
