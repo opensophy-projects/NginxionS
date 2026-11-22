@@ -151,10 +151,28 @@ const panelUp = () => until("the panel answers", answers, { timeout: 150000, eve
  * A change of the learning role of this server (a node joined, disabled) restarts the agent, and nginxions in its
  * network namespace with it (docs/adr/0012-nodes.md 5c): the panel goes away within `within` ms, then comes back.
  */
-async function panelRestarted(within = 45000) {
+async function panelRestarted(within = 45000, agentStartedAt) {
 	const end = Date.now() + within;
 	while (Date.now() < end && (await answers())) await sleep(1000);
-	await panelUp();
+	if (agentStartedAt) {
+		// The watchdog can bring nginxions back before control finishes restarting the agent's dependents.
+		let readySince;
+		await until(
+			"the agent has restarted and the panel stays online",
+			async () => {
+				const agent = await api("GET", "/nginxions/services/openappsec").catch(() => null);
+				if (agent?.health !== "healthy" || !agent.startedAt || agent.startedAt === agentStartedAt) {
+					readySince = undefined;
+					return false;
+				}
+				readySince ??= Date.now();
+				return Date.now() - readySince >= 15000;
+			},
+			{ timeout: 150000, every: 1000 },
+		);
+	} else {
+		await panelUp();
+	}
 	// the page asked the panel while it was away (502, refused): expected, not an error of the page
 	pageErrors.length = 0;
 }
@@ -649,9 +667,10 @@ const scenarios = [
 			await page.getByRole("button", { name: "Add node" }).click();
 			const code = (await page.getByTestId("node-code").innerText()).trim();
 			if (!/^n-[0-9a-f]{16}\./.test(code)) throw new Error(`no join code shown: ${code}`);
-			const row = () => page.locator("tr", { hasText: "gui-node" }).first();
-			await row().waitFor();
-			if (!/Waits for connection/.test(await row().innerText())) throw new Error("the new node does not wait");
+			const uid = code.split(".")[0];
+			const row = page.locator(`tr[data-node="${uid}"]`);
+			await row.waitFor();
+			if (!/Waits for connection/.test(await row.innerText())) throw new Error("the new node does not wait");
 			// "This server": the backend calls its own panel as its manager
 			await page.locator("#cluster-manager").fill("https://127.0.0.1:81");
 			await page.locator("#cluster-code").fill(code);
@@ -660,7 +679,7 @@ const scenarios = [
 			await panelRestarted();
 			await until("the node is online in the list", async () => {
 				await go("/agents/nodes");
-				return /Online/.test(await row().innerText());
+				return /Online/.test(await row.innerText());
 			});
 			// Rollout plan (step 15.2): the staged rollout switched on and off, hosts given to a label of the node
 			const plan = page.getByTestId("rollout-plan");
@@ -679,18 +698,18 @@ const scenarios = [
 			const given = (await api("GET", "/nginxions/nodes/label-hosts")).find((l) => l.label === "gui");
 			if (!given?.host_ids?.includes(labelHost)) throw new Error(`the label does not serve the host: ${JSON.stringify(given)}`);
 			// Packages: the node held on a package it was given, then it follows the configuration again
-			await row().getByRole("button", { name: "Packages", exact: true }).click();
+			await row.getByRole("button", { name: "Packages", exact: true }).click();
 			await modal().getByRole("button", { name: "Back to this package" }).first().click();
 			await page.getByText("The node gets this package with its next heartbeat.").waitFor({ timeout: 15000 });
-			const held = (await api("GET", "/nginxions/nodes")).find((n) => n.name === "gui-node");
+			const held = (await api("GET", "/nginxions/nodes")).find((n) => n.uid === uid);
 			if (held?.pinned?.by !== "manual") throw new Error(`the node is not held: ${JSON.stringify(held?.pinned)}`);
 			await modal().getByRole("button", { name: "Follow the configuration" }).click();
 			await page.getByText("The node follows the configuration again.").waitFor({ timeout: 15000 });
 			await modal().locator(".modal-footer").getByRole("button", { name: "Close", exact: true }).click();
-			if ((await api("GET", "/nginxions/nodes")).find((n) => n.name === "gui-node")?.pinned)
+			if ((await api("GET", "/nginxions/nodes")).find((n) => n.uid === uid)?.pinned)
 				throw new Error("the node still is held");
 			// Disable → its next heartbeat learns it
-			await row().getByRole("button", { name: "Disable" }).click();
+			await row.getByRole("button", { name: "Disable" }).click();
 			await modal().getByRole("button", { name: "Disable", exact: true }).click();
 			await saved("disable the node");
 			// no active node: smartsync off here
@@ -709,10 +728,10 @@ const scenarios = [
 			await page.getByRole("button", { name: "Disconnect" }).click();
 			await modal().getByRole("button", { name: "Disconnect", exact: true }).click();
 			await saved("disconnect");
-			await row().getByRole("button", { name: "Delete" }).click();
+			await row.getByRole("button", { name: "Delete" }).click();
 			await modal().getByRole("button", { name: "Delete", exact: true }).click();
 			await saved("delete the node");
-			await page.locator("tr", { hasText: "gui-node" }).waitFor({ state: "detached", timeout: 15000 });
+			await row.waitFor({ state: "detached", timeout: 15000 });
 			if ((await api("GET", "/nginxions/cluster/member")).joined) throw new Error("still a node of a manager");
 		},
 		async cleanup() {
@@ -760,7 +779,7 @@ const scenarios = [
 						.waitFor({ timeout: 5000 })
 						.then(
 							() => true,
-								async () => ({ ok: false, error: (await shownError()) || "no confirmation shown" }),
+							async () => ({ ok: false, error: (await shownError()) || "no confirmation shown" }),
 						);
 				},
 				{ timeout: 360000, every: 15000 },
@@ -769,10 +788,12 @@ const scenarios = [
 			await row.waitFor();
 			const made = (await api("GET", "/nginxions/learning/profiles")).profiles?.find((p) => p.name === "gui profile");
 			if (!made?.policy) throw new Error(`the profile carries no WAF policy: ${JSON.stringify(made)?.slice(0, 300)}`);
+			const { startedAt } = await api("GET", "/nginxions/services/openappsec");
+			if (!startedAt) throw new Error("the agent has no start time before applying the profile");
 			await row.getByRole("button", { name: "Apply", exact: true }).click();
 			await page.locator(".modal.show").last().getByRole("button", { name: "Apply", exact: true }).click();
 			await page.getByText("The profile is applied, the agent restarts").waitFor({ timeout: 30000 });
-			await panelRestarted(60000);
+			await panelRestarted(60000, startedAt);
 			if ((await api("GET", `/nginxions/waf/hosts/${id}`)).mode !== "prevent-learn")
 				throw new Error("the WAF of the site changed");
 			await go("/agents/open-appsec?tab=learning");
