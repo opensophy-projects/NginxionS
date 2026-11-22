@@ -302,12 +302,13 @@ done
 echo "$nodes_now" | grep -q '"package_error":""' || fail "the package of the node has an error: $nodes_now"
 step "Nodes: an event of the node (an mTLS refusal after the join) comes to the manager with the id of the node"
 node_uid=$(echo "$node_code" | cut -d. -f1)
+# A new certificate has its own denial group and produces a fresh event after the join.
+client smoke-node-event Sales "$domain_id" > /dev/null
+expect "$(mtls --cert /tmp/smoke-node-event.crt --key /tmp/smoke-node-event.key)" 403 "the node's mTLS refusal"
 forwarded=""
-for i in $(seq 1 45); do
-  # refusals of one source and host within a minute are one event: a refusal merged into one from before the join
-  # is not sent, the next minute starts a new event (90 s of attempts)
-  curl -sS -k --max-time 10 $TLS_TO -o /dev/null "$HTTPS_MTLS/smoke-node-$i" || true
-  $CURL "$ADMIN/api/nginxions/events?kind=all&period=1h&node=$node_uid&limit=5" | json | grep -q '"kind":"mtls"' \
+for _ in $(seq 1 60); do
+  $CURL "$ADMIN/api/nginxions/events?kind=mtls&period=1h&node=$node_uid&host=mtls.local&limit=5" \
+    | grep -q 'CN=smoke-node-event' \
     && { forwarded=1; break; }
   sleep 2
 done

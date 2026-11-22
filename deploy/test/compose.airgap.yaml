@@ -2,6 +2,11 @@
 # Used by scripts/test-airgap.sh; every phase adds scenarios to smoke.sh.
 
 services:
+  openappsec:
+    environment:
+      # A shorter learning window can be requested by a stack test.
+      NGINXIONS_LEARNING_INTERVAL_MINUTES: ${NGINXIONS_LEARNING_INTERVAL_MINUTES:-}
+
   nginxions:
     environment:
       # what the backend runs during the tests of the stack (index.js writes it on SIGUSR2; scripts/test-airgap.sh

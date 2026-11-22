@@ -34,7 +34,7 @@ import internalMember from "./nodes/member.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
-import { sensitiveLimiter } from "./rate-limit.js";
+import { nodeLearningLimiter, nodeLimiter, sensitiveLimiter } from "./rate-limit.js";
 import internalRbac from "./rbac/index.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
@@ -3161,7 +3161,7 @@ router.post("/nodes/register", sensitiveLimiter, express.json({ limit: "64kb" })
  * POST /api/nginxions/nodes/heartbeat — without login: Authorization: Bearer <token of the node>; {info} →
  *   {uid, name, labels, server_time}; 401 for an unknown or disabled node
  */
-router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res, next) => {
+router.post("/nodes/heartbeat", nodeLimiter, express.json({ limit: "16kb" }), async (req, res, next) => {
 	try {
 		const token = nodeAuth(req);
 		const answer = await internalNodes.heartbeat(token, req.body?.info, req.ip);
@@ -3179,7 +3179,7 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
  *   15.3) → {stored}
  * GET  /api/nginxions/nodes/bans — the bans of the cluster for the node → {bans}
  */
-router.post("/nodes/bans", express.json({ limit: "4mb" }), async (req, res, next) => {
+router.post("/nodes/bans", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
 	try {
 		const answer = await internalNodes.shareBans(nodeAuth(req), req.body?.bans);
 		res.set("Cache-Control", "no-store");
@@ -3190,7 +3190,7 @@ router.post("/nodes/bans", express.json({ limit: "4mb" }), async (req, res, next
 		next(err);
 	}
 });
-router.get("/nodes/bans", async (req, res, next) => {
+router.get("/nodes/bans", nodeLimiter, async (req, res, next) => {
 	try {
 		const answer = await internalNodes.clusterBans(nodeAuth(req));
 		res.set("Cache-Control", "no-store");
@@ -3206,7 +3206,7 @@ router.get("/nodes/bans", async (req, res, next) => {
  * POST /api/nginxions/nodes/requests — without login: the token and certificate of the node; {requests} (at most 1000):
  *   rows of its request log (step 15.3) → {stored}
  */
-router.post("/nodes/requests", express.json({ limit: "4mb" }), async (req, res, next) => {
+router.post("/nodes/requests", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
 	try {
 		const answer = await internalNodes.requests(nodeAuth(req), req.body?.requests);
 		res.set("Cache-Control", "no-store");
@@ -3222,7 +3222,7 @@ router.post("/nodes/requests", express.json({ limit: "4mb" }), async (req, res, 
  * POST /api/nginxions/nodes/events — without login: Authorization: Bearer <token of the node>; {events} (at most 500)
  *   → {stored}; 401 for an unknown or disabled node
  */
-router.post("/nodes/events", express.json({ limit: "4mb" }), async (req, res, next) => {
+router.post("/nodes/events", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
 	try {
 		const token = nodeAuth(req);
 		const answer = await internalNodes.events(token, req.body?.events);
@@ -3239,7 +3239,7 @@ router.post("/nodes/events", express.json({ limit: "4mb" }), async (req, res, ne
  * GET /api/nginxions/nodes/package — without login: Authorization: Bearer <token of the node>; the signed package of
  *   the node {schema, version, body, signature}; 401 for an unknown or disabled node
  */
-router.get("/nodes/package", async (req, res, next) => {
+router.get("/nodes/package", nodeLimiter, async (req, res, next) => {
 	try {
 		const token = nodeAuth(req);
 		const answer = await internalNodes.package(token);
@@ -3257,7 +3257,7 @@ router.get("/nodes/package", async (req, res, next) => {
  *   {logs: {service: [{stream, line}]}}: the logs it collected for this manager (command collect_logs); 401 for an
  *   unknown node
  */
-router.post("/nodes/logs", express.raw({ type: () => true, limit: "4mb" }), async (req, res, next) => {
+router.post("/nodes/logs", nodeLimiter, express.raw({ type: () => true, limit: "4mb" }), async (req, res, next) => {
 	try {
 		const token = nodeAuth(req);
 		let body = null;
@@ -3302,7 +3302,7 @@ router.get("/nodes/model", sensitiveLimiter, async (req, res, next) => {
  * GET /api/nginxions/nodes/learning/profile — without login: Authorization: Bearer <token of the node>; the signed file
  *   of the learning profile for new nodes (step 15.5); 404 when there is none, 401 for an unknown or disabled node
  */
-router.get("/nodes/learning/profile", async (req, res, next) => {
+router.get("/nodes/learning/profile", nodeLimiter, async (req, res, next) => {
 	try {
 		const token = nodeAuth(req);
 		const answer = await internalNodes.learningProfile(token);
@@ -3326,6 +3326,7 @@ router.get("/nodes/learning/profile", async (req, res, next) => {
 const LEARNING_STORAGE = "/nodes/learning/storage";
 router.all(
 	[LEARNING_STORAGE, `${LEARNING_STORAGE}{/*path}`],
+	nodeLearningLimiter,
 	express.raw({ type: () => true, limit: MAX_LEARNING_BODY }),
 	async (req, res, next) => {
 		try {
@@ -3355,19 +3356,24 @@ router.all(
  * POST /api/nginxions/nodes/learning/sync — without login: Authorization: Bearer <token of the node>; {assetId, type,
  *   windowId}: the agent of the node tells smartsync of this manager that the data of a window is in the storage
  */
-router.post("/nodes/learning/sync", express.raw({ type: () => true, limit: "16kb" }), async (req, res, next) => {
-	try {
-		const token = nodeAuth(req);
-		const answer = await internalNodes.learningSync(token, rawBytes(req));
-		res.set("Cache-Control", "no-store");
-		if (!answer) return unknownNode(res, "Unknown or disabled node");
-		res.status(answer.status).type(answer.type);
-		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- the answer of smartsync to the agent
-		res.send(answer.body);
-	} catch (err) {
-		next(err);
-	}
-});
+router.post(
+	"/nodes/learning/sync",
+	nodeLearningLimiter,
+	express.raw({ type: () => true, limit: "16kb" }),
+	async (req, res, next) => {
+		try {
+			const token = nodeAuth(req);
+			const answer = await internalNodes.learningSync(token, rawBytes(req));
+			res.set("Cache-Control", "no-store");
+			if (!answer) return unknownNode(res, "Unknown or disabled node");
+			res.status(answer.status).type(answer.type);
+			// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- the answer of smartsync to the agent
+			res.send(answer.body);
+		} catch (err) {
+			next(err);
+		}
+	},
+);
 
 /**
  * GET /api/nginxions/nodes/cluster-learning — on a manager with nodes: per site of its shared storage, the data of
