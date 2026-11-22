@@ -1,5 +1,3 @@
- 
-
 package handlers
 
 import (
@@ -75,12 +73,17 @@ type logger struct {
 	WindowLogger []mapToMapToSet `json:"window_logger"`
 }
 
+type parameterSource struct {
+	parameter string
+	source    string
+}
+
 type confidenceMergedData struct {
 	// maps key -> value -> sources set
 	log mms
-	// NginxionS: the node each source was first seen through, the nodes of the merged data, the node of the data now
-	// merged (SetDataNode)
-	sourceNode  map[string]string
+	// NginxionS: the node each source was first seen through for this parameter, the nodes of the merged data,
+	// and the node of the data now merged (SetDataNode).
+	sourceNode  map[parameterSource]string
 	nodes       map[string]bool
 	currentNode string
 }
@@ -160,7 +163,7 @@ func (c *ConfidenceCalculator) MergeData(data interface{}) {
 			}
 			for _, src := range value.Value {
 				c.md.log[key.Key][value.Key][src] = true
-				c.noteSourceNode(src)
+				c.noteSourceNode(key.Key, src)
 			}
 		}
 	}
@@ -245,7 +248,7 @@ func (c *ConfidenceCalculator) ProcessData(ctx context.Context, state models.Sta
 			hasSourcesToFilter = c.filterSources.filter(allSources)
 			c.md.log[key][c.params.NullObject] = allSources
 		}
-		totalSources := c.countSources(ctx, allSources)
+		totalSources := c.countSources(ctx, key, allSources)
 		if totalSources < c.params.MinSources {
 			log.WithContext(ctx).Debugf("not enough sources for key: %v, sources: %v", key, allSources)
 			if hasSourcesToFilter {
@@ -281,7 +284,7 @@ func (c *ConfidenceCalculator) ProcessData(ctx context.Context, state models.Sta
 				c.md.log[key][value] = sources
 			}
 
-			confidenceDelta := c.calculateConfidenceDelta(ctx, sources, totalSources, isKeyBenign)
+			confidenceDelta := c.calculateConfidenceDelta(ctx, key, sources, totalSources, isKeyBenign)
 			if isKeyBenign {
 				log.WithContext(ctx).Debugf("parameter %v is set to benign", key)
 				confidenceDelta *= 2
@@ -401,6 +404,7 @@ func mergeKeyData(orig map[string]float64, other map[string]float64) map[string]
 
 func (c *ConfidenceCalculator) calculateConfidenceDelta(
 	ctx context.Context,
+	key string,
 	sources map[string]bool,
 	totalSources int,
 	isKeyBenign bool) float64 {
@@ -412,7 +416,7 @@ func (c *ConfidenceCalculator) calculateConfidenceDelta(
 		return -math.Ceil(100.0 / minIntervals)
 	}
 
-	sourcesCount := float64(c.countSources(ctx, sources))
+	sourcesCount := float64(c.countSources(ctx, key, sources))
 
 	ratio := sourcesCount / float64(totalSources)
 
@@ -458,16 +462,17 @@ func (c *ConfidenceCalculator) SetDataNode(node string) {
 	c.md.nodes[node] = true
 }
 
-// noteSourceNode keeps the node a source was first seen through (NginxionS)
-func (c *ConfidenceCalculator) noteSourceNode(src string) {
+// noteSourceNode keeps the node a source was first seen through for a particular parameter (NginxionS).
+func (c *ConfidenceCalculator) noteSourceNode(parameter string, src string) {
 	if c.md.currentNode == "" {
 		return
 	}
 	if c.md.sourceNode == nil {
-		c.md.sourceNode = map[string]string{}
+		c.md.sourceNode = map[parameterSource]string{}
 	}
-	if _, ok := c.md.sourceNode[src]; !ok {
-		c.md.sourceNode[src] = c.md.currentNode
+	key := parameterSource{parameter: parameter, source: src}
+	if _, ok := c.md.sourceNode[key]; !ok {
+		c.md.sourceNode[key] = c.md.currentNode
 	}
 }
 
@@ -541,7 +546,7 @@ func (c *ConfidenceCalculator) isBenignOfType(title string, eventType models.Eve
 // brings count up to MinSources-1: one node (or whoever took it over) never makes a value confident alone, the others
 // have to see it too. A source labelled benign in the GUI counts MinSources, as before (a decision of the
 // administrator, not of a node).
-func (c *ConfidenceCalculator) countSources(ctx context.Context, sources map[string]bool) int {
+func (c *ConfidenceCalculator) countSources(ctx context.Context, parameter string, sources map[string]bool) int {
 	count := 0
 	perNode := map[string]int{}
 	capNodes := len(c.md.nodes) >= 2
@@ -549,7 +554,7 @@ func (c *ConfidenceCalculator) countSources(ctx context.Context, sources map[str
 		if c.isSourceBenign(source) {
 			log.WithContext(ctx).Debugf("source %v is set to benign", source)
 			count += c.params.MinSources
-		} else if node, ok := c.md.sourceNode[source]; capNodes && ok {
+		} else if node, ok := c.md.sourceNode[parameterSource{parameter: parameter, source: source}]; capNodes && ok {
 			perNode[node]++
 		} else {
 			count++
