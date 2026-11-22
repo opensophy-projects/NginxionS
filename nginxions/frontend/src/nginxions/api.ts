@@ -822,8 +822,11 @@ export const nodeCommand = (id: number, action: "restart_agent" | "collect_logs"
 	api.post({ url: `/nginxions/nodes/${id}/command`, data: { action } });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
 export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });
-export const joinCluster = (data: { managerUrl: string; code: string }): Promise<ClusterMember> =>
-	api.put({ url: "/nginxions/cluster/member", data });
+export const joinCluster = (data: {
+	managerUrl: string;
+	code: string;
+	managerFingerprint: string;
+}): Promise<ClusterMember> => api.put({ url: "/nginxions/cluster/member", data });
 export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
 
 /** thresholds of the learning of the nodes put together by smartsync on a manager */
