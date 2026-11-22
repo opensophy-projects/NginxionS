@@ -26,6 +26,8 @@ namespace Waap {
 
             ParamMap getParamsMap() const;
             Value getParamVal(Parameter key, Value defaultVal);
+            // NginxionS: the test-only interval in minutes, empty for the default.
+            static Value learningIntervalOfEnv();
         private:
             ParamMap m_paramMap;
         };
