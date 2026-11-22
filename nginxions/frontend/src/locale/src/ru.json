@@ -1322,6 +1322,9 @@
 	"nginxions.cluster.fingerprint": {
 		"defaultMessage": "Сертификат управляющего (SHA-256)"
 	},
+	"nginxions.cluster.fingerprint.hint": {
+		"defaultMessage": "Введите SHA-256-отпечаток TLS-сертификата управляющего сервера, который вы заранее сверили по доверенному каналу."
+	},
 	"nginxions.cluster.hint": {
 		"defaultMessage": "Подключите этот сервер к управляющему: им будут управлять оттуда, а если управляющий недоступен, он продолжит защищать свои сайты."
 	},

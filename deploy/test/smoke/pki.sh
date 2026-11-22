@@ -267,8 +267,9 @@ expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: applicati
   "$ADMIN/api/nginxions/nodes/register" -d '{"code": "n-0000000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "csr_pem": "x"}')" \
   401 "register with an unknown code"
 # the backend of this server calls its own panel as its manager (the certificate of the panel is pinned)
+[ -n "${MANAGER_FINGERPRINT:-}" ] || fail "the test Manager fingerprint is required"
 member=$(api_json -X PUT "$ADMIN/api/nginxions/cluster/member" \
-  -d "{\"manager_url\": \"https://127.0.0.1:81\", \"code\": \"$node_code\"}" | json)
+  -d "{\"manager_url\": \"https://127.0.0.1:81\", \"code\": \"$node_code\", \"manager_fingerprint\": \"$MANAGER_FINGERPRINT\"}" | json)
 echo "$member" | grep -q '"joined":true' || fail "this server did not join itself: $member"
 echo "$member" | grep -q '"fingerprint":"[0-9A-F:]\{95\}"' || fail "no pinned fingerprint of the manager: $member"
 $CURL "$ADMIN/api/nginxions/nodes" | json | grep -q "\"id\":$node_id,[^}]*\"status\":\"active\"" \

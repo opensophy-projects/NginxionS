@@ -31,6 +31,7 @@ import internalClusterSettings from "./nodes/cluster-settings.js";
 import internalNodes, { NODE_COMMANDS } from "./nodes/index.js";
 import { MAX_LEARNING_BODY } from "./nodes/learning-model.js";
 import internalMember from "./nodes/member.js";
+import { MANAGER_FINGERPRINT } from "./nodes/model.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
@@ -3624,7 +3625,7 @@ router
 
 /**
  * GET    /api/nginxions/cluster/member — this server as a node: its manager, id, last contact
- * PUT    /api/nginxions/cluster/member — {manager_url, code}: connect to a manager
+ * PUT    /api/nginxions/cluster/member — {manager_url, code, manager_fingerprint}: connect to a manager
  * DELETE /api/nginxions/cluster/member — disconnect (disable it on the manager too)
  */
 router
@@ -3640,10 +3641,11 @@ router
 					{
 						type: "object",
 						additionalProperties: false,
-						required: ["manager_url", "code"],
+						required: ["manager_url", "code", "manager_fingerprint"],
 						properties: {
 							manager_url: { type: "string", minLength: 8, maxLength: 255 },
 							code: { type: "string", minLength: 20, maxLength: 120 },
+							manager_fingerprint: { type: "string", pattern: MANAGER_FINGERPRINT.source },
 						},
 					},
 					req.body,

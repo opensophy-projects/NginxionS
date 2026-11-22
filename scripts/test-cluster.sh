@@ -188,6 +188,11 @@ call manager PUT "/nginxions/waf/hosts/$host_id" \
 answers manager "$SQLI" 403 || fail "the manager does not block an SQL injection on $DOMAIN"
 
 step "join: two nodes join the manager with one-time codes and are online"
+manager_fingerprint=$(stack manager exec -T nginxions sh -c '
+  openssl s_client -connect 127.0.0.1:81 -noservername </dev/null 2>/dev/null |
+    openssl x509 -noout -sha256 -fingerprint
+')
+manager_fingerprint=${manager_fingerprint#*=}
 declare -A NODE_ID NODE_UID
 for s in node1 node2; do
   answer=$(call manager POST /nginxions/nodes "{\"name\": \"$s\", \"labels\": [\"cluster\"]}")
@@ -196,7 +201,7 @@ for s in node1 node2; do
   code_of=$(echo "$answer" | jq -r '.code // empty')
   [ -n "${NODE_ID[$s]}" ] && [ -n "$code_of" ] || fail "no node or code for $s: $answer"
   joined=$(call "$s" PUT /nginxions/cluster/member \
-    "{\"manager_url\": \"https://${IP[manager]}:81\", \"code\": \"$code_of\"}")
+    "{\"manager_url\": \"https://${IP[manager]}:81\", \"code\": \"$code_of\", \"manager_fingerprint\": \"$manager_fingerprint\"}")
   echo "$joined" | jq -e '.joined == true' > /dev/null || fail "$s did not join: $joined"
 done
 # the first node makes the manager learn for the cluster (smartsync), each node learns through the manager: their
@@ -446,7 +451,7 @@ answer=$(call manager POST /nginxions/nodes '{"name": "node2-again", "labels": [
 NODE_ID[node2]=$(echo "$answer" | jq -r '.node.id')
 call manager PUT "/nginxions/nodes/${NODE_ID[node2]}/hosts" "{\"host_ids\": [$host_id]}" > /dev/null
 call node2 PUT /nginxions/cluster/member \
-  "{\"manager_url\": \"https://${IP[manager]}:81\", \"code\": \"$(echo "$answer" | jq -r .code)\"}" \
+  "{\"manager_url\": \"https://${IP[manager]}:81\", \"code\": \"$(echo "$answer" | jq -r .code)\", \"manager_fingerprint\": \"$manager_fingerprint\"}" \
   | jq -e '.joined == true' > /dev/null || fail "node2 did not join again"
 sleep 10
 panels_up node2

@@ -1,8 +1,8 @@
 // This server as a node of a manager (docs/ROADMAP.md, phase 15; docs/adr/0012-nodes.md).
 //   - "Connect to a manager": the address of the manager and the join code from its "Agents → Nodes"; a key is made
 //     here (it never leaves), the CSR (CN = the id of the node in the code) is signed by the manager;
-//   - the certificate of the panel of the manager is trusted at the first connection: its fingerprint is kept and
-//     every later request goes over a socket checked against it before anything (the code, the token) is sent;
+//   - the administrator provides a verified fingerprint of the manager panel's TLS certificate. Every request,
+//     including registration, checks the certificate against its fingerprint before sending the code or token;
 //   - a heartbeat every 30 s; the manager down or slow (timeout) changes nothing here: the node protects as before;
 //   - disabled on the manager (403): the node says so in its GUI and stops calling.
 // The state (token and key encrypted with the secrets of NginxionS) is a file of the data volume.
@@ -25,7 +25,7 @@ import { generateKey } from "../pki/x509.js";
 import { decrypt, encrypt } from "../secrets.js";
 import { applyLearningRole } from "../waf/agent-settings.js";
 import { applyContent } from "./apply.js";
-import { HEARTBEAT_MS, MEMBER_FILE, normalizeManagerUrl, uidOfCode } from "./model.js";
+import { HEARTBEAT_MS, MANAGER_FINGERPRINT, MEMBER_FILE, normalizeManagerUrl, uidOfCode } from "./model.js";
 import { openPackage } from "./package-model.js";
 import { applySettings } from "./settings-apply.js";
 import { cleanBans, holdBans, readOwnBans, versionOfBans } from "../crowdsec/cluster-bans.js";
@@ -50,8 +50,7 @@ export const clientOf = (state) =>
 const sameFingerprint = (a, b) => String(a).toUpperCase() === String(b).toUpperCase();
 
 /**
- * A request to the manager over a socket whose certificate is checked first: with a pin, a socket with another
- * certificate is closed before anything is written; without one (the first connection) its fingerprint is returned.
+ * A request to the manager over a socket whose certificate must match the pin before anything is written.
  * The body and the answer are bytes (the learning relay, relay.js); managerRequest below speaks JSON.
  * @returns {Promise<{status: number, headers: object, body: Buffer, fingerprint: string}>}
  */
@@ -71,6 +70,7 @@ export const managerExchange = (
 	} = {},
 ) =>
 	new Promise((resolve, reject) => {
+		if (!pin) return reject(new Error("A verified SHA-256 fingerprint of the manager is required"));
 		const url = new URL(urlPath, managerUrl);
 		const port = Number(url.port || 443);
 		const done = (err, value) => (err ? reject(err) : resolve(value));
@@ -80,8 +80,7 @@ export const managerExchange = (
 			// with its certificate a node asks for its channel (the panel then asks for the certificate); without, the panel
 			servername: client ? CLUSTER_SNI : isIP(url.hostname) ? undefined : url.hostname,
 			...(client ? { key: client.key, cert: client.cert } : {}),
-			// the trust is the pin (or the first connection), not the CAs of the system: panels of NginxionS often
-			// have a certificate of their own
+			// The pin authenticates the panel, including panels with a self-signed certificate.
 			rejectUnauthorized: false,
 			timeout: timeoutMs,
 		});
@@ -89,7 +88,7 @@ export const managerExchange = (
 		socket.once("error", (err) => done(err));
 		socket.once("secureConnect", () => {
 			const fingerprint = socket.getPeerCertificate()?.fingerprint256 || "";
-			if (!fingerprint || (pin && !sameFingerprint(pin, fingerprint))) {
+			if (!fingerprint || !sameFingerprint(pin, fingerprint)) {
 				socket.destroy();
 				return done(new Error(`the certificate of the manager changed (${fingerprint || "none"})`));
 			}
@@ -663,7 +662,7 @@ const internalMember = {
 	/**
 	 * Connects this server to a manager with a join code.
 	 * @param {Access} access
-	 * @param {{manager_url: string, code: string}} data
+	 * @param {{manager_url: string, code: string, manager_fingerprint: string}} data
 	 */
 	join: async (access, data) => {
 		await access.can("settings:manage");
@@ -675,11 +674,17 @@ const internalMember = {
 		const code = String(data.code ?? "").trim();
 		const uid = uidOfCode(code);
 		if (!uid) throw new errs.ValidationError("The join code is not valid: copy it again from the manager");
+		const fingerprint = data.manager_fingerprint;
+		if (typeof fingerprint !== "string" || !MANAGER_FINGERPRINT.test(fingerprint)) {
+			throw new errs.ValidationError("Enter the verified SHA-256 fingerprint of the manager certificate");
+		}
+		const pin = fingerprint.replaceAll(":", "").match(/.{2}/g).join(":");
 		const keyPem = generateKey("ec-p256");
 		const csrPem = await makeCsr({ keyPem, subject: { common_name: uid, organization: "NginxionS" } });
 		let answer;
 		try {
 			answer = await managerRequest(managerUrl, "/api/nginxions/nodes/register", {
+				pin,
 				body: { code, csr_pem: csrPem, info: await ownInfo(null) },
 			});
 		} catch (err) {
