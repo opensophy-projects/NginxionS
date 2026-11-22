@@ -442,6 +442,7 @@ export const fetchProfile = async (state, ref, now = Date.now()) => {
 
 /** the most of a model of the agent (as an upload in WAF -> Agent) */
 const MAX_MODEL_BYTES = 1024 * 1024 * 1024;
+const MODEL_RETRY_MS = 600000;
 
 /**
  * The advanced model of the agent of the manager (step 15.5): the package names it by its SHA-256; a node whose model
@@ -456,33 +457,49 @@ export const syncModel = async (state, ref, io = {}) => {
 	const settings = await import("../waf/agent-settings.js");
 	const install = io.install ?? settings.installManagerModel;
 	const remove = io.remove ?? settings.removeManagerModel;
+	const sha256 = ref?.sha256 || "";
+	let restartPending = Boolean(state.model_restart_pending);
+	if (!sha256 && !state.model_sha256 && !restartPending) return state.model_error ? { model_error: "" } : {};
+	if (sha256 === state.model_sha256 && !restartPending && !state.model_error) return {};
 	try {
-		if (!ref?.sha256) {
-			if (!state.model_sha256) return {};
-			await remove();
-			logger.info("Cluster: the manager has no model of the agent any more: the model of the image again");
-			return { model_sha256: "", model_error: "" };
+		let activation;
+		if (sha256) {
+			if (!(Number(ref.size) > 0 && ref.size <= MAX_MODEL_BYTES)) {
+				throw new Error("the size of the model is not valid");
+			}
+			activation = await install(async (file) => {
+				const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/model", {
+					method: "GET",
+					token: decrypt(state.token_enc),
+					pin: state.fingerprint,
+					client: clientOf(state),
+					maxAnswer: ref.size,
+					timeoutMs: 600000,
+					toFile: file,
+				});
+				if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the model`);
+			}, sha256);
+		} else {
+			activation = await remove();
 		}
-		if (ref.sha256 === state.model_sha256) return {};
-		if (!(Number(ref.size) > 0 && ref.size <= MAX_MODEL_BYTES))
-			throw new Error("the size of the model is not valid");
-		await install(async (file) => {
-			const answer = await managerExchange(state.manager_url, "/api/nginxions/nodes/model", {
-				method: "GET",
-				token: decrypt(state.token_enc),
-				pin: state.fingerprint,
-				client: clientOf(state),
-				maxAnswer: ref.size,
-				timeoutMs: 600000,
-				toFile: file,
-			});
-			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the model`);
-		}, ref.sha256);
-		logger.info(`Cluster: the model of the agent ${ref.sha256.slice(0, 12)} of the manager is in place`);
-		return { model_sha256: ref.sha256, model_error: "" };
+		if (activation?.applied !== true) {
+			restartPending = true;
+			if (activation?.error) throw activation.error;
+			return { model_restart_pending: true, model_error: "", model_tried_on: new Date() };
+		}
+		if (sha256) {
+			logger.info(`Cluster: the model of the agent ${sha256.slice(0, 12)} of the manager is in place`);
+		} else {
+			logger.info("Cluster: the manager has no model of the agent any more: the model of the image again");
+		}
+		return { model_sha256: sha256, model_restart_pending: false, model_error: "" };
 	} catch (err) {
 		logger.warn(`Cluster: the model of the agent: ${err.message}`);
-		return { model_error: String(err.message).slice(0, 300) };
+		return {
+			model_restart_pending: restartPending,
+			model_error: String(err.message).slice(0, 300),
+			model_tried_on: new Date(),
+		};
 	}
 };
 
@@ -598,13 +615,14 @@ export const beat = async () => {
 			if (next.profile_error && next.applied_version) {
 				next = { ...next, ...(await fetchProfile(next, (await lastContent()).learning_profile)) };
 			}
-			// a model that failed before: tried again with the next heartbeats (each try is a new download)
-			if (next.model_error && next.applied_version && Date.now() - new Date(next.model_tried_on ?? 0) > 600000) {
-				next = {
-					...next,
-					...(await syncModel(next, (await lastContent()).waf_model)),
-					model_tried_on: new Date(),
-				};
+			// Check queued restarts on the next heartbeat and back off after errors. A matching file is reused.
+			const modelRetryDelay = next.model_error ? MODEL_RETRY_MS : HEARTBEAT_MS / 2;
+			if (
+				(next.model_restart_pending || next.model_error) &&
+				next.applied_version &&
+				Date.now() - new Date(next.model_tried_on ?? 0) > modelRetryDelay
+			) {
+				next = { ...next, ...(await syncModel(next, (await lastContent()).waf_model)) };
 			}
 			// a command of the manager, once per id
 			const command = answer.body?.command;
