@@ -740,7 +740,7 @@ jobs:
 
   appsec-arm64:
     name: nginxions-openappsec image (arm64, experimental)
-    needs: [level, checks]
+    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository]
     if: >-
       github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/security/') &&
       needs.level.outputs.level != 'fast'
