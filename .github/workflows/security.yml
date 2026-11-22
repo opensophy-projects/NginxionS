@@ -205,19 +205,11 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
             -e GIT_CONFIG_VALUE_0='*' "$GITLEAKS_IMAGE" git "${all[@]}" --config .github/security/gitleaks.toml --redact \
             --report-format sarif --report-path out/gitleaks.sarif --exit-code 0 --log-level warn .
-          docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" dir --config .github/security/gitleaks.toml \
-            --redact --report-format sarif --report-path out/gitleaks-files.sarif --exit-code 0 --log-level warn .
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always() && hashFiles('out/gitleaks.sarif') != ''
         with:
           sarif_file: out/gitleaks.sarif
           category: gitleaks
-      # The working-tree scan was previously only an artifact, not visible in Code Scanning.
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
-        if: always() && hashFiles('out/gitleaks-files.sarif') != ''
-        with:
-          sarif_file: out/gitleaks-files.sarif
-          category: gitleaks-files
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
