@@ -368,15 +368,18 @@ kill "$traffic_pid" 2> /dev/null
 traffic_pid=""
 
 step "bans: a ban on node1 is held by the manager and node2; its unban there lifts it everywhere"
-# Enable enforcement in the isolated stack and include the private probe addresses in it.
-# The manager distributes these settings in the same packages as the hosts.
+# Enable enforcement for the private ban-test clients. Keep the main probe on the CrowdSec allowlist
+# so its WAF assertions cannot be satisfied by a CrowdSec ban triggered by earlier requests.
 cs_settings=$(call manager GET /nginxions/crowdsec/settings |
-  jq -ce '.bouncer.enabled = true | .allowlist.private = false')
+  jq -ce --arg probe "$PROBE_IP" '.bouncer.enabled = true | .allowlist.private = false | .allowlist.ips += [$probe]')
 call manager PUT /nginxions/crowdsec/settings "$cs_settings" | jq -e '.result.applied == true' > /dev/null \
   || fail "the manager did not apply the CrowdSec settings for the test"
 bouncer_active() {
   call "$1" GET /nginxions/crowdsec/settings |
-    jq -e '.bouncer.enabled == true and .allowlist.private == false and (.pending | length) == 0' > /dev/null
+    jq -e --arg probe "$PROBE_IP" '
+      .bouncer.enabled == true and .allowlist.private == false and
+      (.allowlist.ips | index($probe) != null) and (.pending | length) == 0
+    ' > /dev/null
 }
 for s in "${STACKS[@]}"; do until_ok "CrowdSec enforcement was not enabled on $s" 60 3 bouncer_active "$s"; done
 
