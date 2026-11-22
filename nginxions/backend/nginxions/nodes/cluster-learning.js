@@ -17,25 +17,38 @@ export const isClusterStatePath = (file) => {
 	return clean !== null && clean === file && /^\/[^/]+\/.+\/remote\/[^/]+$/.test(file);
 };
 
+const xmlEscapes = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&#34;": '"', "&#39;": "'" };
+const storageKey = (key) => {
+	const decoded = key.replace(/&(?:amp|lt|gt|#34|#39);/g, (entity) => xmlEscapes[entity]);
+	return decoded.startsWith("/") ? decoded : `/${decoded}`;
+};
+
+const storageFileUrl = (file) => `${STORAGE_URL}/api${file.split("/").map(encodeURIComponent).join("/")}`;
+
+const readStorageListing = async () => {
+	const list = await fetch(`${STORAGE_URL}/api/?list-type=2&prefix=/`, {
+		headers,
+		signal: AbortSignal.timeout(TIMEOUT_MS),
+	});
+	if (!list.ok) throw new Error(`the shared storage answered ${list.status} to its listing`);
+	return list.text();
+};
+
 /** the keys of a listing of the storage (ListBucketResult) */
 export const keysOfListing = (xml) =>
-	[...String(xml).matchAll(/<Key>([^<]{1,1024})<\/Key>/g)].map((m) => (m[1].startsWith("/") ? m[1] : `/${m[1]}`));
+	[...String(xml).matchAll(/<Key>([^<]{1,1024})<\/Key>/g)].map((m) => storageKey(m[1]));
 
 /**
  * The files of the state put together by smartsync, from the storage of this server.
  * @returns {Promise<{path: string, content: string}[]>} content in base64
  */
 export const readClusterState = async () => {
-	const list = await fetch(`${STORAGE_URL}/api/?list-type=2&prefix=/`, {
-		headers,
-		signal: AbortSignal.timeout(TIMEOUT_MS),
-	});
-	if (!list.ok) throw new Error(`the shared storage answered ${list.status} to its listing`);
 	const files = [];
 	let size = 0;
-	for (const file of keysOfListing(await list.text()).filter(isClusterStatePath)) {
-		const res = await fetch(`${STORAGE_URL}/api${file}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-		if (!res.ok) continue;
+	for (const file of keysOfListing(await readStorageListing()).filter(isClusterStatePath)) {
+		const res = await fetch(storageFileUrl(file), { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+		if (res.status === 404) continue;
+		if (!res.ok) throw new Error(`the shared storage answered ${res.status} to ${file}`);
 		const content = Buffer.from(await res.arrayBuffer());
 		size += content.length;
 		if (size > MAX_CLUSTER_BYTES) throw new Error("the state of the cluster is larger than a snapshot keeps");
@@ -44,17 +57,33 @@ export const readClusterState = async () => {
 	return files;
 };
 
-/** the files of a snapshot back in the storage: smartsync and the agents of the nodes read them from there */
+/** Replaces the merged state with the snapshot, leaving learning windows and other storage data in place. */
 export const restoreClusterState = async (files) => {
+	const retained = new Set();
+	for (const { path } of files) {
+		if (!isClusterStatePath(path)) throw new Error(`not a file of the state of the cluster: ${path}`);
+		retained.add(path);
+	}
+	const stale = keysOfListing(await readStorageListing()).filter(
+		(file) => isClusterStatePath(file) && !retained.has(file),
+	);
 	for (const f of files) {
-		if (!isClusterStatePath(f.path)) throw new Error(`not a file of the state of the cluster: ${f.path}`);
-		const res = await fetch(`${STORAGE_URL}/api${f.path}`, {
+		const res = await fetch(storageFileUrl(f.path), {
 			method: "PUT",
 			headers: { ...headers, "Content-Type": "application/octet-stream" },
 			body: Buffer.from(f.content, "base64"),
 			signal: AbortSignal.timeout(TIMEOUT_MS),
 		});
 		if (!res.ok) throw new Error(`the shared storage answered ${res.status} to ${f.path}`);
+	}
+	for (const file of stale) {
+		const res = await fetch(storageFileUrl(file), {
+			method: "DELETE",
+			headers,
+			signal: AbortSignal.timeout(TIMEOUT_MS),
+		});
+		if (!res.ok && res.status !== 404)
+			throw new Error(`the shared storage answered ${res.status} to delete ${file}`);
 	}
 	return files.length;
 };
@@ -69,7 +98,7 @@ export const entriesOfListing = (xml) =>
 	[...String(xml).matchAll(/<Contents>([\s\S]{0,4096}?)<\/Contents>/g)].map((m) => {
 		const key = /<Key>([^<]{1,1024})<\/Key>/.exec(m[1])?.[1] ?? "";
 		const modified = /<LastModified>([^<]{1,64})<\/LastModified>/.exec(m[1])?.[1] ?? null;
-		return { key: key.startsWith("/") ? key : `/${key}`, modified };
+		return { key: storageKey(key), modified };
 	});
 
 const WINDOW_FILE = /^\/([^/]+)\/(.+)\/window_\d{1,6}(?:_\d{1,6})?\/([^/]+)(?:\/.+)?\/data\.data\d{0,6}$/;
@@ -118,11 +147,5 @@ export const clusterLearningOf = (entries, nodes) => {
 };
 
 /** the learning of the cluster as the storage of this server shows it */
-export const readClusterLearning = async (nodes) => {
-	const list = await fetch(`${STORAGE_URL}/api/?list-type=2&prefix=/`, {
-		headers,
-		signal: AbortSignal.timeout(TIMEOUT_MS),
-	});
-	if (!list.ok) throw new Error(`the shared storage answered ${list.status} to its listing`);
-	return clusterLearningOf(entriesOfListing(await list.text()), nodes);
-};
+export const readClusterLearning = async (nodes) =>
+	clusterLearningOf(entriesOfListing(await readStorageListing()), nodes);
