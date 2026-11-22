@@ -159,6 +159,9 @@ jobs:
           pnpm biome ci . --assist-enabled=false
           # unit tests of NginxionS modules (upstream has none); the SQL ones on the postgres service
           node --test 'nginxions/**/*.test.js'
+      - name: scripts of CI (audit of logs, depth, smoke report, fuzz)
+        # fuzz.test.mjs imports the YAML parser from backend/node_modules; keep it beside the backend install
+        run: node --test scripts/*.test.mjs
 
   checks-frontend:
     name: Frontend (Biome, locales, TypeScript, Vitest)
@@ -224,8 +227,6 @@ jobs:
         with:
           node-version: lts/*
           package-manager-cache: false
-      - name: scripts of CI (audit of the logs, depth of the run, report of smoke)
-        run: node --test scripts/*.test.mjs
       - name: file tree
         # every file of the code of NginxionS has a line in CODE_OF_CONDUCT.md
         run: node scripts/check-tree.mjs
