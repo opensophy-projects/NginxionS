@@ -63,7 +63,7 @@ const writeEnv = async (settings, role) => {
 const managedByManager = async () => {
 	const { readState } = await import("../nodes/member.js");
 	const member = await readState();
-	if (!member || member.disabled || !member.model_sha256) return false;
+	if (!member || member.disabled || !(member.model_sha256 || member.model_restart_pending)) return false;
 	// a server that is a manager itself (its own node in a test) keeps its model in its hands
 	return !(await learningRole()).smartsync;
 };
@@ -83,35 +83,53 @@ const keepPrevious = async () => {
 	}
 };
 
-/**
- * On a node: the model of its manager, fetched into a file next to the model, in place once its hash is the one of the
- * signed package; the model before is kept. The agent restarts.
- * @param {(file: string) => Promise<void>} fetchTo  writes the file of the manager
- * @param {string} sha256  the hash the package names
- */
-export const installManagerModel = async (fetchTo, sha256) => {
-	// the same model here already (a server that is its own node): nothing to fetch, no restart
-	if ((await fileInfo(MODEL_FILE)).sha256 === sha256) return;
-	await mkdir(MODEL_DIR, { recursive: true });
-	const tmp = `${MODEL_FILE}.manager`;
+// The agent loads its model at startup. A queued restart can also restart this backend, so check the agent's
+// start time against the file's change time (updated by rename) even on a later heartbeat.
+const restartForModel = async (changedAt) => {
 	try {
-		await fetchTo(tmp);
-		const got = await sha256Of(tmp);
-		if (got !== sha256) throw new Error(`the model is not the one of the package (SHA-256 ${got.slice(0, 12)})`);
-		await keepPrevious();
-		await rename(tmp, MODEL_FILE);
-	} finally {
-		await rm(tmp, { force: true });
+		const agent = await control.getService(AGENT_SERVICE);
+		if (agent.state === "running" && Date.parse(agent.startedAt) > changedAt) {
+			if (agent.health === "starting") return { applied: false };
+			if (!agent.health || agent.health === "healthy") return { applied: true };
+		}
+		const result = await control.restartService(AGENT_SERVICE, 1);
+		return { applied: result.restarted === true };
+	} catch (error) {
+		return { applied: false, error };
 	}
-	await control.restartService(AGENT_SERVICE, 1);
 };
 
-/** On a node: the manager has no model any more: the model of the image again (the one before is kept) */
+/**
+ * On a node: verify and install the model named in the signed package, keeping the previous one.
+ * @param {(file: string) => Promise<void>} fetchTo  writes the file of the manager
+ * @param {string} sha256  the hash the package names
+ * @returns {Promise<{applied: boolean, error?: Error}>} whether the agent has restarted with the model
+ */
+export const installManagerModel = async (fetchTo, sha256) => {
+	if ((await fileInfo(MODEL_FILE)).sha256 !== sha256) {
+		await mkdir(MODEL_DIR, { recursive: true });
+		const tmp = `${MODEL_FILE}.manager`;
+		try {
+			await fetchTo(tmp);
+			const got = await sha256Of(tmp);
+			if (got !== sha256)
+				throw new Error(`the model is not the one of the package (SHA-256 ${got.slice(0, 12)})`);
+			await keepPrevious();
+			await rename(tmp, MODEL_FILE);
+		} finally {
+			await rm(tmp, { force: true });
+		}
+	}
+	return restartForModel((await stat(MODEL_FILE)).ctimeMs);
+};
+
+/** On a node: return to the model of the image, keeping the advanced model as the previous one. */
 export const removeManagerModel = async () => {
-	if (!(await fileInfo(MODEL_FILE)).present) return false;
 	await keepPrevious();
-	await control.restartService(AGENT_SERVICE, 1);
-	return true;
+	const previous = await stat(PREVIOUS_FILE).catch((err) => {
+		if (err.code !== "ENOENT") throw err;
+	});
+	return previous ? restartForModel(previous.ctimeMs) : { applied: true };
 };
 
 const state = async (settings) => {

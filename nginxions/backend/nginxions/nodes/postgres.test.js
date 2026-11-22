@@ -2,8 +2,8 @@
 // through member.js against a real HTTPS server in front of it (the pin of the certificate of the manager included).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { X509Certificate } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, X509Certificate } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import http from "node:http";
 import https from "node:https";
@@ -28,6 +28,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let managerUrl;
 	let managerFingerprint;
 	let registrationRequests = 0;
+	let modelAgent;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
 	// the shared storage and smartsync of the manager (step 15.4): what reaches them
 	const learned = [];
@@ -61,6 +62,13 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	const restored = [];
 	before(async () => {
 		process.env.NGINXIONS_CONTROL_URL = await fake("control", (req) => {
+			if (modelAgent && req.url === "/v1/services/openappsec") return [200, JSON.stringify(modelAgent.service)];
+			if (modelAgent && req.url === "/v1/services/openappsec/restart") {
+				modelAgent.restarts++;
+				return modelAgent.restarts === 1
+					? [500, '{"error":"agent restart failed"}']
+					: [202, '{"restarted":false,"restarting":true}'];
+			}
 			if (req.url === "/v1/agent/learning/snapshot") return [200, JSON.stringify(agentLearned)];
 			if (req.url === "/v1/agent/learning") return [200, "[]"];
 			if (req.url === "/v1/services") {
@@ -252,6 +260,68 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.deepEqual(await clusterSettings.set(ADMIN, next), next);
 		assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "appsec", "nginxions-smartsync.json"), "utf8")), next);
 		await assert.rejects(() => clusterSettings.set(ADMIN, { ...next, minSources: 1 }), /sources 2–1000/);
+	});
+
+	test("model sync retries a failed restart without downloading again and waits for the agent", async (t) => {
+		const { installManagerModel } = await import("../waf/agent-settings.js");
+		const { MODEL_DIR, MODEL_FILE, PREVIOUS_FILE } = await import("../waf/model-file.js");
+		modelAgent = {
+			restarts: 0,
+			service: { state: "running", health: "healthy", startedAt: "2000-01-01T00:00:00Z" },
+		};
+		t.after(() => {
+			modelAgent = undefined;
+			rmSync(MODEL_FILE, { force: true });
+			rmSync(PREVIOUS_FILE, { force: true });
+		});
+		const previous = gzipSync("the model running now");
+		const model = gzipSync("the model from the manager");
+		const originalHash = createHash("sha256").update(previous).digest("hex");
+		const ref = { sha256: createHash("sha256").update(model).digest("hex"), size: model.length };
+		mkdirSync(MODEL_DIR, { recursive: true });
+		writeFileSync(MODEL_FILE, previous);
+		let downloads = 0;
+		const install = (_fetchFromManager, sha256) =>
+			installManagerModel(async (file) => {
+				downloads++;
+				writeFileSync(file, model);
+			}, sha256);
+		let state = { model_sha256: originalHash };
+		const sync = async () => {
+			state = { ...state, ...(await member.syncModel(state, ref, { install })) };
+		};
+
+		await sync();
+		assert.match(state.model_error, /agent restart failed/);
+		assert.equal(state.model_sha256, originalHash);
+		assert.equal(modelAgent.restarts, 1);
+		assert.equal(downloads, 1);
+		assert.deepEqual(readFileSync(MODEL_FILE), model);
+		assert.deepEqual(readFileSync(PREVIOUS_FILE), previous);
+		const { ctimeMs } = statSync(MODEL_FILE);
+
+		await sync();
+		assert.equal(modelAgent.restarts, 2, "retry the restart of the already written model");
+		assert.equal(downloads, 1);
+		assert.equal(statSync(MODEL_FILE).ctimeMs, ctimeMs);
+		assert.equal(state.model_restart_pending, true);
+		assert.equal(state.model_sha256, originalHash, "a queued restart is not confirmation");
+
+		modelAgent.service.startedAt = new Date(ctimeMs + 1000).toISOString();
+		modelAgent.service.health = "starting";
+		await sync();
+		assert.equal(state.model_restart_pending, true);
+		assert.equal(state.model_sha256, originalHash, "wait for health after the restart");
+		assert.equal(modelAgent.restarts, 2);
+
+		modelAgent.service.health = "healthy";
+		await sync();
+		assert.equal(state.model_sha256, ref.sha256);
+		assert.equal(state.model_restart_pending, false);
+		assert.equal(state.model_error, "");
+		assert.equal(modelAgent.restarts, 2);
+		assert.equal(downloads, 1);
+		assert.deepEqual(readFileSync(PREVIOUS_FILE), previous);
 	});
 
 	test("a viewer sees the list but adds no node", async () => {
@@ -720,8 +790,6 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	});
 
 	test("the model of the agent of the manager goes to its nodes, checked by its hash", async () => {
-		const { createHash } = await import("node:crypto");
-		const { mkdirSync } = await import("node:fs");
 		const { MODEL_FILE } = await import("../waf/model-file.js");
 		const [row] = await nodes.list(ADMIN);
 		const { contentOf } = await import("./package.js");
@@ -741,9 +809,10 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			const file = path.join(dir, "model-of-the-node.tgz");
 			await fetchTo(file);
 			fetched = { bytes: readFileSync(file), wanted };
+			return { applied: true };
 		};
 		let change = await member.syncModel({ ...state, model_sha256: "" }, ref, { install });
-		assert.deepEqual(change, { model_sha256: sha256, model_error: "" });
+		assert.deepEqual(change, { model_sha256: sha256, model_restart_pending: false, model_error: "" });
 		assert.deepEqual(fetched, { bytes: model, wanted: sha256 });
 		// the same model: nothing fetched
 		fetched = null;
@@ -757,9 +826,10 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		change = await member.syncModel({ ...state, model_sha256: sha256 }, undefined, {
 			remove: async () => {
 				removed += 1;
+				return { applied: true };
 			},
 		});
-		assert.deepEqual(change, { model_sha256: "", model_error: "" });
+		assert.deepEqual(change, { model_sha256: "", model_restart_pending: false, model_error: "" });
 		assert.equal(removed, 1);
 	});
 
