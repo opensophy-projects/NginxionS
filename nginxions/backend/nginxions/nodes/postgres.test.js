@@ -31,6 +31,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
 	// the shared storage and smartsync of the manager (step 15.4): what reaches them
 	const learned = [];
+	const storageFiles = new Map();
 	const fakeServices = [];
 	const fake = (name, answer) =>
 		new Promise((resolve) => {
@@ -38,16 +39,17 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 				const chunks = [];
 				req.on("data", (d) => chunks.push(d));
 				req.on("end", () => {
+					const body = Buffer.concat(chunks).toString();
 					learned.push({
 						name,
 						method: req.method,
 						url: req.url,
 						tenant: req.headers["x-tenant-id"],
-						body: Buffer.concat(chunks).toString(),
+						body,
 					});
-					const [status, body] = answer(req);
+					const [status, response] = answer(req, body);
 					res.writeHead(status, { "Content-Type": "application/json" });
-					res.end(body);
+					res.end(response);
 				});
 			});
 			fakeServices.push(service);
@@ -84,9 +86,25 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		process.env.NGINXIONS_APPSEC_MODEL_DIR = path.join(dir, "model");
 		process.env.NGINXIONS_NODE_LOGS_DIR = path.join(dir, "node-logs");
 		process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR = path.join(dir, "snapshots");
-		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req) =>
-			req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'],
-		);
+		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req, body) => {
+			const url = new URL(req.url, "http://storage");
+			if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
+				const prefix = url.searchParams.get("prefix") ?? "";
+				const keys = [...storageFiles.keys()]
+					.filter((file) => file.startsWith(prefix))
+					.map((file) => `<Contents><Key>${file}</Key></Contents>`)
+					.join("");
+				return [200, `<ListBucketResult>${keys}</ListBucketResult>`];
+			}
+			const file = decodeURIComponent(url.pathname.slice(4));
+			if (req.method === "PUT") storageFiles.set(file, body);
+			if (req.method === "DELETE") {
+				storageFiles.delete(file);
+				return [204, ""];
+			}
+			if (req.method === "GET" && storageFiles.has(file)) return [200, storageFiles.get(file)];
+			return req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'];
+		});
 		process.env.NGINXIONS_APPSEC_SMARTSYNC_URL = await fake("smartsync", () => [200, ""]);
 		// the settings file of the agent (its learning role): never /ext of the machine running the tests
 		process.env.NGINXIONS_APPSEC_POLICY_FILE = path.join(dir, "appsec", "local_policy.yaml");
@@ -539,6 +557,59 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		const status = await member.default.status(ADMIN);
 		assert.ok(status.learning.last_ok_on);
 		assert.equal(status.learning.requests > 5, true);
+	});
+
+	test("a snapshot with an empty cluster replaces all remote files and keeps a backup", async (t) => {
+		const { default: snapshots, loadSnapshot } = await import("../learning/snapshots.js");
+		storageFiles.clear();
+		t.after(() => storageFiles.clear());
+		const processed = "/shop/Type/processed/data.data";
+		const later = "/new-asset/Type/remote/data.data";
+		storageFiles.set(processed, "processed");
+		const empty = await snapshots.take(ADMIN);
+		const archive = await snapshots.download(ADMIN, empty.id);
+		const imported = await snapshots.upload(ADMIN, archive.content);
+		assert.deepEqual((await loadSnapshot(imported.id)).cluster, []);
+
+		storageFiles.set(later, "created after the snapshot");
+		const withoutSync = {
+			...ADMIN,
+			can: async (permission) => {
+				if (permission === "waf_learning:sync") throw new Error(`forbidden: ${permission}`);
+			},
+		};
+		await assert.rejects(() => snapshots.restore(withoutSync, imported.id), /forbidden: waf_learning:sync/);
+		assert.equal(storageFiles.get(later), "created after the snapshot");
+
+		const { before, cluster } = await snapshots.restore(ADMIN, imported.id);
+		assert.equal(cluster, 0);
+		assert.deepEqual([...storageFiles], [[processed, "processed"]]);
+		assert.deepEqual((await loadSnapshot(before)).cluster, [
+			{ path: later, content: Buffer.from("created after the snapshot").toString("base64") },
+		]);
+	});
+
+	test("restoring a legacy snapshot without a cluster leaves remote files alone", async (t) => {
+		const { default: snapshots, FORMAT, loadSnapshot } = await import("../learning/snapshots.js");
+		storageFiles.clear();
+		t.after(() => storageFiles.clear());
+		const remote = "/shop/Type/remote/data.data";
+		storageFiles.set(remote, "current");
+		const legacy = await snapshots.upload(
+			ADMIN,
+			gzipSync(JSON.stringify({ format: FORMAT, version: 1, files: [] })),
+		);
+		assert.equal(Object.hasOwn(await loadSnapshot(legacy.id), "cluster"), false);
+		const access = {
+			...ADMIN,
+			can: async (permission) => {
+				assert.notEqual(permission, "waf_learning:sync");
+			},
+		};
+
+		const result = await snapshots.restore(access, legacy.id);
+		assert.equal(result.restored, legacy.id);
+		assert.deepEqual([...storageFiles], [[remote, "current"]]);
 	});
 
 	test("a new node starts with the learning profile of its manager, never over what it learned", async () => {

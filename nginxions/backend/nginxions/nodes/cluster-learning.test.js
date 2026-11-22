@@ -11,6 +11,7 @@ describe("the state of the cluster in a snapshot of learning", () => {
 		["/shop/tuning/decisions.data", "[]"],
 	]);
 	const puts = [];
+	const deletes = [];
 	let server;
 	let mod;
 	before(async () => {
@@ -20,13 +21,23 @@ describe("the state of the cluster in a snapshot of learning", () => {
 			req.on("end", () => {
 				const url = new URL(req.url, "http://storage");
 				if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
-					const keys = [...files.keys()].map((k) => `<Contents><Key>${k}</Key></Contents>`).join("");
+					const keys = [...files.keys()]
+						.map((k) => `<Contents><Key>${k.replaceAll("&", "&amp;")}</Key></Contents>`)
+						.join("");
 					res.end(`<ListBucketResult>${keys}</ListBucketResult>`);
 					return;
 				}
-				const file = url.pathname.slice(4);
+				const file = decodeURIComponent(url.pathname.slice(4));
+				if (req.method === "DELETE") {
+					deletes.push([file, req.headers["x-tenant-id"]]);
+					files.delete(file);
+					res.writeHead(204).end();
+					return;
+				}
 				if (req.method === "PUT") {
-					puts.push([file, Buffer.concat(chunks).toString(), req.headers["x-tenant-id"]]);
+					const content = Buffer.concat(chunks).toString();
+					puts.push([file, content, req.headers["x-tenant-id"]]);
+					files.set(file, content);
 					res.end();
 					return;
 				}
@@ -54,7 +65,7 @@ describe("the state of the cluster in a snapshot of learning", () => {
 		assert.deepEqual(mod.keysOfListing("<Key>a/b</Key><Key>/c/d</Key>"), ["/a/b", "/c/d"]);
 	});
 
-	test("read from the storage and put back as they were", async () => {
+	test("restore replaces remote files and preserves other storage data", async () => {
 		const state = await mod.readClusterState();
 		assert.deepEqual(
 			state.map((f) => [f.path, Buffer.from(f.content, "base64").toString()]),
@@ -63,7 +74,16 @@ describe("the state of the cluster in a snapshot of learning", () => {
 				["/shop/Type/remote/data.data", '{"t":2}'],
 			],
 		);
+		const changed = "/shop/Type/remote/data.data";
+		const stale = "/new&asset/Type/remote/late#file.data";
+		files.set(changed, "changed after snapshot");
+		files.set(stale, "created after snapshot");
 		assert.equal(await mod.restoreClusterState(state), 2);
+		assert.deepEqual(deletes, [[stale, "local"]]);
+		assert.equal(files.has(stale), false);
+		assert.equal(files.get(changed), '{"t":2}');
+		assert.equal(files.get("/shop/Indicators/Confidence/window_0_1/n-1/a/data.data0"), "{}");
+		assert.equal(files.get("/shop/tuning/decisions.data"), "[]");
 		assert.deepEqual(puts, [
 			["/shop/Indicators/Confidence/remote/confidence.data", '{"c":1}', "local"],
 			["/shop/Type/remote/data.data", '{"t":2}', "local"],

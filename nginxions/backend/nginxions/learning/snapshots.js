@@ -98,7 +98,7 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 		content: f.content,
 	}));
 	// the state of the cluster (a manager with nodes), kept beside the files of the agent
-	const cluster = (bundle.cluster ?? []).map((f) => ({ path: f.path, content: f.content }));
+	const cluster = bundle.cluster?.map((f) => ({ path: f.path, content: f.content }));
 	const assets = summarize(parsedFiles(files));
 	const previous = (await listSnapshots())[0];
 	const takenOn = new Date();
@@ -109,7 +109,7 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 			version: 1,
 			takenOn: takenOn.toISOString(),
 			files,
-			...(cluster.length ? { cluster } : {}),
+			cluster,
 		}),
 	);
 	const meta = {
@@ -119,7 +119,7 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 		userId,
 		size: payload.length,
 		files: files.length,
-		cluster: cluster.length,
+		cluster: cluster?.length ?? 0,
 		assets,
 		// the shift from the snapshot before (none for the first one)
 		shift: previous ? shiftOf(previous.assets ?? [], assets) : [],
@@ -146,14 +146,16 @@ const prune = async (keepAuto = KEEP_AUTO) => {
  * A snapshot of what the agent learned now.
  * @param {string} reason
  * @param {number} [userId]
+ * @param {{requireCluster?: boolean}} [options]  a cluster restore needs a backup of the previous state
  */
-export const takeSnapshot = async (reason, userId = 0) => {
+export const takeSnapshot = async (reason, userId = 0, { requireCluster = false } = {}) => {
 	const bundle = await control.snapshotAgentLearning();
 	const { smartsync } = await learningRole();
-	if (smartsync) {
+	if (smartsync || requireCluster) {
 		try {
 			bundle.cluster = await readClusterState();
 		} catch (err) {
+			if (requireCluster) throw err;
 			// the snapshot of this server is still taken; the cluster part is told
 			logger.warn(`Learning snapshots: the state of the cluster was not kept: ${err.message}`);
 		}
@@ -274,11 +276,13 @@ const internalLearningSnapshots = {
 	restore: async (access, id) => {
 		await canManage(access);
 		const payload = await loadSnapshot(id);
-		// the state of the cluster goes back too: the learning of every node changes
-		if (payload.cluster?.length) await access.can("waf_learning:sync");
-		const before = await takeSnapshot("before-restore", access.token.getUserId(0));
-		// the state of the cluster first (smartsync and the nodes read it from the storage), then this agent
-		const cluster = payload.cluster?.length ? await restoreClusterState(payload.cluster) : 0;
+		// An empty cluster list clears the merged state. A snapshot without the field leaves that state alone.
+		const restoreCluster = payload.cluster !== undefined;
+		if (restoreCluster) await access.can("waf_learning:sync");
+		const before = await takeSnapshot("before-restore", access.token.getUserId(0), {
+			requireCluster: restoreCluster,
+		});
+		const cluster = restoreCluster ? await restoreClusterState(payload.cluster) : 0;
 		await control.restoreAgentLearning({ files: payload.files }, access.token.getUserId(0));
 		const metaFile = fileOf(id, "meta.json");
 		const meta = JSON.parse(await readFile(metaFile, "utf8"));

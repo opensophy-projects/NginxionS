@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"openappsec.io/smartsync-shared-files/internal/app/utils"
 	"openappsec.io/errors"
 	"openappsec.io/httputils/responses"
 	"openappsec.io/log"
+	"openappsec.io/smartsync-shared-files/internal/app/utils"
 )
 
 const (
@@ -68,6 +68,22 @@ func (a *Adapter) GetFile(w http.ResponseWriter, r *http.Request) {
 		"got file ok, file length: %v", len(fileContent),
 	)
 	responses.HTTPReturn(ctx, w, http.StatusOK, fileContent, false)
+}
+
+// DeleteClusterFile removes one merged learning file. The node relay does not forward DELETE.
+func (a *Adapter) DeleteClusterFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	path := strings.TrimPrefix(r.URL.Path, "/api/")
+	if err := a.svc.DeleteClusterFile(ctx, path); err != nil {
+		if errors.IsClass(err, errors.ClassBadInput) {
+			responses.HTTPReturn(ctx, w, http.StatusBadRequest, nil, true)
+			return
+		}
+		log.WithContext(ctx).Errorf("failed to delete merged learning file %q: %v", path, err)
+		responses.HTTPReturn(ctx, w, http.StatusInternalServerError, nil, true)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type contents struct {
