@@ -686,7 +686,7 @@ const scenarios = [
 			if (held?.pinned?.by !== "manual") throw new Error(`the node is not held: ${JSON.stringify(held?.pinned)}`);
 			await modal().getByRole("button", { name: "Follow the configuration" }).click();
 			await page.getByText("The node follows the configuration again.").waitFor({ timeout: 15000 });
-			await modal().getByRole("button", { name: "Close", exact: true }).click();
+			await modal().locator(".modal-footer").getByRole("button", { name: "Close", exact: true }).click();
 			if ((await api("GET", "/nginxions/nodes")).find((n) => n.name === "gui-node")?.pinned)
 				throw new Error("the node still is held");
 			// Disable → its next heartbeat learns it
@@ -760,7 +760,7 @@ const scenarios = [
 						.waitFor({ timeout: 5000 })
 						.then(
 							() => true,
-							() => false,
+								async () => ({ ok: false, error: (await shownError()) || "no confirmation shown" }),
 						);
 				},
 				{ timeout: 360000, every: 15000 },
