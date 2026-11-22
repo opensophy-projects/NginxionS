@@ -16,7 +16,7 @@
 #                   API fuzzing (Schemathesis), runtime checks of the containers, CodeQL security-and-quality, more
 #                   Semgrep rulesets, secrets of every branch, the images published on Docker Hub (every release).
 #                   On branches security/** (security-weekly.yml makes one from work every week), on a pull request
-#                   with the label security-scan (and on each push to it while the label stays) and by hand (Run
+#                   with the label security-scan and by hand (Run
 #                   workflow, level "extended", any branch).
 # "report" writes the summary of the run and the artifact security-report (the report, readable SBOMs, raw results);
 # on a branch security/** it also opens an issue with the report.
@@ -104,7 +104,7 @@ jobs:
         run: |
           # A branch push is superseded by its PR run. Keep standalone branch pushes and work/tag pushes.
           if [ "$EVENT" = push ] && [[ "$REF" == refs/heads/* ]] && [ "$REF" != refs/heads/work ]; then
-            open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq 'length')
+            open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open")] | length')
             if [ "$open_prs" -gt 0 ]; then
               echo "level=none" >> "$GITHUB_OUTPUT"
               echo 'suites=[]' >> "$GITHUB_OUTPUT"
