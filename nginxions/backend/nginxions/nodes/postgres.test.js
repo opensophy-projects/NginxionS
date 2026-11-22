@@ -366,7 +366,10 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		);
 		assert.equal(unbanned.bans_error, "");
 		assert.equal(unbanned.bans_version, emptyBansVersion);
-		assert.deepEqual(remove.mock.calls.map(({ arguments: args }) => args), [[held.id]]);
+		assert.deepEqual(
+			remove.mock.calls.map(({ arguments: args }) => args),
+			[[held.id]],
+		);
 		decisions.mock.restore();
 		remove.mock.restore();
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
