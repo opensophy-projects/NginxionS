@@ -2,7 +2,7 @@
 # image pinned in .github/security/tools.env, and the results stay in GitHub: Security → Code scanning (SARIF), the
 # artifacts of the run (security-*) and the summary of the run.
 #
-#   called by CI (ci.yml) on every push and pull request: SAST, secrets, SCA and SBOM of the sources, IaC, the
+#   called by CI (ci.yml) on PRs and standalone pushes (branch pushes with an open PR are superseded by the PR run): SAST, secrets, SCA and SBOM of the sources, IaC, the
 #     workflows, code quality. ci.yml checks the images (vulnerabilities, SBOM, CIS), attacks the running stack
 #     (DAST) and writes the summary report (job "report").
 #   the extended run of CI (level "extended": branches security/**, the weekly security/<date> of
