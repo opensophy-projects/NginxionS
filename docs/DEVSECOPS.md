@@ -20,9 +20,9 @@
 
 | Категория | Инструмент | Что ищет | Где запускается |
 |---|---|---|---|
-| SAST | **Semgrep** | уязвимости JS/TS, Go, C/C++, Dockerfile и workflow: правила сообщества и правила NginxionS (`.github/security/semgrep.yml`) | `security.yml` (история коммитов; SARIF в Code Scanning) |
+| SAST | **Semgrep** | уязвимости JS/TS, Go, C/C++, Dockerfile и workflow: правила сообщества и правила NginxionS (`.github/security/semgrep.yml`) | `security.yml` |
 | SAST | **CodeQL** (JS/TS, C/C++, Go, Actions) | путь данных от запроса до опасного вызова: инъекции, SSRF, XSS, обход путей; в агенте — работа с памятью и строками | `security.yml` |
-| Секреты | **Gitleaks** | ключи, пароли и токены в commit history текущей ветки; в extended — во всех ветках и тегах | `security.yml` |
+| Секреты | **Gitleaks** | ключи, пароли и токены в истории коммитов текущей ветки; в extended — во всех ветках и тегах | `security.yml` (SARIF в Code Scanning) |
 | SCA | **OSV-Scanner** | известные уязвимости зависимостей: npm backend и frontend, Go-модули агента (`openappsec/*/go.mod`); лицензии | `security.yml` |
 | SBOM | **Syft** | состав исходников (backend, frontend) и каждого образа: CycloneDX и SPDX | `security.yml`, `ci.yml` |
 | IaC | **hadolint**, **Trivy config**, **KICS** | Dockerfile, compose и workflow: root, лишние права, небезопасные приёмы | `security.yml` |
