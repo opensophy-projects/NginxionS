@@ -104,8 +104,8 @@ jobs:
         run: |
           # A branch push is superseded by its PR run. Keep standalone branch pushes and work/tag pushes.
           if [ "$EVENT" = push ] && [[ "$REF" == refs/heads/* ]] && [ "$REF" != refs/heads/work ]; then
-            open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open")] | length')
-            if [ "$open_prs" -gt 0 ]; then
+            open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open")] | length' 2>/dev/null || echo 0)
+            if [[ "$open_prs" =~ ^[0-9]+$ ]] && [ "$open_prs" -gt 0 ]; then
               echo "level=none" >> "$GITHUB_OUTPUT"
               echo 'suites=[]' >> "$GITHUB_OUTPUT"
               echo "cpp=false" >> "$GITHUB_OUTPUT"
