@@ -7,7 +7,7 @@
 
 | Что нужно | Как |
 |---|---|
-| Быстрые проверки | ничего: идут на каждый push в любую ветку; локально — `scripts/check.sh` (`--install-hook` — перед каждым push) |
+| Быстрые проверки | ничего: идут на PR и на push в ветки без открытого PR (push в ветку с PR пропускается, PR-run его заменяет); локально — `scripts/check.sh` (`--install-hook` — перед каждым push) |
 | Полная проверка (образы, закрытый контур, DAST) | push в `work` или тег `v*`, любой PR, `[full]` в сообщении коммита, изменение агента, `deploy/`, Dockerfile или rootfs nginx, либо Actions → CI → Run workflow → уровень `full` |
 | Только некоторые тесты стека | `[smoke:waf]` (`[smoke:learning]`), `[smoke:crowdsec]`, `[smoke:core]`, `[dast]`, `[waf-score]`, `[upgrade]`, `[chaos]` в сообщении коммита: образы собираются, идут только названные тесты |
 | Расширенная проверка (тяжёлые сканеры) | метка `security-scan` на PR, либо ветка `security/<что угодно>`, либо Actions → CI → Run workflow → уровень `extended` |
@@ -20,7 +20,7 @@
 
 | Категория | Инструмент | Что ищет | Где запускается |
 |---|---|---|---|
-| SAST | **Semgrep** | уязвимости JS/TS, Go, C/C++, Dockerfile и workflow: правила сообщества и правила NginxionS (`.github/security/semgrep.yml`) | `security.yml` |
+| SAST | **Semgrep** | уязвимости JS/TS, Go, C/C++, Dockerfile и workflow: правила сообщества и правила NginxionS (`.github/security/semgrep.yml`) | `security.yml` (история и текущие файлы; оба SARIF в Code Scanning) |
 | SAST | **CodeQL** (JS/TS, C/C++, Go, Actions) | путь данных от запроса до опасного вызова: инъекции, SSRF, XSS, обход путей; в агенте — работа с памятью и строками | `security.yml` |
 | Секреты | **Gitleaks** | ключи, пароли и токены в файлах и во **всей истории** git | `security.yml` |
 | SCA | **OSV-Scanner** | известные уязвимости зависимостей: npm backend и frontend, Go-модули агента (`openappsec/*/go.mod`); лицензии | `security.yml` |
@@ -37,7 +37,7 @@
 | nginx | **gixy** | работающая конфигурация nginx (`nginx -T`): SSRF, инъекции заголовков, обход `alias` | `ci.yml` → `images` |
 | Эксплуатация | **audit-logs** (`scripts/audit-logs.mjs`) | после теста закрытого контура: ошибки и предупреждения всех контейнеров, debug-логов агента (`/var/log/nano_agent`) и nginx, сведённые к сигнатурам. Известные — в `deploy/test/log-allowlist.tsv`, у каждой причина. Новые — в Summary прогона и в `reports/logs/log-audit.md` (пока отчёт; `LOG_AUDIT=gate` — блокирует) | `ci.yml` → `images` |
 | Контракт | **policy contract** (`scripts/test-policy-contract.sh`) | политики бэкенда (встроенные объекты, примеры open-appsec, политика со всеми видами объектов) подаются настоящему агенту; каждая должна примениться как написана | `ci.yml` → `contract`, `images` |
-| Фаззинг | **fuzz** (`scripts/fuzz.test.mjs`, Lua-тест File Security) | парсеры недоверенного ввода (конвертер Snort, экспертный фрагмент и импорт политики, загрузки через File Security) на мутированных входах: только результат или свой отказ, без исключений и зависаний. 300 случаев в CI, десятки тысяч ночью; `FUZZ_SEED` повторяет найденное | `ci.yml` → `checks`, `nightly.yml` |
+| Фаззинг | **fuzz** (`scripts/fuzz.test.mjs`, Lua-тест File Security) | парсеры недоверенного ввода (конвертер Snort, экспертный фрагмент и импорт политики, загрузки через File Security) на мутированных входах: только результат или свой отказ, без исключений и зависаний. 300 случаев в CI, десятки тысяч ночью; `FUZZ_SEED` повторяет найденное | `ci.yml` → `checks-agent`, `nightly.yml` |
 | WAF | **GoTestWAF** (`scripts/test-waf-score.sh`) | оценка защиты против базовой (`.github/security/waf-baseline.json`, 77,1 % ± 3): ниже — тест падает | `ci.yml` → `stack` |
 | Сети | **test-airgap** | с внешней сети недоступны база, LAPI и AppSec CrowdSec, clamd, `nginxions-control` и локальные порты контейнера `openappsec` (агент, shared storage, tuning) | `ci.yml` → `stack` |
 | Цепочка поставок | **cosign**, **SLSA provenance**, **SBOM-аттестация** | публикуемые образы подписаны (keyless, Sigstore), к ним приложены происхождение сборки и SBOM: `gh attestation verify oci://docker.io/<ns>/<образ>:<тег> --repo <владелец>/<репо>` | `ci.yml` → `publish` |
@@ -68,11 +68,11 @@ DAST (`scripts/test-dast.sh`) поднимает прод-стек, настра
 
 | Глубина | Что входит | Когда |
 |---|---|---|
-| **Быстрая** (~5–10 мин) | lint, типы, тесты, `security.yml`: Semgrep, CodeQL, Gitleaks, OSV-Scanner, SBOM исходников, IaC, workflow, качество | каждый push в любую ветку |
+| **Быстрая** (~5–10 мин) | параллельные jobs backend, frontend, agent и repository; `security.yml`: Semgrep, CodeQL, Gitleaks, OSV-Scanner, SBOM исходников, IaC, workflow, качество | PR; push в ветки без открытого PR; `work` и теги |
 | **Полная** (~45 мин) | быстрая + сборка образов, закрытый контур, скан образов, DAST, шлюз перед публикацией | push в `work`, теги `v*`, pull request, кнопка Run workflow (уровень `full`), push с `[full]` в сообщении коммита |
 | **Расширенная** (~1,5–2 ч) | полная + тяжёлые проверки (ниже) | ветки `security/**` (и еженедельная), pull request с меткой `security-scan`, кнопка Run workflow с уровнем `extended` |
 
-Глубину выбирает первая задача CI («Depth of the run»), она же пишет её в Summary прогона.
+На ветке с открытым PR push-run пропускается: авторитетный прогон — `pull_request`, поэтому один commit не проверяется одновременно двумя workflow runs. Самостоятельные ветки без PR продолжают получать CI по push. Глубину выбирает первая задача CI («Depth of the run»), она же пишет её в Summary прогона.
 
 Глубину выбирает `scripts/ci-level.mjs` (тесты — `ci-level.test.mjs`) по событию, сообщению коммита и списку изменённых
 файлов (из API GitHub, без глубокого клона). Push только документации — быстрая; изменение агента (`openappsec/`),
@@ -82,13 +82,13 @@ frontend — быстрая (образы — по `[full]`). **Инкремен
 
 **Как устроен полный прогон** (параллельно, а не одной длинной задачей):
 
-1. `images` — сборка двух образов, контрактный тест политики с агентом этой сборки (`scripts/test-policy-contract.sh`,
+1. `images` — стартует параллельно с кодовыми проверками; сборка двух образов, контрактный тест политики с агентом этой сборки (`scripts/test-policy-contract.sh`,
    минуты), скан образов; образы уходят артефактом `images` (zstd, хранится сутки).
 2. `stack` — матрица, каждый тест на своей машине и своём стеке (`scripts/ci-stack.sh <тест>`): `smoke-waf`,
    `smoke-crowdsec`, `smoke-core` (группы smoke из `deploy/test/smoke/`), `waf-score`, `upgrade`, `chaos`, `dast`.
    Падение одного не останавливает другие (`fail-fast: false`), и внутри smoke упавшая группа не обрывает следующие:
    за один прогон видны все сломанные места. Отчёт smoke (группы, упавшие и самые долгие шаги) — в Summary.
-3. `publish` — шлюз безопасности по результатам скана образов и DAST, затем (на `work` и тегах) публикация.
+3. `publish` — ждёт все четыре code-check jobs, `contract`, `security`, `images` и `stack`; затем выполняет шлюз безопасности по результатам скана образов и DAST, затем (на `work` и тегах) публикация.
 
 Контрактный тест политики идёт и в быстрой глубине (задача `contract`): политики этого коммита против агента
 опубликованного `develop`. Поле, которое агент не читает, ловится за минуты, без сборки образов.
