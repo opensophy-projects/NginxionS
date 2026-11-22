@@ -238,7 +238,7 @@ call node1 GET /nginx/proxy-hosts | jq -e "[.[] | select(.domain_names == [\"$DO
 
 step "events: the attack on node1 is an event on the manager with the id of node1"
 event_of() { # stack (node), text in the event
-  call manager GET "/nginxions/events?kind=all&period=1h&node=${NODE_UID[$1]}&limit=50" | grep -q "$2"
+  call manager GET "/nginxions/events?kind=security&period=1h&node=${NODE_UID[$1]}&host=$DOMAIN&limit=50" | grep -q "$2"
 }
 until_ok "no event of node1 on the manager" 45 2 event_of node1 "$DOMAIN"
 
@@ -305,44 +305,63 @@ learns() { member "$1" | jq -e '.learning.last_ok_on // empty' > /dev/null; }
 for s in node1 node2; do until_ok "the agent of $s did not reach the storage of the manager: $(member "$s")" 60 3 learns "$s"; done
 
 step "learning together: traffic of three sources through the three servers is learned, the same through one node is not"
-# every second: a search with an SQL word from each client through its own server (three sources, three servers),
-# and another word from the same three clients through node1 alone (a node with three sources: a poisoning try; one
-# node counts as at most MinSources - 1 sources). Windows of learning of a minute (compose.cluster.yaml).
+# Use a known parameter type (comma-delimited filters) with three sources in this isolated stack.
+# Keep the default thresholds for keywords, number of windows and ratio.
+call manager PUT /nginxions/cluster/learning \
+  '{"min_sources": 3, "min_sources_types": 3, "min_intervals": 5, "ratio_threshold": 0.8}' \
+  | jq -e '.minSourcesTypes == 3' > /dev/null || fail "the manager did not set the test threshold for types"
+
+learning_request() { # client suffix, stack, parameter, sample suffix
+  docker exec "$probe$1" curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -H "Host: $DOMAIN" \
+    "http://${IP[$2]}/search?$3=blue%2Cmedium%2Clinen%2C$4"
+}
+learning_round() {
+  local sequence=$1 endpoint s client
+  # Each source sends one parameter through its own server and the other through node1 alone.
+  # The samples vary across clients and rounds so a cached clean value cannot stand in for fresh traffic.
+  for endpoint in manager: node1:-b node2:-c; do
+    s=${endpoint%:*}
+    client=${endpoint#*:}
+    [ "$(learning_request "$client" "$s" shared_filters "$sequence-$s")" = 200 ] || return 1
+    [ "$(learning_request "$client" node1 isolated_filters "$sequence-$s")" = 200 ] || return 1
+  done
+}
+until_ok "the learning requests do not reach all three servers" 20 3 learning_round 0
 (
   i=0
   while true; do
     i=$((i + 1))
-    docker exec "$probe" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[manager]}/search?q=select%20best%20item$((i % 5))" || true
-    docker exec "$probe-b" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node1]}/search?q=select%20best%20item$((i % 5))" || true
-    docker exec "$probe-c" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node2]}/search?q=select%20best%20item$((i % 5))" || true
-    for c in "" -b -c; do
-      docker exec "$probe$c" curl -s -o /dev/null --max-time 5 -H "Host: $DOMAIN" "http://${IP[node1]}/search?p=union%20all%20item$((i % 5))" || true
-    done
+    learning_round "$i" || true
     sleep 1
   done
 ) > /dev/null 2>&1 &
 traffic_pid=$!
 # the windows of the site from this server and both nodes, and a sync of smartsync since (files under remote/)
 together() {
-  call manager GET /nginxions/nodes/cluster-learning | jq -e --arg d "$DOMAIN" '[.assets[]
+  call manager GET /nginxions/nodes/cluster-learning > "$OUT/learning-status.json"
+  jq -e --arg d "$DOMAIN" '[.assets[]
     | select(.asset | startswith($d))
     | select(.local.windows > 0 and ([.nodes[] | select(.windows > 0)] | length) >= 2 and .mergedOn != null)]
-    | length > 0' > /dev/null
+    | length > 0' "$OUT/learning-status.json" > /dev/null
 }
-until_ok "no learning of the three servers put together: $(call manager GET /nginxions/nodes/cluster-learning | head -c 1500)" \
-  90 10 together
-# the norm smartsync put together, in the shared storage of the manager: the levels of confidence of the words
+until_ok "no learning of the three servers put together (see learning-status.json)" 90 10 together
+# Read the types smartsync put together in the manager's shared storage.
 norm() {
   docker exec manager-openappsec wget -qO- --header='X-Tenant-Id: local' \
-    "http://127.0.0.1:7811/api/$DOMAIN/Indicators/Confidence/remote/confidence.data" 2> /dev/null | gzip -cdf
+    "http://127.0.0.1:7811/api/$DOMAIN/Type/Confidence/remote/confidence.data" 2> /dev/null | gzip -cdf
 }
-# a level of the word of the three servers, none (or zero) of the word of node1 alone
+type_learned() {
+  jq -e --arg key "url_param#$1" '
+    any(.confidence_levels[]?; .key == $key and any(.value[]?; .key == "comma_delimiter" and .value > 0))
+    or any(.confidence_set[]?; .key == $key and any(.value.first[]?; . == "comma_delimiter"))
+  ' "$OUT/learning-confidence.json" > /dev/null
+}
 learned_together() {
-  norm | jq -e '[.confidence_levels[]?.value[]? | select((.key | test("select")) and .value > 0)] | length > 0' > /dev/null
+  norm > "$OUT/learning-confidence.json" || return 1
+  type_learned shared_filters
 }
-until_ok "the word of three sources through three servers was not learned: $(norm | head -c 1500)" 60 10 learned_together
-norm | jq -e '[.confidence_levels[]?.value[]? | select((.key | test("union")) and .value > 0)] | length == 0' > /dev/null \
-  || fail "the word of three sources through node1 alone was learned (poisoning from one node): $(norm | head -c 1500)"
+until_ok "the type from three sources through three servers was not learned (see learning-confidence.json)" 60 10 learned_together
+type_learned isolated_filters && fail "the type from three sources through node1 alone was learned (poisoning from one node)"
 kill "$traffic_pid" 2> /dev/null
 traffic_pid=""
 
