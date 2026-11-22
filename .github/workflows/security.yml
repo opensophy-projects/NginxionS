@@ -183,7 +183,7 @@ jobs:
           if-no-files-found: ignore
 
   secrets:
-    name: Gitleaks (git history + working tree)
+    name: Gitleaks (commit history)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -193,13 +193,13 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Gitleaks — scan history and current files
+      - name: Gitleaks — scan commit history
         env:
           LEVEL: ${{ inputs.level }}
         run: |
           . .github/security/tools.env
           mkdir -p out
-          # the files of the checkout and every commit of the history; the extended run: of every branch and tag
+          # the commit history of this ref; the extended run scans every branch and tag
           all=()
           [ "$LEVEL" = extended ] && all=(--log-opts=--all)
           docker run --rm -v "$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
