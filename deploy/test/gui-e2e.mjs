@@ -756,34 +756,32 @@ const scenarios = [
 			await addProxyHost(d);
 			await setWaf(d, "Prevent");
 			const id = await proxyHostId(d);
-			// what the agent learns of the site: normal requests
-			const traffic = async () => {
-				for (let i = 0; i < 20; i++) {
-					await site(d, `/?item=${i}&q=good+day+${i}`);
-				}
-			};
+			let sample = 0;
+			// The agent still waits five minutes after the first window before it saves local learning.
+			await until(
+				"the agent saves learning data for the site",
+				async () => {
+					for (let i = 0; i < 20; i++) {
+						const { status } = await site(d, `/?filters=blue%2Cmedium%2Clinen%2C${++sample}`);
+						if (status !== 200) return { ok: false, status };
+					}
+					const { assets, error } = await api("GET", `/nginxions/learning/hosts/${id}/learned`);
+					return { ok: assets.length > 0, error };
+				},
+				{ timeout: 480000, every: 15000 },
+			);
 			await go("/agents/open-appsec?tab=learning");
 			await page.getByRole("button", { name: "Learning profiles" }).click();
 			await modal().getByRole("button", { name: "New profile" }).click();
 			await modal().locator("#profile-name").fill("gui profile");
 			await modal().locator("label.form-check", { hasText: d }).locator("input").check();
 			await modal().locator("label.form-check", { hasText: "With the WAF policy" }).locator("input").check();
-			// the agent writes what it learned from time to time: the profile is made once it has something of the site
-			await until(
-				"the profile is made",
-				async () => {
-					await traffic();
-					await modal().getByRole("button", { name: "Make the profile" }).click();
-					return page
-						.getByText("The profile is made")
-						.waitFor({ timeout: 5000 })
-						.then(
-							() => true,
-							async () => ({ ok: false, error: (await shownError()) || "no confirmation shown" }),
-						);
-				},
-				{ timeout: 360000, every: 15000 },
-			);
+			await modal().getByRole("button", { name: "Make the profile" }).click();
+			try {
+				await page.getByText("The profile is made").waitFor({ timeout: 15000 });
+			} catch {
+				throw new Error(`the profile was not made: ${(await shownError()) || "no confirmation shown"}`);
+			}
 			const row = modal().locator("tr", { hasText: "gui profile" });
 			await row.waitFor();
 			const made = (await api("GET", "/nginxions/learning/profiles")).profiles?.find((p) => p.name === "gui profile");
