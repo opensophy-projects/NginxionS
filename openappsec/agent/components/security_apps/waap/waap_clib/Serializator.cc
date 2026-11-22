@@ -576,7 +576,11 @@ SerializeToLocalAndRemoteSyncBaseT<ComponentType>::SerializeToLocalAndRemoteSync
                 ") is not set";
         }
     }
-    if (remotePath != "") {
+    // NginxionS: without a tenant, /<assetId>/<type> already starts at the asset.
+    const string localAssetPrefix = "/" + assetId + "/";
+    if (!assetId.empty() && m_remotePath.compare(0, localAssetPrefix.size(), localAssetPrefix) == 0) {
+        m_type = m_remotePath.substr(localAssetPrefix.size());
+    } else if (remotePath != "") {
         // remote path is /<tenantId>/<assetId>/<type>
         auto parts = split(m_remotePath, '/');
         if (parts.size() > 2) {

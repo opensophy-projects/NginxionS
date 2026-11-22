@@ -326,18 +326,15 @@ traffic_pid=$!
 together() {
   call manager GET /nginxions/nodes/cluster-learning | jq -e --arg d "$DOMAIN" '[.assets[]
     | select(.asset | startswith($d))
-    | select(.local.windows > 0 and ([.nodes[] | select(.windows > 0)] | length) >= 2 and .merged_on != null)]
+    | select(.local.windows > 0 and ([.nodes[] | select(.windows > 0)] | length) >= 2 and .mergedOn != null)]
     | length > 0' > /dev/null
 }
 until_ok "no learning of the three servers put together: $(call manager GET /nginxions/nodes/cluster-learning | head -c 1500)" \
   90 10 together
 # the norm smartsync put together, in the shared storage of the manager: the levels of confidence of the words
 norm() {
-  local path
-  for path in "/api//$DOMAIN/Indicators/Confidence/remote/confidence.data" "/api/$DOMAIN/Indicators/Confidence/remote/confidence.data"; do
-    docker exec manager-openappsec wget -qO- "http://127.0.0.1:7811$path" 2> /dev/null && return 0
-  done
-  return 1
+  docker exec manager-openappsec wget -qO- --header='X-Tenant-Id: local' \
+    "http://127.0.0.1:7811/api/$DOMAIN/Indicators/Confidence/remote/confidence.data" 2> /dev/null | gzip -cdf
 }
 # a level of the word of the three servers, none (or zero) of the word of node1 alone
 learned_together() {
@@ -402,7 +399,7 @@ make_profile() {
   profile=$(call manager POST /nginxions/learning/profiles "{\"name\": \"shop\", \"host_ids\": [$host_id], \"with_policy\": true}")
   echo "$profile" | jq -e '.id' > /dev/null
 }
-until_ok "no learning profile of $DOMAIN on the manager: $profile" 30 10 make_profile
+until_ok "no learning profile of $DOMAIN on the manager" 30 10 make_profile
 profile_id=$(echo "$profile" | jq -r .id)
 profile_version=$(echo "$profile" | jq -r .version)
 echo "$profile" | jq -e '.policy.sites == 1' > /dev/null || fail "the profile does not carry the WAF of the site: $profile"
