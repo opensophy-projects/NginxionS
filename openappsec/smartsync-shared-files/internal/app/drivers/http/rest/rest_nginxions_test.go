@@ -146,6 +146,37 @@ func TestSharedFilesAPI(t *testing.T) {
 	}
 }
 
+func TestDeleteClusterFile(t *testing.T) {
+	_, h := newServer(t)
+
+	remote := "/api/shop/Indicators/Confidence/remote/stale.data"
+	processed := "/api/shop/Indicators/Confidence/processed/data.data"
+	for _, path := range []string{remote, processed} {
+		if w := call(h, http.MethodPut, path, "learned", true); w.Code != http.StatusOK {
+			t.Fatalf("PUT %s: %d %s", path, w.Code, w.Body)
+		}
+	}
+	for _, path := range []string{processed, "/api/shop/..%2F..%2FType/remote/stale.data"} {
+		if w := call(h, http.MethodDelete, path, "", true); w.Code != http.StatusBadRequest {
+			t.Errorf("DELETE %s: %d", path, w.Code)
+		}
+	}
+	if w := call(h, http.MethodDelete, remote, "", false); w.Code == http.StatusNoContent {
+		t.Fatal("DELETE without the tenant header")
+	}
+	for range 2 {
+		if w := call(h, http.MethodDelete, remote, "", true); w.Code != http.StatusNoContent {
+			t.Fatalf("DELETE %s: %d %s", remote, w.Code, w.Body)
+		}
+	}
+	if w := call(h, http.MethodGet, remote, "", true); w.Code != http.StatusNotFound {
+		t.Errorf("the remote file remains: %d", w.Code)
+	}
+	if w := call(h, http.MethodGet, processed, "", true); w.Code != http.StatusOK || w.Body.String() != "learned" {
+		t.Errorf("the processed file changed: %d %q", w.Code, w.Body)
+	}
+}
+
 func TestHealthAndLifecycle(t *testing.T) {
 	a, h := newServer(t)
 	for _, path := range []string{"/health/live", "/health/ready"} {

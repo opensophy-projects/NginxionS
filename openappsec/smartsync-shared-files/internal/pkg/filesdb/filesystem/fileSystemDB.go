@@ -1,5 +1,3 @@
-
-
 package filesystem
 
 import (
@@ -193,4 +191,34 @@ func (a *Adapter) PutFile(ctx context.Context, path string, content []byte, isTe
 		}()
 	}
 	return nil
+}
+
+// DeleteClusterFile removes a regular file under <asset>/<type>/remote.
+func (a *Adapter) DeleteClusterFile(path string) error {
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 || parts[len(parts)-2] != "remote" || !filepath.IsLocal(path) || filepath.Clean(path) != path {
+		return errors.Errorf("not a merged learning file: %q", path).SetClass(errors.ClassBadInput)
+	}
+
+	root, err := os.OpenRoot(a.root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	info, err := root.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.Errorf("not a regular file: %q", path).SetClass(errors.ClassBadInput)
+	}
+	err = root.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }

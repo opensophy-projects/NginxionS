@@ -58,6 +58,7 @@ type SharedFilesService interface {
 	GetFilesList(ctx context.Context, pathPrefix string) ([]models.FileMetadata, error)
 	GetFile(ctx context.Context, pathPrefix string) ([]byte, error)
 	PutFile(ctx context.Context, pathPrefix string, content []byte) error
+	DeleteClusterFile(ctx context.Context, path string) error
 }
 
 // Server http server interface
