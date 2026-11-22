@@ -18,10 +18,10 @@ ParamMap WaapParameters::getParamsMap() const
 }
 
 // NginxionS: NGINXIONS_LEARNING_INTERVAL_MINUTES, when set in the environment of the agent, is the length of a window of
-// learning in minutes (learning.intervalDuration, 120 by default), only so that the learning of a test stack of several
-// servers (scripts/test-cluster.sh) takes minutes instead of hours; smartsync reads the same variable. Empty otherwise.
-static Value
-learningIntervalOfEnv()
+// learning in minutes (learning.intervalDuration, 120 by default) for the cluster and GUI tests. smartsync reads the
+// same variable. Empty otherwise.
+Value
+WaapParameters::learningIntervalOfEnv()
 {
     const char *interval = getenv("NGINXIONS_LEARNING_INTERVAL_MINUTES");
     if (interval == nullptr) return "";

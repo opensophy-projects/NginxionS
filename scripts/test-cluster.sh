@@ -326,6 +326,7 @@ learning_round() {
     [ "$(learning_request "$client" node1 isolated_filters "$sequence-$s")" = 200 ] || return 1
   done
 }
+learning_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 until_ok "the learning requests do not reach all three servers" 20 3 learning_round 0
 (
   i=0
@@ -339,9 +340,10 @@ traffic_pid=$!
 # the windows of the site from this server and both nodes, and a sync of smartsync since (files under remote/)
 together() {
   call manager GET /nginxions/nodes/cluster-learning > "$OUT/learning-status.json"
-  jq -e --arg d "$DOMAIN" '[.assets[]
-    | select(.asset | startswith($d))
-    | select(.local.windows > 0 and ([.nodes[] | select(.windows > 0)] | length) >= 2 and .mergedOn != null)]
+  jq -e --arg d "$DOMAIN" --arg since "$learning_started" '[.assets[]
+    | select(.asset == $d)
+    | select(.local.lastOn >= $since and ([.nodes[] | select(.lastOn >= $since)] | length) == 2
+      and .mergedOn >= $since)]
     | length > 0' "$OUT/learning-status.json" > /dev/null
 }
 until_ok "no learning of the three servers put together (see learning-status.json)" 90 10 together

@@ -757,7 +757,7 @@ const scenarios = [
 			await setWaf(d, "Prevent");
 			const id = await proxyHostId(d);
 			let sample = 0;
-			// The agent still waits five minutes after the first window before it saves local learning.
+			// Wait for the agent to persist the site's learning before submitting the profile form.
 			await until(
 				"the agent saves learning data for the site",
 				async () => {
@@ -768,7 +768,7 @@ const scenarios = [
 					const { assets, error } = await api("GET", `/nginxions/learning/hosts/${id}/learned`);
 					return { ok: assets.length > 0, error };
 				},
-				{ timeout: 480000, every: 15000 },
+				{ timeout: 240000, every: 15000 },
 			);
 			await go("/agents/open-appsec?tab=learning");
 			await page.getByRole("button", { name: "Learning profiles" }).click();
