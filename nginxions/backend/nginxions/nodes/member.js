@@ -385,8 +385,11 @@ export const syncBans = async (state, version) => {
 				client: clientOf(state),
 			});
 			if (answer.status !== 200) throw new Error(`the manager answered ${answer.status} to the bans`);
-			await holdBans(cleanBans(answer.body?.bans));
-			out.bans_version = version;
+			const bans = answer.body?.bans;
+			// The list can change between the heartbeat and the fetch. Record what was actually applied.
+			const fetchedVersion = versionOfBans(bans);
+			await holdBans(cleanBans(bans));
+			out.bans_version = fetchedVersion;
 		}
 		return { ...out, bans_error: "" };
 	} catch (err) {
