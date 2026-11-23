@@ -60,6 +60,8 @@ cosign verify docker.io/opensophy/nginxions:develop \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+Для сервера без интернета используйте [офлайн-бандл](docs/OFFLINE.md).
+
 Подробная установка, обновление и решение проблем — в [документации](https://opensophy.com/).
 
 ## Возможности
