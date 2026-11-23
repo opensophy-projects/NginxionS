@@ -172,8 +172,12 @@ export const applyLearningRole = async (userId = 1) => {
 	try {
 		const settings = await getSetting("waf.agent");
 		const role = await learningRole();
-		if ((await readText(ENV_FILE)) === renderEnv(settings, role)) return false;
-		await writeEnv(settings, role);
+		const desired = renderEnv(settings, role);
+		const [configured, applied] = await Promise.all([readText(ENV_FILE), readText(APPLIED_FILE)]);
+		// A failed or interrupted restart leaves the desired file in place but the agent still runs the old role.
+		// Compare the applied file too, so a later reconciliation can retry without rewriting the configuration.
+		if (configured === desired && applied === desired) return false;
+		if (configured !== desired) await writeEnv(settings, role);
 		logger.info(
 			`Cluster: learning ${role.viaManager ? "through the manager" : "here"}, smartsync ${role.smartsync ? "on" : "off"}: the agent restarts`,
 		);
