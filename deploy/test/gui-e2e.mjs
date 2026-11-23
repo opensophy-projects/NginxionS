@@ -409,7 +409,7 @@ const scenarios = [
 			await form.locator('a[href="#tab-locations"]').click();
 			const locations = form.locator("#tab-locations");
 			await locations.getByRole("button", { name: /add location/i }).click();
-			await locations.getByPlaceholder("/path").fill("/review");
+			await locations.getByPlaceholder("/path", { exact: true }).fill("/review");
 			await locations.locator("input[id^='forwardHost-']").fill(UPSTREAM);
 			await locations.locator("input[id^='forwardPort-']").fill("80");
 			await form.locator('a[href="#tab-waf"]').click();
