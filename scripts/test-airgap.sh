@@ -11,6 +11,7 @@
 # A failed group of smoke does not stop the test: the checks after it still run, the test fails at its end. The
 # steps of smoke with their times are in reports/smoke (scripts/smoke-report.mjs) and in the summary of the run.
 #
+#   AIRGAP_PRELOADED=1                    # require local deployment and test images
 # Images: NGINXIONS_REGISTRY / NGINXIONS_VERSION and the pinned versions in deploy/.env.
 set -euo pipefail
 
@@ -54,7 +55,7 @@ collect_coverage() {
     "${compose[@]}" exec -T control sh -c 'kill -USR2 1' || true
     sleep 2
     mkdir -p reports/coverage-stack/control
-    "${compose[@]}" run --rm --no-deps -T --entrypoint sh -v "$PWD/reports/coverage-stack/control:/out" control \
+    "${compose[@]}" run --pull never --rm --no-deps -T --entrypoint sh -v "$PWD/reports/coverage-stack/control:/out" control \
       -c 'cp /coverage/*.json /out/ 2> /dev/null; true' > /dev/null 2>&1 || true
   fi
   command -v node > /dev/null && node scripts/coverage-report.mjs --trim reports/coverage-stack
@@ -96,8 +97,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"${compose[@]}" up -d --no-build "${services[@]}" test-upstream
-
+# Prepare the images separately so the installation and its one-shot checks cannot contact a registry.
+echo "==> prepare the images, then start without registry pulls"
+if [ "${AIRGAP_PRELOADED:-0}" != 1 ]; then
+  "${compose[@]}" pull --policy missing --include-deps "${services[@]}" test-upstream tester
+fi
+"${compose[@]}" up -d --no-build --pull never "${services[@]}" test-upstream
 
 wait_healthy() {
   for i in $(seq 1 90); do
@@ -118,22 +123,30 @@ manager_fingerprint=$("${compose[@]}" exec -T nginxions sh -c '
     openssl x509 -noout -sha256 -fingerprint
 ')
 manager_fingerprint=${manager_fingerprint#*=}
-"${compose[@]}" run --rm -T -e MANAGER_FINGERPRINT="$manager_fingerprint" tester || smoke_status=$?
+"${compose[@]}" run --pull never --rm -T -e MANAGER_FINGERPRINT="$manager_fingerprint" tester || smoke_status=$?
 mkdir -p reports/smoke
 for f in smoke-steps.tsv smoke-groups.tsv; do
-  "${compose[@]}" run --rm -T --entrypoint cat tester "/state/$f" > "reports/smoke/$f" 2> /dev/null || true
+  "${compose[@]}" run --pull never --rm -T --entrypoint cat tester "/state/$f" > "reports/smoke/$f" 2> /dev/null || true
 done
 command -v node > /dev/null && node scripts/smoke-report.mjs reports/smoke || true
 
-# an update runs init again on the volumes of an existing install (issue 146: the copies of the secrets are read
-# only and init has no capabilities, cp could not write them)
-echo "==> init again on existing volumes (an update) succeeds"
-"${compose[@]}" run --rm -T nginxions-init || { echo "FAIL: nginxions-init fails on an existing install"; exit 1; }
+# A restart or update must keep all generated credentials and their copies (issue 146).
+secret_snapshot() {
+  "${compose[@]}" run --pull never --rm --no-deps -T --entrypoint sh nginxions-init -ec '
+    for file in /secrets/*/*; do test -s "$file" || exit 1; done
+    sha256sum /secrets/*/*'
+}
+
+echo "==> init again on existing volumes preserves the generated secrets"
+before_init=$(secret_snapshot)
+"${compose[@]}" run --pull never --rm -T nginxions-init || { echo "FAIL: nginxions-init fails on an existing install"; exit 1; }
+after_init=$(secret_snapshot)
+[ "$before_init" = "$after_init" ] || { echo "FAIL: nginxions-init changed existing secrets"; exit 1; }
 
 echo "==> restart nginxions"
 "${compose[@]}" restart nginxions
 wait_healthy
-"${compose[@]}" run --rm -T tester after-restart
+"${compose[@]}" run --pull never --rm -T tester after-restart
 
 # the interface in a real browser with the session of smoke: every page renders, no error of JavaScript, no 5xx of the
 # API, screenshots in reports/ui (deploy/test/ui-e2e.mjs, UI_E2E=1); the interface driven like a user, each action
@@ -169,21 +182,28 @@ if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
   [ "$gui_status" = 0 ] || { echo "FAIL: an action in the interface had no effect (reports/gui/gui-e2e.md)"; exit 1; }
 fi
 
-# the isolation of the networks, as an attacker on the edge network (the internet side) would try it: the internal
-# services (database, LAPI of CrowdSec, clamd) and nginxions-control (the Docker API, network "control") are not on
-# it, and the local services of the openappsec container (agent 7777, shared storage 7811, tuning 7813) listen on
-# 127.0.0.1 only
+echo "==> networks: all networks of the air-gap stack are internal"
+networks=$(docker network ls --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" --format '{{.Name}}')
+[ -n "$networks" ] || { echo "FAIL: no Compose networks found"; exit 1; }
+while IFS= read -r network; do
+  [ "$(docker network inspect -f '{{.Internal}}' "$network")" = true ] \
+    || { echo "FAIL: $network has external connectivity"; exit 1; }
+done <<< "$networks"
+
+# Test the actual boundary from the edge. Also check numeric addresses so a missing DNS alias
+# cannot hide a routing regression, and use nginx as a reachable control for the probe.
 echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
-"${compose[@]}" run --rm -T --entrypoint sh tester -c '
-  bad=""
-  for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
-    # the time of the TCP connection: 0 when none was made (no such name on this network, refused, dropped); a server
-    # that waits for its client keeps curl until the timeout, so its exit code does not tell
-    tc=$(curl -s -o /dev/null -w "%{time_connect}" --connect-timeout 3 --max-time 4 "telnet://$t" < /dev/null)
-    case "$tc" in 0|0.0*|0,0*|"") ;; *) bad="$bad $t(connected in ${tc}s)" ;; esac
-  done
-  [ -z "$bad" ] || { echo "FAIL: reachable from the edge network:$bad"; exit 1; }
-  echo "    none reachable"' || { echo "FAIL: the networks of the stack are not isolated"; exit 1; }
+blocked=(postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080
+  nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813 nginxions:7815)
+for endpoint in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 control:7080; do
+  id=$("${compose[@]}" ps -q "${endpoint%:*}")
+  [ -n "$id" ] || continue
+  address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
+  [ -n "$address" ] || { echo "FAIL: no address for ${endpoint%:*}"; exit 1; }
+  blocked+=("$address:${endpoint##*:}")
+done
+"${compose[@]}" run --pull never --rm -T --entrypoint sh tester -s -- nginxions:81 "${blocked[@]}" \
+  < deploy/test/airgap-network.sh
 
 echo "==> all requested services are still running"
 for s in "${services[@]}"; do
