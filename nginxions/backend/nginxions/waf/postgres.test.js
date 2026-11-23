@@ -1,10 +1,15 @@
 // The policy objects of WAF -> Policy on PostgreSQL (see ../test/postgres.js): what the editor of the interface does,
 // down to local_policy.yaml (written to a temporary directory) and its versions.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { after, before, describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
+import YAML from "yaml";
 import { admin, freshDatabase, postgres } from "../test/postgres.js";
 
 describe("WAF policy objects on PostgreSQL", { skip: !postgres && "no test database (test/postgres.js)" }, () => {
@@ -15,6 +20,7 @@ describe("WAF policy objects on PostgreSQL", { skip: !postgres && "no test datab
 		dir = await fs.mkdtemp(path.join(os.tmpdir(), "nginxions-policy-"));
 		process.env.NGINXIONS_APPSEC_POLICY_FILE = path.join(dir, "local_policy.yaml");
 		process.env.NGINXIONS_WAF_POLICY_BACKUP_DIR = path.join(dir, "backups");
+		process.env.NGINXIONS_APPSEC_MODEL_DIR = path.join(dir, "model");
 		// no agent in the test: its answer is a closed port
 		process.env.NGINXIONS_APPSEC_ORCHESTRATION_URL = "http://127.0.0.1:9";
 		knex = await freshDatabase("waf");
@@ -115,5 +121,113 @@ describe("WAF policy objects on PostgreSQL", { skip: !postgres && "no test datab
 		const after = await api.get(admin);
 		assert.ok(after.objects.some((o) => o.name === "imported-exception"));
 		assert.equal(after.policy.mode, "detect-learn");
+	});
+
+	test("expert preview, save and rollback validate the same policy", async () => {
+		const { default: expert } = await import("./expert.js");
+		const initial = await expert.get(admin);
+		for (const yaml of [
+			"policies:\n  default:\n    mode: unknown\n",
+			"policies:\n  default:\n    accessControlPractices: not-a-list\n",
+			"policies:\n  default:\n    practices: [missing-practice]\n",
+		]) {
+			const preview = await expert.check(admin, yaml);
+			assert.equal(preview.valid, false);
+			await assert.rejects(expert.save(admin, { content: yaml }), { message: preview.error });
+		}
+		assert.deepEqual((await expert.get(admin)).versions, initial.versions);
+		const first = await expert.save(admin, { content: "policies:\n  default:\n    mode: prevent-learn\n" });
+		const next = "policies:\n  default:\n    mode: inactive\n";
+		const preview = await expert.check(admin, next);
+		assert.equal(preview.valid, true);
+		assert.ok(preview.diff.some(({ op, line }) => op === "+" && line.includes("mode: inactive")));
+		const second = await expert.save(admin, { content: next });
+		const rolledBack = await expert.rollback(admin, first.id);
+		assert.ok(rolledBack.id > second.id);
+		assert.equal(rolledBack.content, first.content);
+		assert.match(await fs.readFile(process.env.NGINXIONS_APPSEC_POLICY_FILE, "utf8"), /mode: prevent-learn/);
+		await expert.save(admin, { content: "" });
+	});
+
+	test("bootstrap imports legacy policies and ignores WAF overrides for disabled locations", async () => {
+		const { bootstrap, buildPolicy, regenerateNow } = await import("./policy.js");
+		const host = {
+			id: 1,
+			owner_user_id: 1,
+			created_on: new Date(),
+			modified_on: new Date(),
+			domain_names: JSON.stringify(["legacy-policy.test"]),
+			forward_host: "upstream.test",
+			forward_port: "80",
+			access_list_id: 0,
+			certificate_id: 0,
+			advanced_config: "",
+			meta: "{}",
+			locations: JSON.stringify([{ path: "/check" }]),
+		};
+		await knex("proxy_host").insert(host);
+		const backupFixture = fileURLToPath(
+			new URL("../../../../deploy/test/fixtures/npm-backup.tgz", import.meta.url),
+		);
+		const source = execFileSync("tar", ["-xOzf", backupFixture, "appsec-localconfig/local_policy.yaml"], {
+			encoding: "utf8",
+		});
+		const policy = YAML.parse(source);
+		policy.policies["specific-rules"].push({ name: "npm-managed-specific-rule-proxyhost-1-0", mode: "inactive" });
+		const legacy = YAML.stringify(policy);
+		await fs.writeFile(process.env.NGINXIONS_APPSEC_POLICY_FILE, legacy);
+		await bootstrap();
+		const backups = process.env.NGINXIONS_WAF_POLICY_BACKUP_DIR;
+		const original = (await fs.readdir(backups)).find((name) => name.endsWith("-before-nginxions.yaml"));
+		assert.equal(await fs.readFile(path.join(backups, original), "utf8"), legacy);
+		const waf = await knex("nginxions_waf_host").where({ proxy_host_id: 1 }).first();
+		assert.equal(waf.mode, "prevent-learn");
+		assert.equal(waf.minimum_confidence, "high");
+		const location = await knex("nginxions_waf_location").where({ proxy_host_id: 1, path: "/check" }).first();
+		assert.equal(location.enabled, false);
+		const rules = async () =>
+			(await buildPolicy()).doc.policies.specificRules.map(({ host, mode }) => [host, mode]);
+		assert.deepEqual(await rules(), [
+			["legacy-policy.test", "prevent-learn"],
+			["legacy-policy.test/check", "inactive"],
+		]);
+		await knex("proxy_host")
+			.where({ id: 1 })
+			.update({ locations: JSON.stringify([{ path: "/check", npmplus_enabled: false }]) });
+		assert.deepEqual(await rules(), [["legacy-policy.test", "prevent-learn"]]);
+		await knex("proxy_host")
+			.where({ id: 1 })
+			.update({ domain_names: JSON.stringify(["renamed-policy.test"]) });
+		assert.deepEqual(await rules(), [["renamed-policy.test", "prevent-learn"]]);
+		await knex("proxy_host").where({ id: 1 }).update({ is_deleted: 1 });
+		assert.deepEqual(await rules(), []);
+		for (let version = 0; version < 23; version++) {
+			await fs.writeFile(process.env.NGINXIONS_APPSEC_POLICY_FILE, `# snapshot ${version}\n`);
+			await regenerateNow();
+		}
+		assert.equal((await fs.readdir(backups)).length, 20);
+	});
+
+	test("model upload validates the archive before replacing the model and can restore the last one", async () => {
+		const { default: agent } = await import("./agent-settings.js");
+		const resources = fileURLToPath(
+			new URL("../../../../openappsec/agent/components/security_apps/waap/resources/", import.meta.url),
+		);
+		const archive = execFileSync("tar", ["--format=pax", "-czf", "-", "-C", resources, "waap.data"], {
+			maxBuffer: 16 * 1024 * 1024,
+		});
+		const upload = (body) => {
+			const stream = Readable.from([body]);
+			stream.headers = { "content-length": String(body.length) };
+			return agent.uploadModel(admin, stream, false);
+		};
+		const installed = await upload(archive);
+		assert.equal(installed.present, true);
+		for (const invalid of [gzipSync("this is not a tar archive"), archive.subarray(0, archive.length - 4)]) {
+			await assert.rejects(upload(invalid), /Invalid advanced model archive/);
+			assert.equal((await agent.get(admin)).model.sha256, installed.sha256);
+		}
+		assert.equal((await agent.removeModel(admin, false)).present, false);
+		assert.equal((await agent.previousModel(admin, false)).sha256, installed.sha256);
 	});
 });

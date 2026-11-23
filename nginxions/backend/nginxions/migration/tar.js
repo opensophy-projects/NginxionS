@@ -35,7 +35,7 @@ const pax = (buf) => {
 		const space = buf.indexOf(0x20, pos);
 		if (space < 0) break;
 		const len = Number.parseInt(buf.subarray(pos, space).toString("utf8"), 10);
-		if (!len) break;
+		if (!(len > space - pos + 1) || pos + len > buf.length) break;
 		const record = buf.subarray(space + 1, pos + len - 1).toString("utf8");
 		const eq = record.indexOf("=");
 		if (eq > 0) out[record.slice(0, eq)] = record.slice(eq + 1);
@@ -70,10 +70,10 @@ export const sniff = (head) => {
  * Extracts `file` into `dest`.
  * @param {string} file
  * @param {string} dest  an existing empty directory
- * @param {{gzip: boolean, accept: (rel: string) => boolean, maxBytes: number, maxEntries: number}} options
+ * @param {{gzip: boolean, accept: (rel: string) => boolean, maxBytes: number, maxEntries: number, strict?: boolean}} options
  * @returns {Promise<{files: number, bytes: number, skipped: number}>}
  */
-export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }) => {
+export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries, strict = false }) => {
 	const input = createReadStream(file);
 	const stream = gzip ? input.pipe(createGunzip()) : input;
 	input.on("error", (err) => stream.destroy(err));
@@ -86,6 +86,8 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 	const result = { files: 0, bytes: 0, skipped: 0 };
 	let entries = 0;
 	let ended = false;
+	let inflated = 0;
+	let endBytes = 0;
 
 	const startEntry = async (header) => {
 		const type = String.fromCharCode(header[156] || 0x30);
@@ -97,8 +99,12 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 		longName = null;
 		paxHeader = {};
 		const bodySize = paxSize ?? size;
+		if (strict && (!Number.isSafeInteger(bodySize) || bodySize < 0 || bodySize > maxBytes)) {
+			throw new TarError("Invalid archive entry size");
+		}
 
 		if (type === "L" || type === "K" || type === "x" || type === "g") {
+			if (strict && type !== "x") throw new TarError("Unsupported archive metadata");
 			if (bodySize > 1024 * 1024) throw new TarError("Extended header is too large");
 			meta = { kind: type, remaining: bodySize, padding: (BLOCK - (bodySize % BLOCK)) % BLOCK, chunks: [] };
 			return;
@@ -110,6 +116,9 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 		const padding = (BLOCK - (bodySize % BLOCK)) % BLOCK;
 		const wanted = rel && accept(rel);
 		const target = wanted ? path.join(dest, rel) : null;
+		if (strict && (!wanted || type !== "0" || (name !== rel && name !== `./${rel}`) || paxSize !== null)) {
+			throw new TarError("Unexpected archive entry");
+		}
 
 		if (wanted && type === "5") {
 			await mkdir(target, { recursive: true });
@@ -135,7 +144,12 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 	const finishMeta = () => {
 		const body = Buffer.concat(meta.chunks);
 		if (meta.kind === "L") longName = text(body, 0, body.length);
-		else if (meta.kind === "x") paxHeader = pax(body);
+		else if (meta.kind === "x") {
+			paxHeader = pax(body);
+			if (strict && Object.keys(paxHeader).some((key) => !["path", "mtime", "atime", "ctime"].includes(key))) {
+				throw new TarError("Unsupported extended archive header");
+			}
+		}
 		meta = null;
 	};
 
@@ -175,10 +189,15 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 			buffer = buffer.subarray(BLOCK);
 			if (header.every((b) => b === 0)) {
 				ended = true;
+				endBytes = BLOCK;
 				return;
 			}
 			if (header.subarray(257, 262).toString("latin1") !== "ustar" && entries === 0 && !meta) {
 				throw new TarError("Not a tar archive");
+			}
+			if (strict) {
+				const checksum = header.reduce((sum, byte, i) => sum + (i >= 148 && i < 156 ? 32 : byte), 0);
+				if (checksum !== octal(header, 148, 8)) throw new TarError("Invalid tar header checksum");
 			}
 			await startEntry(header);
 		}
@@ -186,10 +205,18 @@ export const extract = async (file, dest, { gzip, accept, maxBytes, maxEntries }
 
 	try {
 		for await (const chunk of stream) {
+			inflated += chunk.length;
+			if (strict && inflated > maxBytes + 2 * 1024 * 1024) throw new TarError("The archive is too large");
 			buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
 			await consume();
-			if (ended) break;
+			if (ended) {
+				if (!strict) break;
+				if (buffer.some((byte) => byte !== 0)) throw new TarError("Unexpected data after the tar archive");
+				endBytes += buffer.length;
+				buffer = Buffer.alloc(0);
+			}
 		}
+		if (strict && endBytes < 2 * BLOCK) throw new TarError("The archive is truncated");
 	} catch (err) {
 		if (entry?.handle) await entry.handle.close().catch(() => {});
 		input.destroy();

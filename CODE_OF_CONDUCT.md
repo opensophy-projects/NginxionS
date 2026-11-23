@@ -445,7 +445,7 @@ flowchart LR
     - **`system/`** — `env.js` (env-настройки NPMplus, перенесённые в GUI), `index.js` (их чтение и сохранение)
     - **`waf/`** — open-appsec
       - `index.js` — включение attachment в nginx
-      - `agent.js` — состояние агента
+      - `agent.js` — состояние агента, `agent.test.js` — ответы службы оркестрации и ошибки HTTP
       - `metrics.js` — метрики агента (его служба prometheus на 127.0.0.1:7465)
       - `agent-settings.js` — настройки агента и ML-модели
       - `model-file.js` — файл продвинутой модели агента: прежняя модель, SHA-256 для пакета узлов (шаг 15.5)

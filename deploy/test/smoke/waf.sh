@@ -11,6 +11,11 @@ for i in $(seq 1 10); do
 done
 $CURL "$ADMIN/api/nginxions/waf/policy" | grep -q 'mode: prevent-learn' || fail "the rule is not in prevent-learn"
 
+for i in $(seq 1 45); do
+  $CURL "$ADMIN/api/nginxions/waf" 2>/dev/null | grep -q '"reachable": *true' && break
+  [ "$i" = 45 ] && fail "the WAF group requires a reachable open-appsec agent"
+  sleep 2
+done
 if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   step "WAF: open-appsec is on after a clean install (the nginx attachment is loaded by default)"
   $CURL "$ADMIN/api/nginxions/waf" | grep -q '"active": *true' \
@@ -635,5 +640,5 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   first_after_restart false
   first_after_restart true
 else
-  echo "    (agent not running, WAF scenarios skipped)"
+  fail "the open-appsec agent became unreachable before the WAF scenarios"
 fi

@@ -93,10 +93,19 @@ install_waap()
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-ab.js"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-csrf.js"
 
-    # use advanced model if exist as data for waap
+    # NginxionS: replace only waap.data, and only after a complete extraction. Keep the bundled model on failure.
     ADVANCED_MODEL_FILE=/advanced-model/open-appsec-advanced-model.tgz
     if [ -f "$ADVANCED_MODEL_FILE" ]; then
-        cp_exec "tar -xzf $ADVANCED_MODEL_FILE -C /etc/cp/conf/waap"
+        model_tmp=$(mktemp "$WAAP_POLICY_FOLDER_PATH/.waap.data.XXXXXX")
+        if [ -n "$model_tmp" ] &&
+            { tar -xOzf "$ADVANCED_MODEL_FILE" waap.data > "$model_tmp" 2> /dev/null ||
+                tar -xOzf "$ADVANCED_MODEL_FILE" ./waap.data > "$model_tmp" 2> /dev/null; } &&
+            [ -s "$model_tmp" ] && chmod 644 "$model_tmp" && mv -f "$model_tmp" "$WAAP_POLICY_FOLDER_PATH/waap.data"; then
+            cp_print "NginxionS: advanced waap.data installed" "$FORCE_STDOUT"
+        else
+            [ -z "$model_tmp" ] || rm -f "$model_tmp"
+            cp_print "NginxionS: invalid advanced model archive, using the bundled model" "$FORCE_STDOUT"
+        fi
     fi
 }
 

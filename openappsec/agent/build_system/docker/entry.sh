@@ -107,11 +107,7 @@ fi
 # NginxionS: no intelligence service and CrowdSec auxiliary service of the vendor of the agent (prebuilt, no sources, a cloud
 # behind them); NginxionS runs CrowdSec with its own bouncer
 
-# use advanced model if exist as data for agent
-FILE=/advanced-model/open-appsec-advanced-model.tgz
-if [ -f "$FILE" ]; then
-    tar -xzvf "$FILE" -C /etc/cp/conf/waap
-fi
+# NginxionS: the HTTP transaction handler installer has already loaded waap.data from the model archive.
 
 touch /etc/cp/watchdog/wd.startup
 /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
