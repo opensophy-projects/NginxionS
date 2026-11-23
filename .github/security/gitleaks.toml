@@ -19,6 +19,8 @@ paths = ['''^(openappsec-main|open-appsec-npm-master|smartsync-tuning-main|newpa
 
 [[allowlists]]
 description = "the import of the upstream sources of open-appsec into openappsec/ (git subtree: the squashed contents and their merges): what they held (test keys of Helm charts, Go download caches, an unused key of the agent) was removed from the code after them; the code as it is now is scanned with the files"
+# The rewritten commits have the same trees and ordered parent trees as the originals.
+# Keep the original IDs for refs that still point to the previous history.
 commits = [
   "533ddc7bf3d40b87c9c5477820c1cb301d7e4a2c",
   "fce7b56dabafb450de835def664499de4b99d037",
@@ -30,6 +32,16 @@ commits = [
   "c19dde9487a81c7ee5ce67245b6d77a8727b346f",
   "cc2be60e2f10453a03e7cf93dbac524a3dab965c",
   "a4f96ceed2fcc6e9a3f131bbc2f4b264b2646a7d",
+  "5fa3baee1e1bc42e6954d09bafc1501f49097439",
+  "3bbe0cafdd3c3c190dfb788d4b8455c98814d750",
+  "f213d40a7ed3f81e906b7dea9da34c477225b01b",
+  "76430f96629a316c4515c2b678f082ae7235d05b",
+  "a7bb3018a3e44b615e86b9b651e5e1efa8a5ba14",
+  "30a09e1fb74daa2d670e5070b7136c9e9a9e3097",
+  "2df54f48adec2809a6e4f6b2a3742bff8bf12a84",
+  "2ff1bf361d4a2f96731ec65224b027d99b740935",
+  "172fbed99a78a7bae8cc341d19c8e99b30cd73e7",
+  "115666e6ea4a84864d8676d37a60f0bbcf6de427",
 ]
 
 [[allowlists]]
@@ -38,12 +50,17 @@ paths = ['''^nginxions/backend/nginxions/redact\.test\.js$''', '''^npmos/backend
 
 [[allowlists]]
 description = "squashed imports of upstream NPMplus (git subtree): the example values of its old compose.yaml"
-commits = ["2e646bac59947309643e9d8a879efdbedad58d3d", "acb35371302bac8d980095ee67a29197d96f3bcd"]
+commits = [
+  "2e646bac59947309643e9d8a879efdbedad58d3d",
+  "acb35371302bac8d980095ee67a29197d96f3bcd",
+  "fa031e4c1bdfd56f8026115fafd268d3688b4896",
+  "9ebc2866302a97b02f6301bbdf49be9f39bc35ff",
+]
 paths = ['''^compose\.yaml$''']
 
 [[allowlists]]
 description = "the first version of agent patch 0005 kept the git function context in a hunk header (isKeyCspReport(const std::string &key, ...)), which reads as an API key; later versions have no such context"
-commits = ["1d6a369223b4f7089df34e3db8bb5f25587c46dc"]
+commits = ["1d6a369223b4f7089df34e3db8bb5f25587c46dc", "70180fc42d0be10e2f398968ab5e9795a73a75e3"]
 paths = ['''^deploy/openappsec/agent/patches/0005-feature-dump-for-training\.patch$''']
 
 [[allowlists]]
