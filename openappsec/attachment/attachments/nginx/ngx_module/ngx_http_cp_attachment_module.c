@@ -78,6 +78,8 @@ static ngx_int_t ngx_cp_attachment_init_worker(ngx_cycle_t *cycle);
 ///
 static void ngx_cp_attachment_fini_worker(ngx_cycle_t *cycle);
 
+static void ngx_cp_attachment_fini_master(ngx_cycle_t *cycle);
+
 ///
 /// @brief Initialize global environment variable cache for async mode.
 /// @details Called once during module initialization to cache the CP_ASYNC_MODE environment variable.
@@ -162,7 +164,7 @@ ngx_module_t ngx_http_cp_attachment_module = {
     NULL,
     NULL,
     ngx_cp_attachment_fini_worker,    ///< exit process.
-    NULL,
+    ngx_cp_attachment_fini_master,    ///< exit master.
     NGX_MODULE_V1_PADDING
 };
 
@@ -553,12 +555,19 @@ ngx_cp_attachment_fini_worker(ngx_cycle_t *cycle)
         if (is_timer_active) ngx_del_timer(&ngx_keep_alive_event);
         write_dbg(DBG_LEVEL_INFO, "Timer successfully deleted");
         is_timer_active = 0;
-
-        remove_attachment_metadata_file();
     }
 #ifdef NGINX_ASYNC_SUPPORTED
     ngx_cp_async_cleanup();
 #endif
+}
+
+static void
+ngx_cp_attachment_fini_master(ngx_cycle_t *cycle)
+{
+    (void)cycle;
+    // NginxionS: old workers exit during a reload while new workers need the shared metadata to negotiate IPC.
+    // A replacement master also needs it when nginx is upgraded in place.
+    if (ngx_new_binary == 0) remove_attachment_metadata_file();
 }
 
 static ngx_int_t
