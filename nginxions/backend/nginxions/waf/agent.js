@@ -29,7 +29,14 @@ const getAgentStatus = async () => {
 			body: "{}",
 			signal: AbortSignal.timeout(TIMEOUT_MS),
 		});
+		if (!response.ok) {
+			await response.body?.cancel();
+			return { reachable: false, error: `HTTP ${response.status}` };
+		}
 		raw = await response.json();
+		if (!raw || typeof raw !== "object" || !("Last update status" in raw)) {
+			return { reachable: false, error: "Invalid orchestration status" };
+		}
 	} catch (err) {
 		return { reachable: false, error: err.cause?.code || err.message };
 	}

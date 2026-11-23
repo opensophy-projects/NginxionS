@@ -147,6 +147,7 @@ if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
   docker rm -f "$pw" > /dev/null 2>&1 || true
   docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "$PWD/deploy/test/gui-e2e.mjs:/e2e/gui-e2e.mjs:ro" \
+    -v "$PWD/openappsec/agent/components/security_apps/waap/resources/waap.data:/e2e/waap.data:ro" \
     -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
     -v "$PWD/reports/ui:/out" -v "$PWD/reports/gui:/out-gui" -w /e2e "$pw_image" sleep 3600 > /dev/null
   docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"
@@ -175,12 +176,23 @@ fi
 # 127.0.0.1 only
 echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
 "${compose[@]}" run --rm -T --entrypoint sh tester -c '
+  tcp_time() {
+    curl -s -o /dev/null -w "%{time_connect}" --connect-timeout 3 --max-time 4 "telnet://$1" < /dev/null
+  }
+  no_connection() {
+    case "$1" in 0|0.000000|0,000000) return 0 ;; *) return 1 ;; esac
+  }
+  tc=$(tcp_time nginxions:81)
+  if [ -z "$tc" ] || no_connection "$tc"; then
+    echo "FAIL: could not measure a known reachable TCP port"; exit 1
+  fi
   bad=""
   for t in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080 nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813; do
     # the time of the TCP connection: 0 when none was made (no such name on this network, refused, dropped); a server
     # that waits for its client keeps curl until the timeout, so its exit code does not tell
-    tc=$(curl -s -o /dev/null -w "%{time_connect}" --connect-timeout 3 --max-time 4 "telnet://$t" < /dev/null)
-    case "$tc" in 0|0.0*|0,0*|"") ;; *) bad="$bad $t(connected in ${tc}s)" ;; esac
+    tc=$(tcp_time "$t")
+    [ -n "$tc" ] || { echo "FAIL: could not measure $t"; exit 1; }
+    no_connection "$tc" || bad="$bad $t(connected in ${tc}s)"
   done
   [ -z "$bad" ] || { echo "FAIL: reachable from the edge network:$bad"; exit 1; }
   echo "    none reachable"' || { echo "FAIL: the networks of the stack are not isolated"; exit 1; }

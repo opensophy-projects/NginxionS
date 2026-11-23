@@ -9,9 +9,12 @@
 //   MANAGER_FINGERPRINT   SHA-256 of the panel certificate for the nodes scenario
 //
 // A failed scenario does not stop the others; the test fails at its end. Every scenario cleans up what it made.
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import { gzipSync } from "node:zlib";
 import { chromium, request } from "playwright";
 
 const ADMIN = process.env.ADMIN || "https://nginxions:81";
@@ -281,6 +284,7 @@ async function setHostEnabled(domain, on) {
 
 let crowdsecBefore;
 let blockPageBefore;
+let expertBefore;
 const scenarios = [
 	{
 		name: "hosts-proxy",
@@ -383,11 +387,130 @@ const scenarios = [
 				return { ok: Array.isArray(rows) && rows.length > 0, n: rows?.length };
 			});
 			await go(`/waf/events?host=${d}`);
-			await page.locator("tbody tr", { hasText: d }).first().waitFor({ timeout: 20000 });
+			await page.locator("tbody tr", { hasText: d }).first().click({ timeout: 20000 });
+			const event = page.getByRole("dialog");
+			await event.getByText("Event as written by the agent").waitFor();
+			await event.locator("pre", { hasText: d }).last().waitFor({ timeout: 20000 });
+			await event.getByRole("button", { name: "Close", exact: true }).last().click();
 			await setWaf(d, "Off");
 			await until(`${d} not inspected when Off`, () => proxied(d, XSS), { timeout: 120000 });
 		},
 		cleanup: () => removeProxyHost("gui-waf.local"),
+	},
+	{
+		name: "waf-location",
+		title: "Host form → WAF: a location has its own mode and policy generation follows host changes",
+		async run() {
+			const domain = "gui-waf-location.local";
+			const renamed = "gui-waf-renamed.local";
+			await addProxyHost(domain);
+			await hostAction(domain, "Edit");
+			const form = page.getByRole("dialog");
+			await form.locator('a[href="#tab-locations"]').click();
+			const locations = form.locator("#tab-locations");
+			await locations.getByRole("button", { name: /add location/i }).click();
+			await locations.getByPlaceholder("/path").fill("/review");
+			await locations.locator("input[id^='forwardHost-']").fill(UPSTREAM);
+			await locations.locator("input[id^='forwardPort-']").fill("80");
+			await form.locator('a[href="#tab-waf"]').click();
+			await form.getByRole("checkbox", { name: "Protect with open-appsec" }).check();
+			await form.locator("#nginxionsWafMode").selectOption("detect-learn");
+			await form.getByRole("combobox", { name: "/review" }).selectOption("prevent-learn");
+			await form.getByRole("button", { name: "Save", exact: true }).click();
+			await saved("WAF location");
+			const id = await proxyHostId(domain);
+			const policy = () => api("GET", "/nginxions/waf/policy");
+			await until("the WAF location is in the generated policy", async () =>
+				(await policy()).content.includes(`host: ${domain}/review`));
+			await until("the WAF location uses Prevent", () => status(domain, 403, `/review${XSS.slice(1)}`), { timeout: 120000 });
+			await until("the rest of the host uses Detect", () => proxied(domain, XSS));
+			await go("/agents/open-appsec?tab=agent");
+			await page.getByRole("button", { name: "Show YAML", exact: true }).click();
+			await page.getByRole("dialog").locator("pre").filter({ hasText: `${domain}/review` }).waitFor();
+			await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+			const applied = page.waitForResponse((response) => response.url().endsWith("/api/nginxions/waf/policy/apply"));
+			await page.getByRole("button", { name: "Apply now", exact: true }).click();
+			if (!(await (await applied).json()).applied?.ok) throw new Error("The agent did not accept the apply request");
+			await api("PUT", `/nginx/proxy-hosts/${id}`, { domain_names: [renamed] });
+			await until("the policy follows a host rename", async () => {
+				const { content } = await policy();
+				return content.includes(`host: ${renamed}/review`) && !content.includes(domain);
+			});
+			await removeProxyHost(renamed);
+			await until("the policy drops a deleted host", async () => !(await policy()).content.includes(renamed));
+		},
+		async cleanup() {
+			await removeProxyHost("gui-waf-location.local");
+			await removeProxyHost("gui-waf-renamed.local");
+		},
+	},
+	{
+		name: "waf-expert",
+		title: "Expert policy → Check, diff, save and roll back as a new version",
+		async run() {
+			expertBefore = (await api("GET", "/nginxions/waf/policy/custom")).content;
+			await go("/agents/open-appsec?item=expert");
+			const editor = page.locator("textarea:visible").first();
+			await editor.fill("policies:\n  default:\n    mode: unknown\n");
+			await page.getByRole("button", { name: "Check", exact: true }).click();
+			await page.locator(".alert-danger", { hasText: "policies.default.mode" }).waitFor();
+			const save = page.getByRole("button", { name: "Save and apply", exact: true });
+			if (!(await save.isDisabled())) throw new Error("the invalid fragment can be saved");
+			const first = "policies:\n  default:\n    mode: detect-learn\n";
+			await editor.fill(first);
+			await page.getByRole("button", { name: "Check", exact: true }).click();
+			await page.getByText("Changes of local_policy.yaml", { exact: true }).waitFor();
+			await page.getByPlaceholder("Comment", { exact: true }).fill("Phase 1 initial fragment");
+			await save.click();
+			const firstRow = page.getByRole("row", { name: /Phase 1 initial fragment/ });
+			await firstRow.getByText("in force", { exact: true }).waitFor();
+			await editor.fill("policies:\n  default:\n    mode: inactive\n");
+			await save.click();
+			await firstRow.getByRole("button", { name: "Roll back", exact: true }).click();
+			await page.getByRole("dialog").getByRole("button", { name: "Roll back", exact: true }).click();
+			await page.getByRole("row", { name: /Rollback to version/ }).getByText("in force", { exact: true }).waitFor();
+			if ((await api("GET", "/nginxions/waf/policy/custom")).content !== first) {
+				throw new Error("the rollback did not restore the saved fragment");
+			}
+		},
+		async cleanup() {
+			if (expertBefore !== undefined) await api("PUT", "/nginxions/waf/policy/custom", { content: expertBefore });
+			expertBefore = undefined;
+		},
+	},
+	{
+		name: "waf-model",
+		title: "Agent → Model: reject a bad archive, upload waap.data, restart and return to the built-in model",
+		async run() {
+			const model = execFileSync("tar", ["-czf", "-", "-C", "/e2e", "waap.data"], { maxBuffer: 16 * 1024 * 1024 });
+			const hash = createHash("sha256").update(model).digest("hex");
+			await go("/agents/open-appsec?tab=agent");
+			const chooser = page.locator('input[type="file"][accept*=".tgz"]');
+			const modelResponse = (method) => page.waitForResponse((response) =>
+				new URL(response.url()).pathname === "/api/nginxions/waf/agent/model" && response.request().method() === method);
+			let response = modelResponse("PUT");
+			await chooser.setInputFiles({ name: "invalid.tgz", mimeType: "application/gzip", buffer: gzipSync("plain text") });
+			if ((await response).status() !== 400) throw new Error("the invalid archive was accepted");
+			const before = await api("GET", "/nginxions/services/openappsec");
+			response = modelResponse("PUT");
+			await chooser.setInputFiles({ name: "open-appsec-advanced-model.tgz", mimeType: "application/gzip", buffer: model });
+			if (!(await response).ok()) throw new Error("the archive with waap.data was refused");
+			await panelRestarted(45000, before.startedAt);
+			if ((await api("GET", "/nginxions/waf/agent")).model.sha256 !== hash) throw new Error("the uploaded model is missing");
+			await go("/agents/open-appsec?tab=agent");
+			const installed = await api("GET", "/nginxions/services/openappsec");
+			await page.getByRole("button", { name: "Remove model", exact: true }).click();
+			response = modelResponse("DELETE");
+			await page.getByRole("dialog").getByRole("button", { name: "Remove model", exact: true }).click();
+			if (!(await response).ok()) throw new Error("the custom model was not removed");
+			await panelRestarted(45000, installed.startedAt);
+			const { model: current } = await api("GET", "/nginxions/waf/agent");
+			if (current.present || current.previous?.sha256 !== hash) throw new Error("the built-in model was not restored");
+		},
+		async cleanup() {
+			const state = await api("GET", "/nginxions/waf/agent");
+			if (state.model.present) await api("DELETE", "/nginxions/waf/agent/model?apply=false");
+		},
 	},
 	{
 		name: "crowdsec-ban",

@@ -6,7 +6,7 @@ import { Button, HasPermission, LoadingPage } from "src/components";
 import { useLocaleState } from "src/context";
 import { formatDateTime, intl, T } from "src/locale";
 import { MANAGE, VIEW } from "src/modules/Permissions";
-import { showSuccess } from "src/notifications";
+import { showError, showSuccess } from "src/notifications";
 import { type AgentStatus, applyWafPolicy, setWafEnabled, type WafPolicyState, type WafStatus } from "../../api";
 import { useWafStatus } from "../../hooks";
 import { showConfirmModal } from "../../modals/ConfirmModal";
@@ -69,8 +69,11 @@ function PolicyCard({ policy }: { policy?: WafPolicyState }) {
 	const apply = async () => {
 		setApplying(true);
 		try {
-			await applyWafPolicy();
-			showSuccess(intl.formatMessage({ id: "nginxions.waf.policy-applied" }));
+			const result = await applyWafPolicy();
+			if (result.applied?.ok) showSuccess(intl.formatMessage({ id: "nginxions.waf.policy-applied" }));
+			else showError(intl.formatMessage({ id: "nginxions.waf.policy-not-sent" }));
+		} catch (err) {
+			showError(err instanceof Error ? err.message : String(err));
 		} finally {
 			setApplying(false);
 			queryClient.invalidateQueries({ queryKey: ["nginxions-waf"] });
