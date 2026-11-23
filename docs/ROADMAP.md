@@ -154,12 +154,11 @@
 │   │   ├── …                 # upstream NPMplus
 │   │   └── nginxions/            # НАШ код: shell/ (sidebar), waf/, analytics/, learning/, pki/, rbac/, ui/
 │   ├── rootfs/, patches/, Dockerfile
-├── reference/                # read-only исходники для контекста ИИ (агент, smartsync, tuning, open-appsec-npm) + VERSIONS.md
-├── deploy/                   # compose: стек по умолчанию (всё локально), dev, офлайн-бандл
-├── design/                   # токены opensophy, sidebar-example, макеты
-├── docs/                     # ROADMAP, ADR, руководства RU/EN
-├── scripts/upstream-sync.sh, scripts/offline-bundle.sh
-├── CLAUDE.md / AGENTS.md
+├── openappsec/               # исходники агента, attachment и Go-сервисов
+├── deploy/                   # Compose, сборка и версии образов, скрипты первого запуска
+├── docs/                     # ROADMAP, ADR и руководства
+├── scripts/offline-bundle.sh # упаковка опубликованных образов и установочных файлов
+├── CLAUDE.md
 └── .github/workflows/        # lint, typecheck, tests, locale-check, docker build, air-gap e2e
 ```
 
@@ -196,45 +195,29 @@
 
 ### Фаза 0. Фундамент репозитория (≈1 нед. + доведение до прода)
 
-#### Статус фазы 0 (на 2026-10-27) — готово
+#### Статус фазы 0
 
-Весь код написан, свои образы собираются в CI, полный закрытый контур на них зелёный. Образы опубликованы в Docker Hub, ACME-регистрация проверена вживую, Renovate присылает PR. Сертификат Let's Encrypt выпущен на реальный поддомен.
+Текущий Compose использует два образа проекта: `nginxions` и `nginxions-openappsec`. Последний включает агент,
+shared storage, tuning и smartsync и используется также для контейнера `control`. CrowdSec, PostgreSQL и ClamAV
+берутся из официальных образов. Сборка агента для arm64 экспериментальная и вынесена за пределы приёмки фазы.
 
-**Готово и проверено**
+Текущий upstream NPMplus — [2026-11-18-r1](https://github.com/ZoeyVid/NPMplus/tree/b15d1551c4c7a07bafcc21f74fb06af0a50fa7ac).
+Коммит NginxionS `58d3b348` закрепляет этот upstream для `git subtree`. Версии исходников open-appsec указаны
+в [`deploy/openappsec/sources.env`](../deploy/openappsec/sources.env), порядок обновления — в [CLAUDE.md](../CLAUDE.md).
 
-| Что | Как проверено |
-|---|---|
-| NPMplus в `nginxions/` (subtree, релиз `2026-10-22-r1`), `reference/` + `VERSIONS.md`, `CLAUDE.md`, `ENV-INVENTORY.md`, ADR-0001 | ревью |
-| Линтеры, типы, тесты, shellcheck, compose, согласованность версий | CI, job «Lint, types, tests» — зелёный |
-| Секреты Docker Hub (`DOCKERHUB_NAMESPACE`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`) | CI, шаг «registry credentials» — зелёный |
-| Прод-образ `nginxions` из `nginxions/Dockerfile`, включая стадию `crowdsec-seed` с полным набором коллекций (`ZoeyVid/npmplus`, appsec) | CI, прогон #4, job «Images» |
-| Свои образы `nginxions-appsec-agent` (openappsec из исходников, ~17 мин), `-smartsync`, `-shared-storage`, `-tuning` | CI, прогон #4, job «Images» |
-| Полный закрытый контур на наших образах: все 9 сервисов поднимаются и остаются запущенными без интернета | CI, прогон #4, шаг «closed-network test (full stack)» |
-| Local-first: нет Gravatar, проверки обновлений и обращений к ACME при старте; NginxionS стартует без интернета | закрытый контур (CI), поиск фоновых обращений в логах |
-| CrowdSec на официальном образе без интернета, bouncer `nginxions` регистрируется из секрета | закрытый контур (CI) |
-| Секреты генерируются сами, `COOKIE_SECRET` постоянный (сессия переживает рестарт) | закрытый контур (CI) |
-| Исправление бага с дубликатом email | регрессионный сценарий в закрытом контуре |
-| Реальный IP клиента доходит до upstream | закрытый контур (CI) |
-| Dev-режим: `compose.dev.yaml` + `pnpm vite`, вход и дашборд | вручную через браузер |
-| Выпуск сертификата Let's Encrypt (HTTP-01) и HTTPS на проксируемом хосте; админка опубликована через proxy host вместо порта 81 | вручную на опубликованном образе, реальный поддомен |
-| Renovate (Mend Renovate, режим Interactive) | присылает PR с обновлениями (первые — GitHub Actions) |
-| Регистрация ACME-аккаунта при первом запросе сертификата (`nginxions/backend/nginxions/acme.js`), без обращений к ACME при старте | вручную на опубликованном образе: аккаунт Let's Encrypt зарегистрирован при первом запросе, certbot дошёл до проверки домена (первая попытка — домен указывал на GitHub Pages) |
-| Публикация в Docker Hub из `work`: `opensophy/nginxions:develop` (amd64 + arm64, общий манифест), `opensophy/nginxions-appsec-{agent,smartsync,shared-storage,tuning}:develop` (amd64) | CI, прогон #11 на `work`; теги проверены на Docker Hub |
-
-**Не сделано (вынесено за фазу 0)**
-
-- Образы open-appsec под arm64: upstream их не выпускает; в CI сборка экспериментальная, запускается вручную.
-- Раздача снимков hub CrowdSec из NginxionS (адрес уже настроен) — фаза 7.
+Поставка для закрытой сети описана в [OFFLINE.md](OFFLINE.md). Workflow **Offline bundle** собирает бандл
+на одном раннере, а на втором проверяет импорт с нуля и запуск без реестра. Артефакт для установки
+публикуется после успешной приёмки.
 
 #### 0.1. Основа — выполнено
-- [x] Определить коммит `ZoeyVid/NPMplus`, которому соответствует текущая копия: тег `2026-10-14-r1` (043ddf5), совпадение побайтное. NPMplus подключён в `nginxions/` через `git subtree`.
-- [x] `reference/` + `VERSIONS.md` (обновление — `scripts/update-reference.sh`); из сборки и линтеров исключено.
+- [x] Источник NPMplus зафиксирован через `git subtree` в `nginxions/`. Тег и дайджест dev-образа заданы в `deploy/dev/Dockerfile`.
+- [x] Исходники open-appsec находятся в `openappsec/` и участвуют в сборке и проверках. Коммиты upstream зафиксированы в `deploy/openappsec/sources.env`.
 - [x] `CLAUDE.md`: карта модулей, конвенции, команды проверки, правило `nginxions/` + `NginxionS:`, правило local-first.
 - [x] CI (`.github/workflows/ci.yml`): biome, `tsc`, vitest, проверка локалей, shellcheck, проверка compose-файлов, сборка образов amd64 (arm64 — при публикации или вручную), публикация в Docker Hub (при заданных `vars.DOCKERHUB_NAMESPACE` и секретах).
 - [x] **Тест «закрытый контур»** (`scripts/test-airgap.sh`, `deploy/test/`): стек без выхода в интернет; первый админ, вход, прокси-хост, трафик через прокси, отключённая проверка обновлений, bouncer в CrowdSec, нет попыток обращения к облаку в логах.
-- [x] `deploy/compose.yaml`: NginxionS + Postgres + агент open-appsec (hybrid, без токена) + smartsync + shared-storage + tuning-svc + CrowdSec (без CAPI) + socket-proxy. `deploy/compose.dev.yaml`: dev-образ из исходников, синхронизация backend, тестовый upstream, генератор атак, Vite-прокси для интерфейса.
+- [x] `deploy/compose.yaml`: NginxionS, PostgreSQL, open-appsec с локальными сервисами обучения, отдельный `control`, CrowdSec (без CAPI) и ClamAV. `deploy/compose.dev.yaml`: dev-образ из исходников, синхронизация backend, тестовый upstream, генератор атак, Vite-прокси для интерфейса.
 - [x] Умолчания local-first: выключены Gravatar и проверка версии (`NGINXIONS_CHECK_VERSION`), загрузка IP-диапазонов Cloudflare (уже была выключена), таймауты на запросы к ACME.
-- [x] Compose по умолчанию сразу содержит всё, что нельзя поменять из GUI: `ipc`, shm-том attachment, общие тома политики и логов, метки `nginxions.managed=true`, socket-proxy, внутренние сети без выхода наружу. Секреты генерирует `nginxions-init`.
+- [x] Compose по умолчанию сразу содержит всё, что нельзя поменять из GUI: `ipc`, shm-том attachment, общие тома политики и логов, метки `nginxions.managed=true`, отдельный контейнер управления, внутренние сети без выхода наружу. Секреты генерирует `nginxions-init`.
 - [x] Инвентаризация env-настроек: `docs/ENV-INVENTORY.md`.
 - [x] Минимальный ребрендинг: заголовок, шапка, ссылки, en/ru-строки. Логотип — в фазе 2.
 #### 0.2. Доведение до продового решения (по находкам фазы 0)
@@ -246,14 +229,16 @@
   - в `config.yaml` фиксируется `hub_branch`, чтобы не было обращения к version.crowdsec.net;
   - свой образ `nginxions-crowdsec` удаляется.
   - Ключ bouncer передаётся штатно через `/run/secrets/bouncer_key_nginxions`.
-- [x] **Свои образы open-appsec** (`deploy/openappsec/`, коммиты в `sources.env`; Go-сервисы с `*_FILE` и shared-storage без root) из исходников с фиксированными коммитами: `nginxions-appsec-agent` (openappsec, `make docker`), `nginxions-appsec-smartsync`, `nginxions-appsec-shared-storage` (+ `smartsync-shared-files` в `reference/`), `nginxions-appsec-tuning`. CI собирает их и публикует, поэтому прод не зависит от ghcr.io.
-- [x] **Версии зафиксированы** (`deploy/.env`, проверка в CI, `renovate.json`, приложение Mend Renovate установлено): никаких `latest` в `deploy/compose.yaml`. Все образы пинятся тегом выпуска NginxionS, сторонние (postgres, socket-proxy, crowdsec) — точной версией. Обновления вносит Renovate в PR.
+- [x] **Свой образ `nginxions-openappsec`** собирается из исходников `openappsec/` с версиями upstream
+  в `deploy/openappsec/sources.env`. Образ содержит агент и Go-сервисы обучения и публикуется в Docker Hub.
+- [x] **Версии зафиксированы** (`deploy/.env`, проверка в CI, `renovate.json`, приложение Mend Renovate установлено): никаких `latest` в `deploy/compose.yaml`. Все образы пинятся тегом выпуска NginxionS, сторонние (PostgreSQL, CrowdSec, ClamAV) — точной версией. Обновления вносит Renovate в PR.
 - [x] **ACME без обращений при старте** (`nginxions/backend/nginxions/acme.js`; убрана и проверка `ACME_PROFILE` при старте): регистрация аккаунта переносится в backend и выполняется при первом запросе сертификата Let's Encrypt/ZeroSSL. При старте NginxionS больше не обращается к ACME.
 - [x] **`COOKIE_SECRET`** генерирует `nginxions-init`; сессии переживают рестарт.
 - [x] ~~Отправить в NPMplus исправление бага с дубликатом email~~ — upstream уже исправил это в `develop` (ad399896) тем же способом; придёт со следующим релизным тегом, тогда снимаем метку `NginxionS:`. `nginxions/` обновлён до последнего релиза `2026-10-22-r1`.
 - [x] **ADR по сети** (`docs/adr/0001-network.md`; IP клиента проверяется в закрытом контуре): bridge с публикацией портов вместо `network_mode: host`. Описано, когда нужен host-режим и что нужно для IPv6.
 - [x] **Закрытый контур на полном стеке в CI:** все сервисы, включая агент, smartsync, tuning, CrowdSec из снимка; агент применяет политику NginxionS без интернета и блокирует атаки (сценарии фазы 1 в `deploy/test/smoke.sh`).
-- [x] **Публикация в Docker Hub** (настроена в CI, секреты заведены) `opensophy/nginxions*`: на ветке `work` — тег `develop`, при git-теге `vX.Y.Z` — `X.Y.Z` и `latest`; мультиархитектурный манифест amd64+arm64.
+- [x] **Публикация в Docker Hub** (настроена в CI, секреты заведены) `opensophy/nginxions*`: на ветке `work` — тег `develop`, при git-теге `vX.Y.Z` — `X.Y.Z` и `latest`; мультиархитектурный манифест панели amd64+arm64.
+- [x] Сборка офлайн-бандла из опубликованных образов и автоматическая приёмка импорта на отдельном раннере ([OFFLINE.md](OFFLINE.md)).
 - [x] Первый зелёный прогон CI.
 
 **Приёмка:** все образы (NginxionS, open-appsec) собираются в CI и публикуются в Docker Hub; стек из опубликованных образов поднимается одной командой без интернета; проксирование работает, агент применяет политику, CrowdSec работает на официальном образе; ни один сервис не обращается к облаку.
