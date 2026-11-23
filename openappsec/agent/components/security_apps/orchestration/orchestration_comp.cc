@@ -379,12 +379,12 @@ private:
                 install_error =
                     "Critical Error: Agent/Gateway was not fully deployed " +
                     err_hostname +
-                    " and is not enforcing a security policy. Retry installation or contact opensophy support.";
+                    " and is not enforcing a security policy. Retry installation or contact support.";
             } else {
                 install_error =
                     "Warning: Agent/Gateway " +
                     err_hostname +
-                    " software update failed. Agent is running previous software. Contact opensophy support.";
+                    " software update failed. Agent is running previous software. Contact support.";
             }
             dbgTrace(D_ORCHESTRATOR)
                 << "Manifest failed to be updated. Error: "
@@ -407,7 +407,7 @@ private:
             string install_error =
                 "Warning: Agent/Gateway " +
                 err_hostname +
-                " software update failed. Agent is running previous software. Contact opensophy support.";
+                " software update failed. Agent is running previous software. Contact support.";
             string current_error = i_orchestration_status->getManifestError();
             if (current_error.find("Gateway was not fully deployed") == string::npos) {
                 i_orchestration_status->setFieldStatus(
@@ -1159,7 +1159,7 @@ private:
                 UpdatesConfigType::GENERAL,
                 UpdatesFailureReason::GET_UPDATE_REQUEST,
                 "",
-                "Warning: Agent/Gateway failed during the update process. Contact opensophy support."
+                "Warning: Agent/Gateway failed during the update process. Contact support."
             ).notify();
 
             return genError(response.getErr());
@@ -1257,13 +1257,13 @@ private:
                     "Agent/Gateway was not fully deployed " +
                     err_hostname +
                     " and is not enforcing a security policy.";
-                recommended_fix = "Retry installation or contact opensophy support.";
+                recommended_fix = "Retry installation or contact support.";
             } else if (current_error.find("Warning") != string::npos) {
                 msg =
                     "Agent/Gateway " +
                     err_hostname +
                     " software update failed. Agent is running previous software.";
-                recommended_fix = "Contact opensophy support.";
+                recommended_fix = "Contact support.";
             }
             if (!msg.empty() && !recommended_fix.empty()) {
                 LogGen manifest_error_notification(
@@ -1888,7 +1888,7 @@ private:
         ).notify();
 
         LogGen(
-            "opensophy Orchestration nano service successfully started",
+            "Orchestration nano service successfully started",
             Audience::SECURITY,
             Severity::INFO,
             Priority::LOW,
@@ -2487,7 +2487,7 @@ OrchestrationComp::preload()
     registerExpectedConfiguration<string>("orchestration", "Policy file path");
     registerExpectedConfiguration<string>("orchestration", "Configuration path");
     registerExpectedConfiguration<string>("orchestration", "Configuration directory");
-    registerExpectedConfiguration<string>("orchestration", "Default opensophy directory");
+    registerExpectedConfiguration<string>("orchestration", "Default agent directory");
     registerExpectedConfiguration<string>("orchestration", "Configuration file extension");
     registerExpectedConfiguration<string>("orchestration", "Policy file extension");
     registerExpectedConfiguration<string>("orchestration", "Temp file extension");

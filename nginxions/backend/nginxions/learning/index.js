@@ -13,9 +13,9 @@ import { isPostgres } from "../../lib/config.js";
 import errs from "../../lib/error.js";
 import { global as logger } from "../../logger.js";
 import control from "../control/client.js";
-import { openTrials } from "../waf/trial.js";
 import { EVENT_TABLE } from "../events/store.js";
 import { scheduleRegenerate } from "../waf/policy.js";
+import { openTrials } from "../waf/trial.js";
 import * as appsec from "./appsec.js";
 import {
 	assetsOf,
@@ -28,12 +28,12 @@ import {
 	groupKey,
 	groupsOf,
 	hostStats,
-	mergeDecisions,
-	statsOf,
-	suggestionOf,
 	LEARNED_KINDS,
 	learnedFolders,
 	learnedOf,
+	mergeDecisions,
+	statsOf,
+	suggestionOf,
 } from "./model.js";
 import { LABEL_TABLE, parseLabel } from "./policy.js";
 

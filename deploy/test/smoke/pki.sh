@@ -254,6 +254,8 @@ fi
 
 # ------------------------------------------------- servers of NginxionS (docs/adr/0012-nodes.md, phase 15)
 step "Nodes: this server joins itself as a node with a one-time code (CSR, PKI, token, heartbeat), then is disabled"
+# the WAF on test.local: the agent of the node then reads its labels through the manager (step "learns through")
+ensure_waf_on
 node_answer=$(api_json -X POST "$ADMIN/api/nginxions/nodes" -d '{"name": "smoke-node", "labels": ["smoke"]}' | json)
 node_id=$(echo "$node_answer" | grep -o '"node":{"id":[0-9]*' | grep -o '[0-9]*$')
 node_code=$(echo "$node_answer" | grep -o '"code":"n-[0-9a-f]*\.[A-Za-z0-9_-]*"' | cut -d'"' -f4)
@@ -265,8 +267,9 @@ expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Content-Type: applicati
   "$ADMIN/api/nginxions/nodes/register" -d '{"code": "n-0000000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "csr_pem": "x"}')" \
   401 "register with an unknown code"
 # the backend of this server calls its own panel as its manager (the certificate of the panel is pinned)
+[ -n "${MANAGER_FINGERPRINT:-}" ] || fail "the test Manager fingerprint is required"
 member=$(api_json -X PUT "$ADMIN/api/nginxions/cluster/member" \
-  -d "{\"manager_url\": \"https://127.0.0.1:81\", \"code\": \"$node_code\"}" | json)
+  -d "{\"manager_url\": \"https://127.0.0.1:81\", \"code\": \"$node_code\", \"manager_fingerprint\": \"$MANAGER_FINGERPRINT\"}" | json)
 echo "$member" | grep -q '"joined":true' || fail "this server did not join itself: $member"
 echo "$member" | grep -q '"fingerprint":"[0-9A-F:]\{95\}"' || fail "no pinned fingerprint of the manager: $member"
 $CURL "$ADMIN/api/nginxions/nodes" | json | grep -q "\"id\":$node_id,[^}]*\"status\":\"active\"" \
@@ -280,6 +283,10 @@ expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: 
   "$ADMIN/api/nginxions/nodes/heartbeat")" 401 "a heartbeat with a wrong token"
 expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
   "$ADMIN/api/nginxions/nodes/package")" 401 "a package with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/learning/storage//x/tuning/decisions.data")" 401 "the storage of the manager with a wrong token"
+expect "$(curl -sS -k -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer nt_wrong' \
+  "$ADMIN/api/nginxions/nodes/learning/sync" -d '{}')" 401 "smartsync of the manager with a wrong token"
 
 step "Nodes: a host given to the node comes in its signed package; here its domain is taken, so it is left out and told"
 api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [$host_id]}" | json | grep -q "\[$host_id\]" \
@@ -287,13 +294,41 @@ api_json -X PUT "$ADMIN/api/nginxions/nodes/$node_id/hosts" -d "{\"host_ids\": [
 applied=""
 for _ in $(seq 1 30); do
   nodes_now=$($CURL "$ADMIN/api/nginxions/nodes" | json)
-  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":1' && { applied=1; break; }
+  # mtls.local is left out (its domain is taken here), and with it what only it needs (its certificate, if the PKI
+  # steps before took it): at least one thing skipped
+  echo "$nodes_now" | grep -q '"package_version":"[0-9a-f]\{64\}","package_skipped":[1-9]' && { applied=1; break; }
   sleep 2
 done
 [ -n "$applied" ] || fail "the package of the node was not applied: $nodes_now"
 echo "$nodes_now" | grep -q '"package_error":""' || fail "the package of the node has an error: $nodes_now"
+step "Nodes: an event of the node (an mTLS refusal after the join) comes to the manager with the id of the node"
+node_uid=$(echo "$node_code" | cut -d. -f1)
+# A new certificate has its own denial group and produces a fresh event after the join.
+client smoke-node-event Sales "$domain_id" > /dev/null
+expect "$(mtls --cert /tmp/smoke-node-event.crt --key /tmp/smoke-node-event.key)" 403 "the node's mTLS refusal"
+forwarded=""
+for _ in $(seq 1 60); do
+  $CURL "$ADMIN/api/nginxions/events?kind=mtls&period=1h&node=$node_uid&host=mtls.local&limit=5" \
+    | grep -q 'CN=smoke-node-event' \
+    && { forwarded=1; break; }
+  sleep 2
+done
+[ -n "$forwarded" ] || fail "no event of the node on the manager: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
 # the host of this server is still the one serving mtls.local (one row, not a copy)
 expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
+
+step "Nodes: the agent of the node learns through the manager (its relay, the shared storage of the manager)"
+# the join restarted the agent with the storage and smartsync of the manager (docs/adr/0012-nodes.md 5c); it reads the
+# labels of each WAF site every minute: through the relay of NginxionS, the pinned TLS of the node, the storage there
+learning=""
+for _ in $(seq 1 60); do
+  member=$($CURL "$ADMIN/api/nginxions/cluster/member" | json)
+  # the time of the last answer of the storage to the relay (not the heartbeat: "learning":{..., "last_ok_on":"..."})
+  echo "$member" | grep -q '"learning":{[^}]*"last_ok_on":"' && { learning=1; break; }
+  sleep 3
+done
+[ -n "$learning" ] || fail "the agent of the node did not reach the storage of the manager: $member"
+step "Nodes: the node is disabled on the manager, learns it with its heartbeat and leaves"
 $CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"
 # its next heartbeat (every 30 s) learns it was disabled
 disabled=""
@@ -302,5 +337,28 @@ for _ in $(seq 1 25); do
   sleep 2
 done
 [ -n "$disabled" ] || fail "the node did not learn it was disabled: $($CURL "$ADMIN/api/nginxions/cluster/member" | json)"
+# disabled on the manager (no active node: no smartsync here) and told so (no learning through a manager): each change
+# of the learning role restarts the agent, and nginxions with it, a few seconds later. Settled: the agent runs the
+# settings of the role now, and nginxions has stayed up for three checks in a row. The groups after this one need the
+# panel (a restart in the middle of the next group refused its requests)
+settled() {
+  last=""
+  same=0
+  for _ in $(seq 1 60); do
+    agent=$($CURL "$ADMIN/api/nginxions/waf/agent" 2>/dev/null || true)
+    now=$($CURL "$ADMIN/api/nginxions/services/nginxions" 2>/dev/null | grep -o '"startedAt": *"[^"]*"' || true)
+    if echo "$agent" | grep -q '"restartRequired": *false' && [ -n "$now" ] && [ "$now" = "$last" ]; then
+      same=$((same + 1))
+      [ "$same" -ge 3 ] && return 0
+    else
+      same=0
+    fi
+    last=$now
+    sleep 5
+  done
+  fail "the agent and nginxions did not settle after $1"
+}
+settled "the node was disabled"
 $CURL -X DELETE "$ADMIN/api/nginxions/cluster/member" | json | grep -q '"joined":false' || fail "leaving the manager failed"
 $CURL -X DELETE "$ADMIN/api/nginxions/nodes/$node_id" | grep -q true || fail "the disabled node was not deleted"
+settled "the node left"

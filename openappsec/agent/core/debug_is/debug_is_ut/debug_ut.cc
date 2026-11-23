@@ -317,7 +317,8 @@ TEST(DebugBaseTest, newTraceSpanDebugTest)
     EXPECT_NE("", i_env->getCurrentTrace());
 
     string trace_output = "[2016-11-13T17:31:24.087: " + trace_id.substr(0, 6) + ": "
-        + "Trace@trace.cc:36 "
+        // NginxionS: the lines of the debug messages of trace.cc and span.cc (their license headers were removed)
+        + "Trace@trace.cc:25 "
         + "                                   | >>>] New trace was created "
         + trace_id;
     EXPECT_THAT(debug_output.str(), HasSubstr(trace_output));
@@ -326,7 +327,7 @@ TEST(DebugBaseTest, newTraceSpanDebugTest)
         + trace_id.substr(0, 6)
         + "-"
         + span_id.substr(0, 6)
-        + ": Span@span.cc:49 "
+        + ": Span@span.cc:38 "
         + "                              | >>>] New span was created "
         + span_id
         + ", trace id "
@@ -1043,7 +1044,8 @@ TEST(DebugFogTest, fog_stream)
         "                    \"agentId\": \"Unknown\",\n"
         "                    \"issuingFunction\": \"handleThresholdReach\",\n"
         "                    \"issuingFile\": \"debug_streams.cc\",\n"
-        "                    \"issuingLine\": 364,\n"
+        // NginxionS: the line of handleThresholdReach in debug_streams.cc (its license header was removed)
+        "                    \"issuingLine\": 353,\n"
         "                    \"eventTraceId\": \"\",\n"
         "                    \"eventSpanId\": \"\",\n"
         "                    \"issuingEngineVersion\": \"\",\n"

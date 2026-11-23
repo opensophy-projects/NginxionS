@@ -12,11 +12,11 @@ import { ADMIN, VIEW } from "src/modules/Permissions";
 import { showError } from "src/notifications";
 import { downloadAudit, type EventQuery } from "../../api";
 import { useAudit } from "../../hooks";
-import { Popover } from "../../ui/Popover";
-import styles from "../WafEvents/Events.module.css";
-import hostStyles from "../Hosts/Hosts.module.css";
-import { SearchField } from "../../ui/SearchField";
 import { ExportMenu, Pager } from "../../ui/Lists";
+import { Popover } from "../../ui/Popover";
+import { SearchField } from "../../ui/SearchField";
+import hostStyles from "../Hosts/Hosts.module.css";
+import styles from "../WafEvents/Events.module.css";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 50;

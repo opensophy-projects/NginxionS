@@ -132,7 +132,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "$H" "$T/?cmd=;cat%20/etc/passwd"   
 
 Каждый push прогоняет `scripts/test-airgap.sh`: весь стек в сети без интернета, сценарии в `deploy/test/smoke.sh`.
 
-- Стек поднимается без интернета, ни один сервис не пытается выйти в облако (opensophy, CrowdSec Console/CAPI, Gravatar, проверка версий).
+- Стек поднимается без интернета, ни один сервис не пытается выйти в облако (облако производителя агента, CrowdSec Console/CAPI, Gravatar, проверка версий).
 - Прокси работает, upstream видит реальный IP клиента.
 - «Обзор → Сервисы»: список, логи, перезапуск postgres с переподключением, пересоздание nginx-конфигов, диагностический архив. `socket-proxy` и `nginxions-control` перезапустить нельзя.
 - Включение WAF переключателем в GUI (перезапуск nginxions с attachment).

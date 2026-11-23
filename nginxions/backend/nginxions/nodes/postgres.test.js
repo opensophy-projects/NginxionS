@@ -2,7 +2,10 @@
 // through member.js against a real HTTPS server in front of it (the pin of the certificate of the manager included).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { createHash, X509Certificate } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
+import http from "node:http";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,11 +26,100 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let member;
 	let server;
 	let managerUrl;
+	let managerFingerprint;
+	let registrationRequests = 0;
+	let modelAgent;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
+	// the shared storage and smartsync of the manager (step 15.4): what reaches them
+	const learned = [];
+	const storageFiles = new Map();
+	const fakeServices = [];
+	const fake = (name, answer) =>
+		new Promise((resolve) => {
+			const service = http.createServer((req, res) => {
+				const chunks = [];
+				req.on("data", (d) => chunks.push(d));
+				req.on("end", () => {
+					const body = Buffer.concat(chunks).toString();
+					learned.push({
+						name,
+						method: req.method,
+						url: req.url,
+						tenant: req.headers["x-tenant-id"],
+						body,
+					});
+					const [status, response] = answer(req, body);
+					res.writeHead(status, { "Content-Type": "application/json" });
+					res.end(response);
+				});
+			});
+			fakeServices.push(service);
+			service.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${service.address().port}`));
+		});
 
+	// nginxions-control of this server (step 15.5): what the agent learned, and the state restored
+	const agentLearned = { files: [] };
+	const restored = [];
 	before(async () => {
+		process.env.NGINXIONS_CONTROL_URL = await fake("control", (req) => {
+			if (modelAgent && req.url === "/v1/services/openappsec") return [200, JSON.stringify(modelAgent.service)];
+			if (modelAgent && req.url === "/v1/services/openappsec/restart") {
+				modelAgent.restarts++;
+				return modelAgent.restarts === 1
+					? [500, '{"error":"agent restart failed"}']
+					: [202, '{"restarted":false,"restarting":true}'];
+			}
+			if (req.url === "/v1/agent/learning/snapshot") return [200, JSON.stringify(agentLearned)];
+			if (req.url === "/v1/agent/learning") return [200, "[]"];
+			if (req.url === "/v1/services") {
+				return [
+					200,
+					JSON.stringify([
+						{ service: "openappsec", state: "running" },
+						{ service: "crowdsec", state: "exited" },
+					]),
+				];
+			}
+			if (/^\/v1\/services\/[a-z]+\/logs/.test(req.url)) {
+				return [
+					200,
+					JSON.stringify([{ stream: "stdout", line: `a line of ${req.url.split("/")[3]} token=SECRET` }]),
+				];
+			}
+			return [200, '{"restored": true}'];
+		});
+		writeFileSync(path.join(dir, "control_token"), "t");
+		process.env.NGINXIONS_CONTROL_TOKEN_FILE = path.join(dir, "control_token");
+		process.env.NGINXIONS_LEARNING_PROFILE_DIR = path.join(dir, "profiles");
+		process.env.NGINXIONS_APPSEC_MODEL_DIR = path.join(dir, "model");
+		process.env.NGINXIONS_NODE_LOGS_DIR = path.join(dir, "node-logs");
+		process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR = path.join(dir, "snapshots");
+		process.env.NGINXIONS_APPSEC_STORAGE_URL = await fake("storage", (req, body) => {
+			const url = new URL(req.url, "http://storage");
+			if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
+				const prefix = url.searchParams.get("prefix") ?? "";
+				const keys = [...storageFiles.keys()]
+					.filter((file) => file.startsWith(prefix))
+					.map((file) => `<Contents><Key>${file}</Key></Contents>`)
+					.join("");
+				return [200, `<ListBucketResult>${keys}</ListBucketResult>`];
+			}
+			const file = decodeURIComponent(url.pathname.slice(4));
+			if (req.method === "PUT") storageFiles.set(file, body);
+			if (req.method === "DELETE") {
+				storageFiles.delete(file);
+				return [204, ""];
+			}
+			if (req.method === "GET" && storageFiles.has(file)) return [200, storageFiles.get(file)];
+			return req.url.includes("missing") ? [404, "{}"] : [200, '{"stored": true}'];
+		});
+		process.env.NGINXIONS_APPSEC_SMARTSYNC_URL = await fake("smartsync", () => [200, ""]);
+		// the settings file of the agent (its learning role): never /ext of the machine running the tests
+		process.env.NGINXIONS_APPSEC_POLICY_FILE = path.join(dir, "appsec", "local_policy.yaml");
 		process.env.NGINXIONS_SECRET_KEY_FILE = path.join(dir, "secret.key");
 		process.env.NGINXIONS_MEMBER_FILE = path.join(dir, "cluster", "member.json");
+		// the signing key of the manager (step 15.2): never /data of the machine running the tests
+		process.env.NGINXIONS_SIGNING_KEY_FILE = path.join(dir, "manager-signing.key");
 		knex = await freshDatabase("nodes");
 		// the routes load the PKI in its order (it has a cycle with mTLS when imported alone)
 		await import("../routes.js");
@@ -51,28 +143,98 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			"-subj",
 			"/CN=manager.test",
 		]);
+		const panelCert = readFileSync(path.join(dir, "panel.crt"));
+		managerFingerprint = new X509Certificate(panelCert).fingerprint256;
 		server = https.createServer(
-			{ key: readFileSync(path.join(dir, "panel.key")), cert: readFileSync(path.join(dir, "panel.crt")) },
+			{
+				key: readFileSync(path.join(dir, "panel.key")),
+				cert: panelCert,
+				// as nginx on the channel of the nodes: the certificate is asked for, the backend judges it
+				requestCert: true,
+				rejectUnauthorized: false,
+			},
 			(req, res) => {
-				let raw = "";
-				req.on("data", (d) => {
-					raw += d;
-				});
+				if (req.method === "POST" && req.url === "/api/nginxions/nodes/register") registrationRequests++;
+				const chunks = [];
+				req.on("data", (d) => chunks.push(d));
 				req.on("end", async () => {
-					const body = JSON.parse(raw || "{}");
+					// an error of the manager is an answer (500 with its message), never a request left without one
+					try {
+						await answerOf(Buffer.concat(chunks));
+					} catch (err) {
+						res.writeHead(500, { "Content-Type": "application/json" });
+						res.end(JSON.stringify({ error: { code: 500, message: String(err.message) } }));
+					}
+				});
+				// the token and the certificate the node showed (nginx passes it to the backend)
+				const token = () => {
+					const raw = req.socket.getPeerCertificate?.()?.raw;
+					const cert = raw
+						? `-----BEGIN CERTIFICATE-----\n${raw
+								.toString("base64")
+								.match(/.{1,64}/g)
+								.join("\n")}\n-----END CERTIFICATE-----\n`
+						: null;
+					return { token: /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1], cert };
+				};
+				const answerOf = async (raw) => {
+					// the learning routes (bytes in and out), as routes.js has them: the path not normalized
+					const [pathname, search = ""] = req.url.split(/\?(.*)/s);
+					const storagePrefix = "/api/nginxions/nodes/learning/storage";
+					if (pathname.startsWith(storagePrefix) || pathname === "/api/nginxions/nodes/learning/sync") {
+						const answer = pathname.startsWith(storagePrefix)
+							? await nodes.learningStorage(token(), {
+									method: req.method,
+									rawPath: pathname.slice(storagePrefix.length),
+									query: new URLSearchParams(search),
+									body: raw,
+								})
+							: await nodes.learningSync(token(), raw);
+						if (!answer) {
+							res.writeHead(401);
+							return res.end();
+						}
+						res.writeHead(answer.status, { "Content-Type": answer.type });
+						return res.end(answer.body);
+					}
+					const body = JSON.parse(raw.toString() || "{}");
 					let answer = null;
 					if (req.url === "/api/nginxions/nodes/register")
 						answer = await nodes.register(body, "198.51.100.7");
-					if (req.url === "/api/nginxions/nodes/package") {
-						answer = await nodes.package(/^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1]);
+					if (req.url === "/api/nginxions/nodes/events") answer = await nodes.events(token(), body.events);
+					if (req.url === "/api/nginxions/nodes/requests")
+						answer = await nodes.requests(token(), body.requests);
+					if (req.url === "/api/nginxions/nodes/bans")
+						answer =
+							req.method === "GET"
+								? await nodes.clusterBans(token())
+								: await nodes.shareBans(token(), body.bans);
+					if (req.url === "/api/nginxions/nodes/package") answer = await nodes.package(token());
+					if (req.url === "/api/nginxions/nodes/logs") answer = await nodes.storeLogs(token(), body.logs);
+					if (req.url === "/api/nginxions/nodes/model") {
+						const model = await nodes.wafModel(token());
+						if (model?.file) {
+							res.writeHead(200, { "Content-Type": "application/gzip" });
+							return res.end(readFileSync(model.file));
+						}
+						res.writeHead(model ? 404 : 401);
+						return res.end();
+					}
+					if (req.url === "/api/nginxions/nodes/learning/profile") {
+						const profile = await nodes.learningProfile(token());
+						if (profile?.bytes) {
+							res.writeHead(200, { "Content-Type": "application/gzip" });
+							return res.end(profile.bytes);
+						}
+						res.writeHead(profile ? 404 : 401);
+						return res.end();
 					}
 					if (req.url === "/api/nginxions/nodes/heartbeat") {
-						const token = /^Bearer\s+(\S+)$/.exec(req.headers.authorization || "")?.[1];
-						answer = await nodes.heartbeat(token, body.info, "198.51.100.7");
+						answer = await nodes.heartbeat(token(), body.info, "198.51.100.7");
 					}
 					res.writeHead(answer ? 200 : 401, { "Content-Type": "application/json" });
 					res.end(JSON.stringify(answer ?? { error: { code: 401, message: "Unknown" } }));
-				});
+				};
 			},
 		);
 		await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -80,7 +242,86 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	});
 	after(async () => {
 		server?.close();
+		for (const service of fakeServices) service.close();
+		await (await import("./relay.js")).stopRelay();
 		await knex?.destroy();
+	});
+
+	test("the thresholds of the learning of the nodes: saved in the GUI, written for smartsync", async () => {
+		const { default: clusterSettings } = await import("./cluster-settings.js");
+		assert.deepEqual(await clusterSettings.get(VIEWER), {
+			minSources: 3,
+			minSourcesTypes: 10,
+			minIntervals: 5,
+			ratioThreshold: 0.8,
+		});
+		const next = { minSources: 4, minSourcesTypes: 12, minIntervals: 6, ratioThreshold: 0.7 };
+		await assert.rejects(() => clusterSettings.set(VIEWER, next), /forbidden: waf_learning:sync/);
+		assert.deepEqual(await clusterSettings.set(ADMIN, next), next);
+		assert.deepEqual(JSON.parse(readFileSync(path.join(dir, "appsec", "nginxions-smartsync.json"), "utf8")), next);
+		await assert.rejects(() => clusterSettings.set(ADMIN, { ...next, minSources: 1 }), /sources 2–1000/);
+	});
+
+	test("model sync retries a failed restart without downloading again and waits for the agent", async (t) => {
+		const { installManagerModel } = await import("../waf/agent-settings.js");
+		const { MODEL_DIR, MODEL_FILE, PREVIOUS_FILE } = await import("../waf/model-file.js");
+		modelAgent = {
+			restarts: 0,
+			service: { state: "running", health: "healthy", startedAt: "2000-01-01T00:00:00Z" },
+		};
+		t.after(() => {
+			modelAgent = undefined;
+			rmSync(MODEL_FILE, { force: true });
+			rmSync(PREVIOUS_FILE, { force: true });
+		});
+		const previous = gzipSync("the model running now");
+		const model = gzipSync("the model from the manager");
+		const originalHash = createHash("sha256").update(previous).digest("hex");
+		const ref = { sha256: createHash("sha256").update(model).digest("hex"), size: model.length };
+		mkdirSync(MODEL_DIR, { recursive: true });
+		writeFileSync(MODEL_FILE, previous);
+		let downloads = 0;
+		const install = (_fetchFromManager, sha256) =>
+			installManagerModel(async (file) => {
+				downloads++;
+				writeFileSync(file, model);
+			}, sha256);
+		let state = { model_sha256: originalHash };
+		const sync = async () => {
+			state = { ...state, ...(await member.syncModel(state, ref, { install })) };
+		};
+
+		await sync();
+		assert.match(state.model_error, /agent restart failed/);
+		assert.equal(state.model_sha256, originalHash);
+		assert.equal(modelAgent.restarts, 1);
+		assert.equal(downloads, 1);
+		assert.deepEqual(readFileSync(MODEL_FILE), model);
+		assert.deepEqual(readFileSync(PREVIOUS_FILE), previous);
+		const { ctimeMs } = statSync(MODEL_FILE);
+
+		await sync();
+		assert.equal(modelAgent.restarts, 2, "retry the restart of the already written model");
+		assert.equal(downloads, 1);
+		assert.equal(statSync(MODEL_FILE).ctimeMs, ctimeMs);
+		assert.equal(state.model_restart_pending, true);
+		assert.equal(state.model_sha256, originalHash, "a queued restart is not confirmation");
+
+		modelAgent.service.startedAt = new Date(ctimeMs + 1000).toISOString();
+		modelAgent.service.health = "starting";
+		await sync();
+		assert.equal(state.model_restart_pending, true);
+		assert.equal(state.model_sha256, originalHash, "wait for health after the restart");
+		assert.equal(modelAgent.restarts, 2);
+
+		modelAgent.service.health = "healthy";
+		await sync();
+		assert.equal(state.model_sha256, ref.sha256);
+		assert.equal(state.model_restart_pending, false);
+		assert.equal(state.model_error, "");
+		assert.equal(modelAgent.restarts, 2);
+		assert.equal(downloads, 1);
+		assert.deepEqual(readFileSync(PREVIOUS_FILE), previous);
 	});
 
 	test("a viewer sees the list but adds no node", async () => {
@@ -88,17 +329,52 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await assert.rejects(() => nodes.add(VIEWER, { name: "edge-1" }), /forbidden: nodes:manage/);
 	});
 
-	test("a node joins with its code: certificate from the PKI, token, heartbeat, the code works once", async () => {
+	test("join sends no registration request when the Manager fingerprint is missing or malformed", async () => {
+		const { newCode, newUid } = await import("./model.js");
+		const data = { manager_url: managerUrl, code: newCode(newUid()) };
+		await assert.rejects(() => member.default.join(ADMIN, data), /verified SHA-256 fingerprint/);
+		for (const fingerprint of ["", "AA:BB", "G".repeat(64), 123]) {
+			await assert.rejects(
+				() => member.default.join(ADMIN, { ...data, manager_fingerprint: fingerprint }),
+				/verified SHA-256 fingerprint/,
+			);
+		}
+		assert.equal(registrationRequests, 0);
+		assert.equal(await member.readState(), null);
+	});
+
+	test("join sends no registration request when the Manager fingerprint differs", async () => {
+		const { newCode, newUid } = await import("./model.js");
+		const differentFingerprint = (managerFingerprint[0] === "0" ? "1" : "0") + managerFingerprint.slice(1);
+		await assert.rejects(
+			() =>
+				member.default.join(ADMIN, {
+					manager_url: managerUrl,
+					code: newCode(newUid()),
+					manager_fingerprint: differentFingerprint,
+				}),
+			/the certificate of the manager changed/,
+		);
+		assert.equal(registrationRequests, 0);
+		assert.equal(await member.readState(), null);
+	});
+
+	test("a node joins with a matching Manager fingerprint: certificate from the PKI, token, heartbeat, one-time code", async (t) => {
 		const { node, code } = await nodes.add(ADMIN, { name: "edge-1", labels: ["EU", "edge"] });
 		assert.equal(node.state, "pending");
 		assert.deepEqual(node.labels, ["eu", "edge"]);
 		await assert.rejects(() => nodes.add(ADMIN, { name: "edge-1" }), /exists/);
 
-		const status = await member.default.join(ADMIN, { manager_url: managerUrl, code });
+		const status = await member.default.join(ADMIN, {
+			manager_url: managerUrl,
+			code,
+			manager_fingerprint: managerFingerprint.replaceAll(":", "").toLowerCase(),
+		});
+		assert.equal(registrationRequests, 1);
 		assert.equal(status.joined, true);
 		assert.equal(status.uid, node.uid);
 		assert.equal(status.name, "edge-1");
-		assert.match(status.fingerprint, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+		assert.equal(status.fingerprint, managerFingerprint);
 
 		const [row] = await nodes.list(ADMIN);
 		assert.equal(row.status, "active");
@@ -114,7 +390,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 
 		// the code is spent
 		await assert.rejects(
-			() => member.default.join(ADMIN, { manager_url: managerUrl, code }),
+			() =>
+				member.default.join(ADMIN, { manager_url: managerUrl, code, manager_fingerprint: managerFingerprint }),
 			/joined|node of a manager/,
 		);
 		assert.equal(await nodes.register({ code, csr_pem: "x" }), null);
@@ -122,13 +399,438 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await member.beat();
 		const state = await member.readState();
 		assert.equal(state.last_error, "");
+		// the channel (step 15.2): the token alone, or with a certificate that is not the one of the node, is refused
+		const { decrypt } = await import("../secrets.js");
+		const realToken = decrypt(state.token_enc);
+		assert.equal(await nodes.heartbeat({ token: realToken, cert: null }, {}), null);
+		assert.equal(
+			await nodes.heartbeat({ token: realToken, cert: readFileSync(path.join(dir, "panel.crt"), "utf8") }, {}),
+			null,
+		);
+		assert.ok(await nodes.heartbeat({ token: realToken, cert: state.cert_pem }, {}), "its own certificate passes");
 		// the key of the manager is pinned, the (empty) package of the node is applied and its version told
 		assert.match(state.signing_key, /BEGIN PUBLIC KEY/);
 		assert.match(state.applied_version, /^[0-9a-f]{64}$/);
 		assert.equal(state.package_error, "");
+		// an event of this server after the join goes to the manager with the id of the node (one database here: the
+		// manager keeps it as a second row)
+		const { classify } = await import("../events/normalize.js");
+		const { store } = await import("../events/store.js");
+		const { row: event } = classify({
+			eventTime: new Date().toISOString().replace("Z", ""),
+			eventName: "Web Request",
+			eventSeverity: "Critical",
+			eventSource: { serviceName: "HTTP Transaction Handler", assetName: "shop.example.com" },
+			eventData: { securityAction: "Prevent", waapIncidentType: "SQL Injection", sourceIP: "198.51.100.20" },
+		});
+		await store({ events: [event], telemetry: [], cursors: [] });
 		await member.beat();
 		assert.equal((await nodes.list(ADMIN))[0].info.package_version, state.applied_version);
+		const copies = await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" });
+		assert.deepEqual(copies.map((e) => e.node_id).sort(), ["local", node.uid].sort());
+		assert.equal((await member.readState()).events_error, "");
+		// sent once: the next heartbeat sends nothing again
+		await member.beat();
+		assert.equal((await knex("nginxions_security_event").where({ source_ip: "198.51.100.20" })).length, 2);
+		// a request of this server after the join: its row and its hourly counts come to the manager with the id of
+		// the node (step 15.3)
+		const reqTime = new Date();
+		await store({
+			events: [],
+			telemetry: [],
+			cursors: [],
+			requestLog: [
+				{ time: reqTime, host: "shop.example.com", ip: "198.51.100.21", path: "/", status: 200, bytes: 10 },
+			],
+			requests: [],
+			countries: [],
+		});
+		await member.beat();
+		const reqCopies = await knex("nginxions_request_log").where({ ip: "198.51.100.21" });
+		assert.deepEqual(reqCopies.map((r) => r.node_id).sort(), ["local", node.uid].sort());
+		const hourly = await knex("nginxions_request_hourly").where({ node_id: node.uid, host: "shop.example.com" });
+		assert.equal(Number(hourly[0]?.requests), 1);
+		assert.equal((await member.readState()).requests_error, "");
+		await member.beat();
+		assert.equal((await knex("nginxions_request_log").where({ ip: "198.51.100.21" })).length, 2, "sent once");
+		// shared bans (step 15.3): a ban of CrowdSec here goes to the manager, which holds it, and comes back to the
+		// node as a ban of the cluster (one CrowdSec in the test, replaced)
+		const { CLUSTER_ORIGIN, io: bansIo, versionOfBans } = await import("../crowdsec/cluster-bans.js");
+		const pushed = [];
+		Object.assign(bansIo, {
+			decisions: async () => [
+				{
+					id: 1,
+					origin: "crowdsec",
+					scope: "Ip",
+					value: "198.51.100.30",
+					type: "ban",
+					duration: "3h59m0s",
+					scenario: "crowdsecurity/ssh-bf",
+				},
+			],
+			push: async (list) => pushed.push(...list),
+			remove: async () => {},
+		});
+		await member.beat();
+		const shared = await knex("nginxions_cluster_ban").where({ origin: node.uid });
+		assert.deepEqual(
+			shared.map((b) => b.value),
+			["198.51.100.30"],
+		);
+		assert.ok(pushed.some((p) => p.value === "198.51.100.30" && p.type === "ban"));
+		assert.equal((await member.readState()).bans_error, "");
+		// The manager advertised an empty list, then returned a ban created before the fetch. A subsequent
+		// empty list must be fetched again if that ban is lifted before the next heartbeat.
+		const emptyBansVersion = versionOfBans([]);
+		const bansState = await member.readState();
+		const synced = await member.syncBans(bansState, emptyBansVersion);
+		assert.equal(synced.bans_error, "");
+		assert.notEqual(synced.bans_version, emptyBansVersion);
+		const held = { ...pushed.at(-1), id: 2, origin: CLUSTER_ORIGIN };
+		const decisions = t.mock.method(bansIo, "decisions", async () => [held]);
+		const remove = t.mock.method(bansIo, "remove", async () => {});
+		const unbanned = await member.syncBans(
+			{ ...bansState, ...synced, bans_sent: emptyBansVersion },
+			emptyBansVersion,
+		);
+		assert.equal(unbanned.bans_error, "");
+		assert.equal(unbanned.bans_version, emptyBansVersion);
+		assert.deepEqual(
+			remove.mock.calls.map(({ arguments: args }) => args),
+			[[held.id]],
+		);
+		decisions.mock.restore();
+		remove.mock.restore();
 		assert.equal((await nodes.list(ADMIN))[0].info.version.length > 0, true);
+		// the rollout: the package the node applied, once (later heartbeats with the same version add nothing)
+		const rollout = await nodes.rollout(VIEWER);
+		assert.deepEqual(
+			rollout.map((r) => [r.kind, r.result, r.version, r.node_name]),
+			[["package", "applied", state.applied_version, "edge-1"]],
+		);
+		assert.deepEqual(await nodes.rollout(VIEWER, { node_id: row.id + 1000 }), []);
+		// a package the node refused, then undone on the manager: the package offered is the one applied here again,
+		// the error goes (the node does not wait for a new version to say all is well)
+		const memberFile = process.env.NGINXIONS_MEMBER_FILE;
+		const refused = {
+			...(await member.readState()),
+			failed_version: "f".repeat(64),
+			package_error: "nginx: refused",
+		};
+		writeFileSync(memberFile, JSON.stringify(refused));
+		await member.beat();
+		const cleared = await member.readState();
+		assert.equal(cleared.package_error, "");
+		assert.equal(cleared.failed_version, "");
+		assert.equal(cleared.applied_version, state.applied_version);
+		// a command: waits for the heartbeat, the node does it (restarts its agent), the next heartbeat tells it
+		await assert.rejects(() => nodes.command(VIEWER, row.id, "restart_agent"), /forbidden: nodes:manage/);
+		await assert.rejects(() => nodes.command(ADMIN, row.id, "format_disk"), /Unknown command/);
+		assert.deepEqual((await nodes.command(ADMIN, row.id, "restart_agent")).command.action, "restart_agent");
+		learned.length = 0;
+		await member.beat();
+		assert.ok(
+			learned.some((r) => r.name === "control" && r.method === "POST" && r.url.includes("openappsec")),
+			"the agent of the node was restarted",
+		);
+		assert.match((await member.readState()).command_done, /^[0-9a-f]{16}$/);
+		await member.beat();
+		assert.equal((await nodes.list(ADMIN))[0].command, null);
+		const [done] = await nodes.rollout(VIEWER);
+		assert.deepEqual([done.kind, done.version, done.result], ["command", "restart_agent", "applied"]);
+		// the services of the node in its heartbeat; its logs on demand, collected with the next heartbeat
+		assert.deepEqual((await nodes.list(ADMIN))[0].info.services, { openappsec: "running", crowdsec: "exited" });
+		assert.equal(await nodes.logs(ADMIN, row.id), null);
+		await nodes.command(ADMIN, row.id, "collect_logs");
+		await member.beat();
+		const logs = await nodes.logs(ADMIN, row.id);
+		assert.deepEqual(Object.keys(logs.logs).sort(), ["crowdsec", "openappsec"]);
+		assert.match(logs.logs.openappsec[0].line, /^a line of openappsec/);
+		await assert.rejects(() => nodes.logs(VIEWER, row.id), /forbidden: services:view/);
+		assert.equal(await nodes.storeLogs("n-unknown.token", {}), null);
+		// a manager with a node: the learning of the cluster from its storage (empty here)
+		assert.deepEqual(await nodes.clusterLearning(VIEWER), { available: true, assets: [], error: "" });
+	});
+
+	test("the agent of the node learns through the manager: its relay, the storage and smartsync there", async () => {
+		// the role in the settings of the agent: through the manager (a node) and smartsync (this manager has a node)
+		const env = readFileSync(path.join(dir, "appsec", "nginxions-agent.env"), "utf8");
+		assert.match(env, /^NGINXIONS_LEARNING_VIA=manager$/m);
+		assert.match(env, /^NGINXIONS_SMARTSYNC=true$/m);
+
+		const relay = await import("./relay.js");
+		const [storagePort, syncPort] = await relay.startRelay({ storagePort: 0, syncPort: 0 });
+		const { uid } = await member.readState();
+		// the agent sends its path as it is (no URL normalization, as fetch would do with ".." and "%2e%2e")
+		const agent = (port, method, urlPath, body) =>
+			new Promise((resolve, reject) => {
+				const req = http.request({ host: "127.0.0.1", port, method, path: urlPath }, (res) => {
+					const chunks = [];
+					res.on("data", (d) => chunks.push(d));
+					res.on("end", () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString() }));
+				});
+				req.on("error", reject);
+				req.end(body);
+			});
+		learned.length = 0;
+		// the data of a window: under the id of the node, whatever the agent calls itself
+		let answer = await agent(
+			storagePort,
+			"PUT",
+			"/api//shop/Indicators/Confidence/window_0_1/agent-a/data.data0",
+			'{"w":1}',
+		);
+		assert.equal(answer.status, 200, answer.text);
+		assert.deepEqual(learned.at(-1), {
+			name: "storage",
+			method: "PUT",
+			url: `/api/shop/Indicators/Confidence/window_0_1/${uid}/agent-a/data.data0`,
+			tenant: "local",
+			body: '{"w":1}',
+		});
+		// reads: the state put together and the labels of the manager; a file not there yet is the 404 of the storage
+		answer = await agent(storagePort, "GET", "/api/?list-type=2&prefix=/shop/Indicators/Confidence/remote");
+		assert.equal(answer.status, 200);
+		assert.equal(learned.at(-1).url, "/api/?list-type=2&prefix=%2Fshop%2FIndicators%2FConfidence%2Fremote");
+		assert.equal((await agent(storagePort, "GET", "/api//shop/tuning/missing.data")).status, 404);
+		// the state put together, the processed state of an agent, the labels: never written by a node
+		const before = learned.length;
+		for (const file of ["remote/confidence.data", "processed/confidence.data"]) {
+			answer = await agent(storagePort, "PUT", `/api//shop/Indicators/Confidence/${file}`, "{}");
+			assert.equal(answer.status, 403, file);
+		}
+		assert.equal((await agent(storagePort, "PUT", "/api//shop/tuning/decisions.data", "[]")).status, 403);
+		assert.equal((await agent(storagePort, "GET", "/api//shop/../../etc/passwd")).status, 400);
+		assert.equal(learned.length, before, "nothing refused reached the storage");
+		// the notification to smartsync: its fields only
+		answer = await agent(
+			syncPort,
+			"POST",
+			"/api/sync",
+			JSON.stringify({ assetId: "shop", type: "Indicators/Confidence", windowId: "window_0_1", x: 1 }),
+		);
+		assert.equal(answer.status, 200, answer.text);
+		assert.deepEqual(
+			{ ...learned.at(-1), body: JSON.parse(learned.at(-1).body) },
+			{
+				name: "smartsync",
+				method: "POST",
+				url: "/api/sync",
+				tenant: "local",
+				body: { assetId: "shop", type: "Indicators/Confidence", windowId: "window_0_1" },
+			},
+		);
+		assert.equal((await agent(syncPort, "POST", "/api/sync", "{}")).status, 400);
+		assert.equal((await agent(syncPort, "GET", "/health/live")).status, 404);
+		// the state of the node shows what its relay did last
+		const status = await member.default.status(ADMIN);
+		assert.ok(status.learning.last_ok_on);
+		assert.equal(status.learning.requests > 5, true);
+	});
+
+	test("a snapshot with an empty cluster replaces all remote files and keeps a backup", async (t) => {
+		const { default: snapshots, loadSnapshot } = await import("../learning/snapshots.js");
+		storageFiles.clear();
+		t.after(() => storageFiles.clear());
+		const processed = "/shop/Type/processed/data.data";
+		const later = "/new-asset/Type/remote/data.data";
+		storageFiles.set(processed, "processed");
+		const empty = await snapshots.take(ADMIN);
+		const archive = await snapshots.download(ADMIN, empty.id);
+		const imported = await snapshots.upload(ADMIN, archive.content);
+		assert.deepEqual((await loadSnapshot(imported.id)).cluster, []);
+
+		storageFiles.set(later, "created after the snapshot");
+		const withoutSync = {
+			...ADMIN,
+			can: async (permission) => {
+				if (permission === "waf_learning:sync") throw new Error(`forbidden: ${permission}`);
+			},
+		};
+		await assert.rejects(() => snapshots.restore(withoutSync, imported.id), /forbidden: waf_learning:sync/);
+		assert.equal(storageFiles.get(later), "created after the snapshot");
+
+		const { before, cluster } = await snapshots.restore(ADMIN, imported.id);
+		assert.equal(cluster, 0);
+		assert.deepEqual([...storageFiles], [[processed, "processed"]]);
+		assert.deepEqual((await loadSnapshot(before)).cluster, [
+			{ path: later, content: Buffer.from("created after the snapshot").toString("base64") },
+		]);
+	});
+
+	test("restoring a legacy snapshot without a cluster leaves remote files alone", async (t) => {
+		const { default: snapshots, FORMAT, loadSnapshot } = await import("../learning/snapshots.js");
+		storageFiles.clear();
+		t.after(() => storageFiles.clear());
+		const remote = "/shop/Type/remote/data.data";
+		storageFiles.set(remote, "current");
+		const legacy = await snapshots.upload(
+			ADMIN,
+			gzipSync(JSON.stringify({ format: FORMAT, version: 1, files: [] })),
+		);
+		assert.equal(Object.hasOwn(await loadSnapshot(legacy.id), "cluster"), false);
+		const access = {
+			...ADMIN,
+			can: async (permission) => {
+				assert.notEqual(permission, "waf_learning:sync");
+			},
+		};
+
+		const result = await snapshots.restore(access, legacy.id);
+		assert.equal(result.restored, legacy.id);
+		assert.deepEqual([...storageFiles], [[remote, "current"]]);
+	});
+
+	test("a new node starts with the learning profile of its manager, never over what it learned", async () => {
+		const { default: profiles } = await import("../learning/profiles.js");
+		const gz = (text) => gzipSync(JSON.stringify(text)).toString("base64");
+		const [{ id: shop }] = await knex("proxy_host")
+			.insert({
+				created_on: new Date(),
+				modified_on: new Date(),
+				owner_user_id: 1,
+				is_deleted: 0,
+				domain_names: JSON.stringify(["shop.example.com"]),
+				forward_host: "upstream",
+				forward_port: 80,
+				enabled: 1,
+				meta: "{}",
+				locations: "[]",
+			})
+			.returning("id");
+		// what the agent of the manager learned: the shop (its API location too) and another site
+		agentLearned.files = [
+			{ asset: "shop.example.com", name: "5.data", content: gz({ learned: "shop" }) },
+			{ asset: "shop.example.com/api", name: "4.data", content: gz({ learned: "api" }) },
+			{ asset: "other.example.com", name: "5.data", content: gz({ learned: "other" }) },
+		];
+		await assert.rejects(() => profiles.create(VIEWER, { name: "shop", host_ids: [shop] }), /forbidden/);
+		await assert.rejects(() => profiles.create(ADMIN, { name: "a/b", host_ids: [shop] }), /name of the profile/);
+		const meta = await profiles.create(ADMIN, { name: "Shop prod", host_ids: [shop] });
+		assert.equal(meta.files, 2, "the files of the site only");
+		assert.equal(meta.own, true);
+		assert.deepEqual(meta.sites, [{ domains: ["shop.example.com"] }]);
+		// the file: downloaded, uploaded again is the same profile
+		const file = await profiles.download(ADMIN, meta.id);
+		await assert.rejects(() => profiles.upload(ADMIN, file.content), /here already/);
+		await assert.rejects(() => profiles.upload(ADMIN, Buffer.from("junk")), /not a learning profile/);
+
+		// the node serves the shop; the profile for new nodes is in its package, by version
+		const [row] = await nodes.list(ADMIN);
+		await nodes.setHosts(ADMIN, row.id, [shop]);
+		const { contentOf } = await import("./package.js");
+		assert.equal((await contentOf(row.id)).learning_profile, undefined);
+		await profiles.setForNewNodes(ADMIN, meta.id, true);
+		assert.deepEqual((await contentOf(row.id)).learning_profile, { id: meta.id, version: meta.version });
+
+		// the node has learned the API location of the shop itself: nothing of the shop is replaced
+		agentLearned.files = [{ asset: "shop.example.com/api", name: "4.data", content: gz({ own: 1 }) }];
+		learned.length = 0;
+		const state = await member.readState();
+		let change = await member.fetchProfile(state, { id: meta.id, version: meta.version });
+		assert.deepEqual(change, { profile_version: meta.version, profile_assets: 0, profile_error: "" });
+		assert.equal(learned.filter((r) => r.url === "/v1/agent/learning/restore").length, 0);
+
+		// a node that learned nothing of it: the site is filled, what else it learned stays
+		agentLearned.files = [{ asset: "blog.example.com", name: "5.data", content: gz({ own: 2 }) }];
+		change = await member.fetchProfile({ ...state, profile_version: "" }, { id: meta.id, version: meta.version });
+		assert.equal(change.profile_assets, 1, change.profile_error);
+		const restore = learned.find((r) => r.url === "/v1/agent/learning/restore");
+		assert.deepEqual(
+			JSON.parse(restore.body)
+				.files.map((f) => `${f.asset}/${f.name}`)
+				.sort(),
+			["blog.example.com/5.data", "shop.example.com/5.data", "shop.example.com/api/4.data"],
+		);
+		// the same version again: nothing fetched
+		assert.deepEqual(await member.fetchProfile({ ...state, profile_version: meta.version }, meta), {});
+
+		// a profile signed by another key than the one the node pinned is refused
+		const other = await member.fetchProfile(
+			{
+				...state,
+				profile_version: "",
+				signing_key: (await import("node:crypto"))
+					.generateKeyPairSync("ed25519")
+					.publicKey.export({ type: "spki", format: "pem" }),
+			},
+			{ id: meta.id, version: meta.version },
+		);
+		assert.match(other.profile_error, /not signed by the manager/);
+
+		// applied here, for the sites of these hosts; then off for new nodes and deleted
+		agentLearned.files = [];
+		const applied = await profiles.apply(ADMIN, meta.id, { host_ids: [shop] });
+		assert.deepEqual(applied.assets, ["shop.example.com"]);
+		await assert.rejects(() => profiles.apply(ADMIN, meta.id, { with_policy: true }), /carries no WAF policy/);
+
+		// with the WAF of its sites (step 15.5): the mode of the shop goes with it and comes back when applied
+		agentLearned.files = [{ asset: "shop.example.com", name: "5.data", content: gz({ learned: "shop" }) }];
+		await knex("nginxions_waf_host").insert({
+			proxy_host_id: shop,
+			enabled: true,
+			mode: "prevent-learn",
+			minimum_confidence: "high",
+			modified_on: new Date(),
+		});
+		const withPolicy = await profiles.create(ADMIN, { name: "Shop with WAF", host_ids: [shop], with_policy: true });
+		assert.deepEqual(withPolicy.policy, { sites: 1, objects: 0 });
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
+		agentLearned.files = [];
+		const back = await profiles.apply(ADMIN, withPolicy.id, { with_policy: true });
+		assert.deepEqual(back.policy, { sites: 1, created: [], missing: [], notFound: [] });
+		assert.equal((await knex("nginxions_waf_host").where({ proxy_host_id: shop }).first()).mode, "prevent-learn");
+		await profiles.remove(ADMIN, withPolicy.id);
+		await profiles.setForNewNodes(ADMIN, meta.id, false);
+		assert.equal(await nodes.learningProfile("x"), null);
+		await nodes.setHosts(ADMIN, row.id, []);
+		await profiles.remove(ADMIN, meta.id);
+		assert.deepEqual((await profiles.list(ADMIN)).profiles, []);
+	});
+
+	test("the model of the agent of the manager goes to its nodes, checked by its hash", async () => {
+		const { MODEL_FILE } = await import("../waf/model-file.js");
+		const [row] = await nodes.list(ADMIN);
+		const { contentOf } = await import("./package.js");
+		assert.equal((await contentOf(row.id)).waf_model, undefined, "no model uploaded: the model of the image");
+		// a model uploaded on the manager: its hash and size are in the signed package of every node
+		const model = gzipSync(Buffer.from("a model of the agent".repeat(1000)));
+		mkdirSync(path.dirname(MODEL_FILE), { recursive: true });
+		writeFileSync(MODEL_FILE, model);
+		const sha256 = createHash("sha256").update(model).digest("hex");
+		const ref = (await contentOf(row.id)).waf_model;
+		assert.deepEqual(ref, { sha256, size: model.length });
+
+		// the node fetches it over its pinned channel into a file, as the package names it
+		const state = await member.readState();
+		let fetched = null;
+		const install = async (fetchTo, wanted) => {
+			const file = path.join(dir, "model-of-the-node.tgz");
+			await fetchTo(file);
+			fetched = { bytes: readFileSync(file), wanted };
+			return { applied: true };
+		};
+		let change = await member.syncModel({ ...state, model_sha256: "" }, ref, { install });
+		assert.deepEqual(change, { model_sha256: sha256, model_restart_pending: false, model_error: "" });
+		assert.deepEqual(fetched, { bytes: model, wanted: sha256 });
+		// the same model: nothing fetched
+		fetched = null;
+		assert.deepEqual(await member.syncModel({ ...state, model_sha256: sha256 }, ref, { install }), {});
+		assert.equal(fetched, null);
+		// a size the manager did not answer with: the download stops, the error is told
+		change = await member.syncModel({ ...state, model_sha256: "" }, { sha256, size: 10 }, { install });
+		assert.match(change.model_error, /too big/);
+		// the manager without a model: the node goes back to the model of the image
+		let removed = 0;
+		change = await member.syncModel({ ...state, model_sha256: sha256 }, undefined, {
+			remove: async () => {
+				removed += 1;
+				return { applied: true };
+			},
+		});
+		assert.deepEqual(change, { model_sha256: "", model_restart_pending: false, model_error: "" });
+		assert.equal(removed, 1);
 	});
 
 	test("another certificate on the address of the manager: the node sends nothing", async () => {
@@ -169,6 +871,11 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		const state = await member.readState();
 		assert.equal(state.disabled, true);
 		assert.match(state.last_error, /disabled/);
+
+		// disabled: its relay says so (503), the agent learns here again
+		const env = readFileSync(path.join(dir, "appsec", "nginxions-agent.env"), "utf8");
+		assert.doesNotMatch(env, /NGINXIONS_LEARNING_VIA/);
+		assert.doesNotMatch(env, /NGINXIONS_SMARTSYNC/);
 
 		const left = await member.default.leave(ADMIN);
 		assert.equal(left.joined, false);

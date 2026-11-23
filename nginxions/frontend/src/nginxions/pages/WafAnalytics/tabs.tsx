@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { T } from "src/locale";
 import type { AnalyticsPeriod, Bucket, EventRow, OriginEndpoint, TopRow, Traffic, TrafficFilters } from "../../api";
+import { Admonition } from "../../ui/Admonition";
 import { BarList, StackedBars } from "../../ui/Charts";
 import { AreaChart, type AreaSeries } from "../../ui/charts/AreaChart";
 import {
@@ -20,9 +21,8 @@ import {
 import { Kpi, Kpis } from "../../ui/charts/Kpi";
 import { WorldMap } from "../../ui/charts/WorldMap";
 import hostStyles from "../Hosts/Hosts.module.css";
-import { Admonition } from "../../ui/Admonition";
 import styles from "./Analytics.module.css";
-import { bucketLabel, bucketTitle, Country, Grid, Panel, Section, t, TopList } from "./common";
+import { bucketLabel, bucketTitle, Country, Grid, Panel, Section, TopList, t } from "./common";
 
 interface TabProps {
 	data: Traffic;
@@ -337,6 +337,15 @@ function RequestsTab({ data, period, filter }: TabProps) {
 				<Panel title={<T id="nginxions.traffic.top.protocols" />}>
 					<TopList rows={rows(data, "protocols")} filter={(v) => filter("protocol", v)} />
 				</Panel>
+				{rows(data, "nodes").some((r) => r.value !== "local") && (
+					<Panel title={<T id="nginxions.traffic.top.nodes" />}>
+						<TopList
+							rows={rows(data, "nodes")}
+							filter={(v) => filter("node", v)}
+							label={(v) => (v === "local" ? t("nginxions.traffic.node.local") : v)}
+						/>
+					</Panel>
+				)}
 				<Panel title={<T id="nginxions.traffic.top.agents" />} wide>
 					<TopList rows={rows(data, "agents")} />
 				</Panel>

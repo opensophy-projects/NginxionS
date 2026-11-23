@@ -9,12 +9,16 @@ CROWDSEC_ENABLED=false
 CROWDSEC_MODE=prevent
 NGINXIONS_FAIL_OPEN=true
 NGINXIONS_FAIL_OPEN_TIMEOUT_MS=50
+NGINXIONS_SMARTSYNC=false
+NGINXIONS_LEARNING_VIA=local
 if [ -f "$SETTINGS" ]; then
     while IFS='=' read -r key value; do
         case "$key=$value" in
             CROWDSEC_ENABLED=true | CROWDSEC_ENABLED=false) CROWDSEC_ENABLED=$value ;;
             CROWDSEC_MODE=prevent | CROWDSEC_MODE=detect) CROWDSEC_MODE=$value ;;
             NGINXIONS_FAIL_OPEN=true | NGINXIONS_FAIL_OPEN=false) NGINXIONS_FAIL_OPEN=$value ;;
+            NGINXIONS_SMARTSYNC=true | NGINXIONS_SMARTSYNC=false) NGINXIONS_SMARTSYNC=$value ;;
+            NGINXIONS_LEARNING_VIA=local | NGINXIONS_LEARNING_VIA=manager) NGINXIONS_LEARNING_VIA=$value ;;
             NGINXIONS_FAIL_OPEN_TIMEOUT_MS=*)
                 [[ "$value" =~ ^[0-9]{1,5}$ ]] && NGINXIONS_FAIL_OPEN_TIMEOUT_MS=$value ;;
         esac
@@ -32,7 +36,32 @@ else
     unset CROWDSEC_ENABLED
 fi
 
+# Learning of several servers (docs/adr/0012-nodes.md, 5c). NginxionS writes the role of this server:
+# - a node (NGINXIONS_LEARNING_VIA=manager): the shared storage and smartsync of its manager, through the relay of
+#   NginxionS on this server (127.0.0.1:7817 storage, :7818 smartsync), which takes them to the manager over the pinned
+#   TLS of the node; the labels of the manager (decisions.data) come the same way;
+# - a manager (NGINXIONS_SMARTSYNC=true): smartsync of this container (127.0.0.1:7815) puts the learning together;
+# - otherwise no LEARNING_HOST: the agent learns alone, as before.
+if [ "$NGINXIONS_LEARNING_VIA" = manager ]; then
+    export SHARED_STORAGE_HOST=127.0.0.1:7817 LEARNING_HOST=127.0.0.1:7818
+elif [ "$NGINXIONS_SMARTSYNC" = true ]; then
+    export LEARNING_HOST="127.0.0.1:${NGINXIONS_SMARTSYNC_PORT:-7815}"
+else
+    unset LEARNING_HOST
+fi
 
+# Fail-open of the nginx attachment: profile settings in settings.json. The agent gets settings only from a
+# management cloud, which NginxionS never uses, so the file is ours.
+# Not agent.config.log.useBulkMode=false: without bulk mode every log goes to all streams at once on
+# the request path, the HTTP transaction handler then neither logs nor blocks (checked in CI).
+# orchestration.configTimeoutSeconds: the orchestration waits for the services to confirm a new policy up to 600 s by
+# default and checks no update meanwhile; a confirmation lost while the services restart (an agent restart from the
+# GUI) held every policy change of the GUI for 10 minutes. 60 s, then the policy is applied again.
+# agent.registrationThreadTimeout.nginxModule (issue 149): after a restart of the agent each nginx worker registers again
+# on the first request it gets, and its fail-open verdict was given when that took more than 100 ms: the first attack
+# after "Save and restart" passed unchecked (fail-open) or the first request was refused (fail-close). 3 s: the request
+# that registers waits for it; the attachment retries a failed registration with a growing pause, so an agent that is
+# down holds one request per pause, not every request.
 mkdir -p /etc/cp/conf
 printf '{"agentSettings": [%s, %s, %s, %s]}\n' \
     "{\"key\": \"agent.failOpenState.nginxModule\", \"value\": \"$NGINXIONS_FAIL_OPEN\"}" \

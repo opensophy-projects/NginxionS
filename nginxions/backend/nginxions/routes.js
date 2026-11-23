@@ -1,4 +1,6 @@
 // NginxionS API: /api/nginxions/*
+import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import express from "express";
 import db from "../db.js";
 import internalAuditLog from "../internal/audit-log.js";
@@ -22,13 +24,18 @@ import { geoAvailable, writeGeoConf } from "./geo/index.js";
 import internalGeoip from "./geoip/index.js";
 import internalHosts, { HOST_OBJECTS } from "./hosts.js";
 import internalLearning from "./learning/index.js";
+import internalLearningProfiles from "./learning/profiles.js";
 import internalLearningSnapshots from "./learning/snapshots.js";
 import internalMigration from "./migration/index.js";
-import internalNodes from "./nodes/index.js";
+import internalClusterSettings from "./nodes/cluster-settings.js";
+import internalNodes, { NODE_COMMANDS } from "./nodes/index.js";
+import { MAX_LEARNING_BODY } from "./nodes/learning-model.js";
 import internalMember from "./nodes/member.js";
+import { MANAGER_FINGERPRINT } from "./nodes/model.js";
 import internalNotifications from "./notifications/index.js";
 import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
+import { nodeLearningLimiter, nodeLimiter, sensitiveLimiter } from "./rate-limit.js";
 import internalRbac from "./rbac/index.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
@@ -41,7 +48,6 @@ import internalWaf from "./waf/index.js";
 import { getAgentMetrics } from "./waf/metrics.js";
 import internalWafObjects, { simulateHostMode } from "./waf/objects/api.js";
 import internalWafSchemas from "./waf/schemas.js";
-import { sensitiveLimiter } from "./rate-limit.js";
 import internalWafTrial from "./waf/trial.js";
 
 const router = express.Router({
@@ -649,6 +655,16 @@ router
 	.all(jwtdecode())
 	.put(handle((req, res) => internalWafAgent.uploadModel(res.locals.access, req, req.query.apply !== "false")))
 	.delete(handle((req, res) => internalWafAgent.removeModel(res.locals.access, req.query.apply !== "false")));
+
+/**
+ * POST /api/nginxions/waf/agent/model/previous?apply=false — back to the model before the last upload or removal (on a
+ * manager its nodes follow with their next package)
+ */
+router
+	.route("/waf/agent/model/previous")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((req, res) => internalWafAgent.previousModel(res.locals.access, req.query.apply !== "false")));
 
 /**
  * GET /api/nginxions/waf/agent/metrics — metrics of the agent (its prometheus nano service), parsed
@@ -2959,6 +2975,119 @@ router
 	.all(jwtdecode())
 	.delete(handle((req, res) => internalLearningSnapshots.remove(res.locals.access, String(req.params.snapshot_id))));
 
+/**
+ * Learning profiles (learning/profiles.js, step 15.5): what the agent learned of chosen sites, signed, applied here,
+ * on another NginxionS (a file) or on new nodes
+ * GET    /api/nginxions/learning/profiles — the profiles, the newest first, and the fingerprint of the key of this server
+ * POST   /api/nginxions/learning/profiles — {name, host_ids, snapshot_id?, with_policy?}: a profile of these sites, now or of a snapshot
+ *        (with_policy: their WAF too, step 15.5)
+ * POST   /api/nginxions/learning/profiles/upload — body: a profile file (application/octet-stream), its signature checked
+ * POST   /api/nginxions/learning/profiles/:profile_id/apply — {host_ids?, with_policy?}: in place of the learned state of its sites
+ *        (with_policy: their WAF too)
+ *        (the agent and nginxions restart)
+ * GET    /api/nginxions/learning/profiles/:profile_id/download — the signed file
+ * PUT    /api/nginxions/learning/profiles/:profile_id — {for_new_nodes}: the profile new nodes start with
+ * DELETE /api/nginxions/learning/profiles/:profile_id
+ */
+const hostIdsSchema = { type: "array", maxItems: 1000, items: { type: "integer", minimum: 1 } };
+router
+	.route("/learning/profiles")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalLearningProfiles.list(res.locals.access)))
+	.post(
+		handle(
+			async (req, res) =>
+				internalLearningProfiles.create(
+					res.locals.access,
+					await validator(
+						{
+							type: "object",
+							additionalProperties: false,
+							required: ["name", "host_ids"],
+							properties: {
+								name: { type: "string", minLength: 1, maxLength: 100 },
+								host_ids: { ...hostIdsSchema, minItems: 1 },
+								snapshot_id: { type: "string", maxLength: 40 },
+								with_policy: { type: "boolean" },
+							},
+						},
+						req.body,
+					),
+				),
+			201,
+		),
+	);
+
+router
+	.route("/learning/profiles/upload")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		express.raw({ type: () => true, limit: "100mb" }),
+		handle((req, res) => internalLearningProfiles.upload(res.locals.access, rawBytes(req)), 201),
+	);
+
+router
+	.route("/learning/profiles/:profile_id/apply")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		handle(async (req, res) =>
+			internalLearningProfiles.apply(
+				res.locals.access,
+				String(req.params.profile_id),
+				await validator(
+					{
+						type: "object",
+						additionalProperties: false,
+						properties: { host_ids: hostIdsSchema, with_policy: { type: "boolean" } },
+					},
+					req.body ?? {},
+				),
+			),
+		),
+	);
+
+router
+	.route("/learning/profiles/:profile_id/download")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(async (req, res, next) => {
+		try {
+			const file = await internalLearningProfiles.download(res.locals.access, String(req.params.profile_id));
+			res.set("Content-Type", "application/gzip");
+			res.set("Content-Disposition", `attachment; filename="${file.name}"`);
+			res.send(file.content);
+		} catch (err) {
+			next(err);
+		}
+	});
+
+router
+	.route("/learning/profiles/:profile_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["for_new_nodes"],
+					properties: { for_new_nodes: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalLearningProfiles.setForNewNodes(
+				res.locals.access,
+				String(req.params.profile_id),
+				data.for_new_nodes,
+			);
+		}),
+	)
+	.delete(handle((req, res) => internalLearningProfiles.remove(res.locals.access, String(req.params.profile_id))));
+
 // ------------------------------------------------------------------ servers of NginxionS (docs/adr/0012-nodes.md)
 
 const nodeSchema = {
@@ -2969,6 +3098,22 @@ const nodeSchema = {
 		labels: { type: "array", maxItems: 20, items: { type: "string", maxLength: 32 } },
 	},
 };
+/**
+ * How a node proves itself on its channel (docs/adr/0012-nodes.md 5a): its token, and the certificate it showed to
+ * nginx (the server of the panel named nginxions-cluster asks for it; the node has proven it holds its key). A client
+ * cannot send this header itself: every proxy of the panel sets it (empty unless on that channel).
+ */
+const nodeAuth = (req) => {
+	const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+	let cert = null;
+	try {
+		cert = req.get("x-nginxions-node-cert") ? decodeURIComponent(req.get("x-nginxions-node-cert")) : null;
+	} catch {
+		cert = null;
+	}
+	return { token, cert };
+};
+
 const nodeId = (req) => {
 	const id = Number(req.params.node_id);
 	if (!Number.isInteger(id) || id < 1 || id > MAX_ID) throw new errs.ValidationError("invalid node id");
@@ -3017,10 +3162,71 @@ router.post("/nodes/register", sensitiveLimiter, express.json({ limit: "64kb" })
  * POST /api/nginxions/nodes/heartbeat — without login: Authorization: Bearer <token of the node>; {info} →
  *   {uid, name, labels, server_time}; 401 for an unknown or disabled node
  */
-router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res, next) => {
+router.post("/nodes/heartbeat", nodeLimiter, express.json({ limit: "16kb" }), async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.heartbeat(token, req.body?.info, req.ip);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * POST /api/nginxions/nodes/bans — without login: the token and certificate of the node; {bans}: its own bans (step
+ *   15.3) → {stored}
+ * GET  /api/nginxions/nodes/bans — the bans of the cluster for the node → {bans}
+ */
+router.post("/nodes/bans", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const answer = await internalNodes.shareBans(nodeAuth(req), req.body?.bans);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+router.get("/nodes/bans", nodeLimiter, async (req, res, next) => {
+	try {
+		const answer = await internalNodes.clusterBans(nodeAuth(req));
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * POST /api/nginxions/nodes/requests — without login: the token and certificate of the node; {requests} (at most 1000):
+ *   rows of its request log (step 15.3) → {stored}
+ */
+router.post("/nodes/requests", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const answer = await internalNodes.requests(nodeAuth(req), req.body?.requests);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * POST /api/nginxions/nodes/events — without login: Authorization: Bearer <token of the node>; {events} (at most 500)
+ *   → {stored}; 401 for an unknown or disabled node
+ */
+router.post("/nodes/events", nodeLimiter, express.json({ limit: "4mb" }), async (req, res, next) => {
+	try {
+		const token = nodeAuth(req);
+		const answer = await internalNodes.events(token, req.body?.events);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
 		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
@@ -3034,9 +3240,9 @@ router.post("/nodes/heartbeat", express.json({ limit: "16kb" }), async (req, res
  * GET /api/nginxions/nodes/package — without login: Authorization: Bearer <token of the node>; the signed package of
  *   the node {schema, version, body, signature}; 401 for an unknown or disabled node
  */
-router.get("/nodes/package", async (req, res, next) => {
+router.get("/nodes/package", nodeLimiter, async (req, res, next) => {
 	try {
-		const token = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+		const token = nodeAuth(req);
 		const answer = await internalNodes.package(token);
 		res.set("Cache-Control", "no-store");
 		if (!answer) return unknownNode(res, "Unknown or disabled node");
@@ -3046,6 +3252,214 @@ router.get("/nodes/package", async (req, res, next) => {
 		next(err);
 	}
 });
+
+/**
+ * POST /api/nginxions/nodes/logs — without login: Authorization: Bearer <token of the node>; body (bytes, JSON):
+ *   {logs: {service: [{stream, line}]}}: the logs it collected for this manager (command collect_logs); 401 for an
+ *   unknown node
+ */
+router.post("/nodes/logs", nodeLimiter, express.raw({ type: () => true, limit: "4mb" }), async (req, res, next) => {
+	try {
+		const token = nodeAuth(req);
+		let body = null;
+		try {
+			body = JSON.parse(rawBytes(req)?.toString("utf8") || "null");
+		} catch {
+			body = null;
+		}
+		const answer = await internalNodes.storeLogs(token, body?.logs);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- an object: JSON
+		res.send(answer);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * GET /api/nginxions/nodes/model — without login: Authorization: Bearer <token of the node>; the advanced model of the
+ *   agent of this manager (step 15.5; its SHA-256 is in the signed package); 404 without one, 401 for an unknown or
+ *   disabled node
+ */
+// a node downloads the model once per change; the limit stops a stolen token from reading the file in a loop
+router.get("/nodes/model", sensitiveLimiter, async (req, res, next) => {
+	try {
+		const token = nodeAuth(req);
+		const answer = await internalNodes.wafModel(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		if (answer.none) return res.status(404).send({ error: { code: 404, message: "No model on the manager" } });
+		res.type("application/gzip");
+		res.set("Content-Length", String(answer.size));
+		await pipeline(createReadStream(answer.file), res);
+	} catch (err) {
+		if (res.headersSent) res.destroy(err);
+		else next(err);
+	}
+});
+
+/**
+ * GET /api/nginxions/nodes/learning/profile — without login: Authorization: Bearer <token of the node>; the signed file
+ *   of the learning profile for new nodes (step 15.5); 404 when there is none, 401 for an unknown or disabled node
+ */
+router.get("/nodes/learning/profile", nodeLimiter, async (req, res, next) => {
+	try {
+		const token = nodeAuth(req);
+		const answer = await internalNodes.learningProfile(token);
+		res.set("Cache-Control", "no-store");
+		if (!answer) return unknownNode(res, "Unknown or disabled node");
+		if (answer.none)
+			return res.status(404).send({ error: { code: 404, message: "No learning profile for new nodes" } });
+		res.type("application/gzip");
+		// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- a gzip file for the node, never HTML of the panel
+		res.send(answer.bytes);
+	} catch (err) {
+		next(err);
+	}
+});
+
+/**
+ * GET|PUT /api/nginxions/nodes/learning/storage/<path> — without login: Authorization: Bearer <token of the node>; the
+ *   agent of the node (through its relay) reads and writes the shared storage of this manager (step 15.4; what it may:
+ *   nodes/learning-model.js); 401 for an unknown or disabled node
+ */
+const LEARNING_STORAGE = "/nodes/learning/storage";
+router.all(
+	[LEARNING_STORAGE, `${LEARNING_STORAGE}{/*path}`],
+	nodeLearningLimiter,
+	express.raw({ type: () => true, limit: MAX_LEARNING_BODY }),
+	async (req, res, next) => {
+		try {
+			const token = nodeAuth(req);
+			// the path as the agent sent it, not normalized (an agent without a tenant asks //<asset>/...; "..": the
+			// rules of nodes/learning-model.js refuse it): after the prefix of the route
+			const [pathname, search = ""] = String(req.originalUrl).split(/\?(.*)/s);
+			const rawPath = pathname.slice(pathname.indexOf(LEARNING_STORAGE) + LEARNING_STORAGE.length);
+			const answer = await internalNodes.learningStorage(token, {
+				method: req.method,
+				rawPath,
+				query: new URLSearchParams(search),
+				body: rawBytes(req),
+			});
+			res.set("Cache-Control", "no-store");
+			if (!answer) return unknownNode(res, "Unknown or disabled node");
+			res.status(answer.status).type(answer.type);
+			// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- bytes of the storage to the agent, never HTML of the panel
+			res.send(answer.body);
+		} catch (err) {
+			next(err);
+		}
+	},
+);
+
+/**
+ * POST /api/nginxions/nodes/learning/sync — without login: Authorization: Bearer <token of the node>; {assetId, type,
+ *   windowId}: the agent of the node tells smartsync of this manager that the data of a window is in the storage
+ */
+router.post(
+	"/nodes/learning/sync",
+	nodeLearningLimiter,
+	express.raw({ type: () => true, limit: "16kb" }),
+	async (req, res, next) => {
+		try {
+			const token = nodeAuth(req);
+			const answer = await internalNodes.learningSync(token, rawBytes(req));
+			res.set("Cache-Control", "no-store");
+			if (!answer) return unknownNode(res, "Unknown or disabled node");
+			res.status(answer.status).type(answer.type);
+			// nosemgrep: javascript.express.security.audit.xss.direct-response-write.direct-response-write -- the answer of smartsync to the agent
+			res.send(answer.body);
+		} catch (err) {
+			next(err);
+		}
+	},
+);
+
+/**
+ * GET /api/nginxions/nodes/cluster-learning — on a manager with nodes: per site of its shared storage, the data of
+ *   windows of each node and of this server, the last merge of smartsync ({available: false} elsewhere)
+ */
+router
+	.route("/nodes/cluster-learning")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.clusterLearning(res.locals.access)));
+
+/**
+ * GET /api/nginxions/nodes/rollout?node_id=&limit= — what the nodes applied of this manager (packages, the model of
+ *   the agent, learning profiles) or what failed, the newest first
+ */
+router
+	.route("/nodes/rollout")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(
+		handle((req, res) =>
+			internalNodes.rollout(res.locals.access, {
+				node_id: Number(req.query.node_id) || undefined,
+				limit: Number(req.query.limit) || undefined,
+			}),
+		),
+	);
+
+/**
+ * GET /api/nginxions/nodes/label-hosts — [{label, host_ids}]: every node with the label serves its hosts (step 15.2)
+ * PUT /api/nginxions/nodes/label-hosts/:label — {host_ids}
+ */
+router
+	.route("/nodes/label-hosts")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.labelHosts(res.locals.access)));
+router
+	.route("/nodes/label-hosts/:label")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["host_ids"],
+					properties: { host_ids: { type: "array", maxItems: 1000, items: { type: "integer", minimum: 1 } } },
+				},
+				req.body,
+			);
+			return internalNodes.setLabelHosts(res.locals.access, String(req.params.label), data.host_ids);
+		}),
+	);
+
+/**
+ * GET  /api/nginxions/nodes/staged — {staged}: a staged rollout (step 15.2)
+ * PUT  /api/nginxions/nodes/staged — {staged}: on (the nodes that are not canaries are held), off
+ * POST /api/nginxions/nodes/staged/promote — the change reaches every node
+ */
+router
+	.route("/nodes/staged")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_req, res) => internalNodes.rolloutSettings(res.locals.access)))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["staged"],
+					properties: { staged: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.setStaged(res.locals.access, data.staged);
+		}),
+	);
+router
+	.route("/nodes/staged/promote")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(handle((_req, res) => internalNodes.promote(res.locals.access)));
 
 /**
  * PUT    /api/nginxions/nodes/:node_id — {name?, labels?}
@@ -3068,6 +3482,109 @@ router
 	.options((_, res) => res.sendStatus(204))
 	.all(jwtdecode())
 	.post(handle((req, res) => internalNodes.newCode(res.locals.access, nodeId(req))));
+
+/**
+ * GET /api/nginxions/nodes/:node_id/logs — the last logs the node sent (nodes:view and services:view); a command
+ *   collect_logs asks for new ones
+ */
+router
+	.route("/nodes/:node_id/logs")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.logs(res.locals.access, nodeId(req))));
+
+/**
+ * PUT /api/nginxions/nodes/:node_id/drain — {drained}: out of work (its package has no hosts) or back
+ */
+/**
+ * PUT /api/nginxions/nodes/:node_id/canary — {canary}: reached first by a staged rollout (step 15.2)
+ */
+router
+	.route("/nodes/:node_id/canary")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["canary"],
+					properties: { canary: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.setCanary(res.locals.access, nodeId(req), data.canary);
+		}),
+	);
+
+/**
+ * GET /api/nginxions/nodes/:node_id/packages — the packages the node was given (the last 20), the newest first
+ * PUT /api/nginxions/nodes/:node_id/packages — {version}: held on that package (a rollback); {version: null}: it
+ *     follows the configuration again
+ */
+router
+	.route("/nodes/:node_id/packages")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((req, res) => internalNodes.packages(res.locals.access, nodeId(req))))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["version"],
+					properties: {
+						version: { anyOf: [{ type: "string", pattern: "^[0-9a-f]{64}$" }, { type: "null" }] },
+					},
+				},
+				req.body,
+			);
+			return internalNodes.hold(res.locals.access, nodeId(req), data.version);
+		}),
+	);
+
+router
+	.route("/nodes/:node_id/drain")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["drained"],
+					properties: { drained: { type: "boolean" } },
+				},
+				req.body,
+			);
+			return internalNodes.drain(res.locals.access, nodeId(req), data.drained);
+		}),
+	);
+
+/**
+ * POST /api/nginxions/nodes/:node_id/command — {action: "restart_agent"}: done by the node with its next heartbeat
+ */
+router
+	.route("/nodes/:node_id/command")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.post(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["action"],
+					properties: { action: { enum: NODE_COMMANDS } },
+				},
+				req.body,
+			);
+			return internalNodes.command(res.locals.access, nodeId(req), data.action);
+		}),
+	);
 
 /**
  * GET /api/nginxions/nodes/:node_id/hosts — the proxy hosts the node serves (ids of this server)
@@ -3108,7 +3625,7 @@ router
 
 /**
  * GET    /api/nginxions/cluster/member — this server as a node: its manager, id, last contact
- * PUT    /api/nginxions/cluster/member — {manager_url, code}: connect to a manager
+ * PUT    /api/nginxions/cluster/member — {manager_url, code, manager_fingerprint}: connect to a manager
  * DELETE /api/nginxions/cluster/member — disconnect (disable it on the manager too)
  */
 router
@@ -3124,10 +3641,11 @@ router
 					{
 						type: "object",
 						additionalProperties: false,
-						required: ["manager_url", "code"],
+						required: ["manager_url", "code", "manager_fingerprint"],
 						properties: {
 							manager_url: { type: "string", minLength: 8, maxLength: 255 },
 							code: { type: "string", minLength: 20, maxLength: 120 },
+							manager_fingerprint: { type: "string", pattern: MANAGER_FINGERPRINT.source },
 						},
 					},
 					req.body,
@@ -3136,5 +3654,40 @@ router
 		),
 	)
 	.delete(handle((_, res) => internalMember.leave(res.locals.access)));
+
+/**
+ * GET /api/nginxions/cluster/learning — the thresholds of the learning of the nodes (smartsync on a manager)
+ * PUT /api/nginxions/cluster/learning — {min_sources, min_sources_types, min_intervals, ratio_threshold} (the client
+ *   of the GUI sends the keys of a body in snake case)
+ */
+router
+	.route("/cluster/learning")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_, res) => internalClusterSettings.get(res.locals.access)))
+	.put(
+		handle(async (req, res) => {
+			const data = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["min_sources", "min_sources_types", "min_intervals", "ratio_threshold"],
+					properties: {
+						min_sources: { type: "integer", minimum: 2, maximum: 1000 },
+						min_sources_types: { type: "integer", minimum: 2, maximum: 1000 },
+						min_intervals: { type: "integer", minimum: 1, maximum: 100 },
+						ratio_threshold: { type: "number", minimum: 0.1, maximum: 1 },
+					},
+				},
+				req.body,
+			);
+			return internalClusterSettings.set(res.locals.access, {
+				minSources: data.min_sources,
+				minSourcesTypes: data.min_sources_types,
+				minIntervals: data.min_intervals,
+				ratioThreshold: data.ratio_threshold,
+			});
+		}),
+	);
 
 export default router;

@@ -6,6 +6,7 @@
 //   ADMIN   the interface (https://nginxions:81)      HTTP   the sites (http://nginxions)
 //   JAR     the cookie jar of smoke                    OUT    screenshots of failures, gui-e2e.json and .md
 //   ONLY    a comma list of scenarios to run (all by default)
+//   MANAGER_FINGERPRINT   SHA-256 of the panel certificate for the nodes scenario
 //
 // A failed scenario does not stop the others; the test fails at its end. Every scenario cleans up what it made.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -98,7 +99,12 @@ async function until(what, check, { timeout = 60000, every = 1500 } = {}) {
 	const end = Date.now() + timeout;
 	let last;
 	while (Date.now() < end) {
-		last = await check();
+		try {
+			last = await check();
+		} catch (err) {
+			// a page or a request that failed (the panel restarting) is a "not yet"; its error is the last value
+			last = { ok: false, error: String(err.message || err).split("\n")[0].slice(0, 200) };
+		}
 		if (last?.ok ?? last) return last;
 		await sleep(every);
 	}
@@ -135,6 +141,42 @@ const api = async (method, path, data) => {
 	if (!res.ok()) throw new Error(`${method} ${path}: ${res.status()} ${text.slice(0, 200)}`);
 	return json;
 };
+
+/** the panel answers its API */
+const answers = () => api("GET", "/").then(
+	() => true,
+	() => false,
+);
+const panelUp = () => until("the panel answers", answers, { timeout: 150000, every: 2000 });
+/**
+ * A change of the learning role of this server (a node joined, disabled) restarts the agent, and nginxions in its
+ * network namespace with it (docs/adr/0012-nodes.md 5c): the panel goes away within `within` ms, then comes back.
+ */
+async function panelRestarted(within = 45000, agentStartedAt) {
+	const end = Date.now() + within;
+	while (Date.now() < end && (await answers())) await sleep(1000);
+	if (agentStartedAt) {
+		// The watchdog can bring nginxions back before control finishes restarting the agent's dependents.
+		let readySince;
+		await until(
+			"the agent has restarted and the panel stays online",
+			async () => {
+				const agent = await api("GET", "/nginxions/services/openappsec").catch(() => null);
+				if (agent?.health !== "healthy" || !agent.startedAt || agent.startedAt === agentStartedAt) {
+					readySince = undefined;
+					return false;
+				}
+				readySince ??= Date.now();
+				return Date.now() - readySince >= 15000;
+			},
+			{ timeout: 150000, every: 1000 },
+		);
+	} else {
+		await panelUp();
+	}
+	// the page asked the panel while it was away (502, refused): expected, not an error of the page
+	pageErrors.length = 0;
+}
 
 const go = async (path) => {
 	await page.goto(ADMIN + path, { waitUntil: "networkidle", timeout: 45000 });
@@ -626,22 +668,56 @@ const scenarios = [
 			await page.getByRole("button", { name: "Add node" }).click();
 			const code = (await page.getByTestId("node-code").innerText()).trim();
 			if (!/^n-[0-9a-f]{16}\./.test(code)) throw new Error(`no join code shown: ${code}`);
-			const row = () => page.locator("tr", { hasText: "gui-node" }).first();
-			await row().waitFor();
-			if (!/Waits for connection/.test(await row().innerText())) throw new Error("the new node does not wait");
+			const uid = code.split(".")[0];
+			const row = page.locator(`tr[data-node="${uid}"]`);
+			await row.waitFor();
+			if (!/Waits for connection/.test(await row.innerText())) throw new Error("the new node does not wait");
 			// "This server": the backend calls its own panel as its manager
 			await page.locator("#cluster-manager").fill("https://127.0.0.1:81");
 			await page.locator("#cluster-code").fill(code);
+			const fingerprint = process.env.MANAGER_FINGERPRINT;
+			if (!fingerprint) throw new Error("the test Manager fingerprint is required");
+			await page.locator("#cluster-fingerprint").fill(fingerprint);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await page.getByText("Certificate of the manager (SHA-256)").waitFor({ timeout: 30000 });
+			await page.locator("dt").filter({ hasText: "Certificate of the manager (SHA-256)" }).waitFor({ timeout: 30000 });
+			await panelRestarted();
 			await until("the node is online in the list", async () => {
 				await go("/agents/nodes");
-				return /Online/.test(await row().innerText());
+				return /Online/.test(await row.innerText());
 			});
+			// Rollout plan (step 15.2): the staged rollout switched on and off, hosts given to a label of the node
+			const plan = page.getByTestId("rollout-plan");
+			await plan.getByText("Staged rollout", { exact: true }).click();
+			await until("the staged rollout is on", async () => (await api("GET", "/nginxions/nodes/staged")).staged);
+			await go("/agents/nodes");
+			await plan.getByText("Staged rollout", { exact: true }).click();
+			await until("the staged rollout is off", async () => !(await api("GET", "/nginxions/nodes/staged")).staged);
+			await addProxyHost("gui-label.local");
+			const labelHost = await proxyHostId("gui-label.local");
+			await go("/agents/nodes");
+			await plan.locator("tr[data-label-row='gui']").getByRole("button", { name: "Hosts", exact: true }).click();
+			await modal().locator("label.form-check", { hasText: "gui-label.local" }).locator("input").check();
+			await modal().getByRole("button", { name: "Save", exact: true }).click();
+			await saved("the hosts of the label");
+			const given = (await api("GET", "/nginxions/nodes/label-hosts")).find((l) => l.label === "gui");
+			if (!given?.host_ids?.includes(labelHost)) throw new Error(`the label does not serve the host: ${JSON.stringify(given)}`);
+			// Packages: the node held on a package it was given, then it follows the configuration again
+			await row.getByRole("button", { name: "Packages", exact: true }).click();
+			await modal().getByRole("button", { name: "Back to this package" }).first().click();
+			await page.getByText("The node gets this package with its next heartbeat.").waitFor({ timeout: 15000 });
+			const held = (await api("GET", "/nginxions/nodes")).find((n) => n.uid === uid);
+			if (held?.pinned?.by !== "manual") throw new Error(`the node is not held: ${JSON.stringify(held?.pinned)}`);
+			await modal().getByRole("button", { name: "Follow the configuration" }).click();
+			await page.getByText("The node follows the configuration again.").waitFor({ timeout: 15000 });
+			await modal().locator(".modal-footer").getByRole("button", { name: "Close", exact: true }).click();
+			if ((await api("GET", "/nginxions/nodes")).find((n) => n.uid === uid)?.pinned)
+				throw new Error("the node still is held");
 			// Disable → its next heartbeat learns it
-			await row().getByRole("button", { name: "Disable" }).click();
+			await row.getByRole("button", { name: "Disable" }).click();
 			await modal().getByRole("button", { name: "Disable", exact: true }).click();
 			await saved("disable the node");
+			// no active node: smartsync off here
+			await panelRestarted();
 			await until(
 				"the node learns it was disabled",
 				async () => {
@@ -650,22 +726,89 @@ const scenarios = [
 				},
 				{ timeout: 75000, every: 3000 },
 			);
+			// disabled: it no longer learns through the manager
+			await panelRestarted();
+			await go("/agents/nodes");
 			await page.getByRole("button", { name: "Disconnect" }).click();
 			await modal().getByRole("button", { name: "Disconnect", exact: true }).click();
 			await saved("disconnect");
-			await row().getByRole("button", { name: "Delete" }).click();
+			await row.getByRole("button", { name: "Delete" }).click();
 			await modal().getByRole("button", { name: "Delete", exact: true }).click();
 			await saved("delete the node");
-			await page.locator("tr", { hasText: "gui-node" }).waitFor({ state: "detached", timeout: 15000 });
+			await row.waitFor({ state: "detached", timeout: 15000 });
 			if ((await api("GET", "/nginxions/cluster/member")).joined) throw new Error("still a node of a manager");
 		},
 		async cleanup() {
 			await api("DELETE", "/nginxions/cluster/member").catch(() => {});
+			await api("PUT", "/nginxions/nodes/staged", { staged: false }).catch(() => {});
+			await api("PUT", "/nginxions/nodes/label-hosts/gui", { host_ids: [] }).catch(() => {});
+			await removeProxyHost("gui-label.local").catch(() => {});
 			for (const n of await api("GET", "/nginxions/nodes").catch(() => [])) {
 				if (n.name !== "gui-node") continue;
 				if (n.status === "active") await api("POST", `/nginxions/nodes/${n.id}/revoke`);
 				await api("DELETE", `/nginxions/nodes/${n.id}`);
 			}
+		},
+	},
+	{
+		name: "learning-profile",
+		title:
+			"Agents → open-appsec → Learning → Learning profiles: a profile of a site with its WAF policy is made, applied (the agent restarts) and removed",
+		async run() {
+			const d = "gui-profile.local";
+			const modal = () => page.locator(".modal.show").last();
+			await addProxyHost(d);
+			await setWaf(d, "Prevent");
+			const id = await proxyHostId(d);
+			let sample = 0;
+			// Wait for the agent to persist the site's learning before submitting the profile form.
+			await until(
+				"the agent saves learning data for the site",
+				async () => {
+					for (let i = 0; i < 20; i++) {
+						const { status } = await site(d, `/?filters=blue%2Cmedium%2Clinen%2C${++sample}`);
+						if (status !== 200) return { ok: false, status };
+					}
+					const { assets, error } = await api("GET", `/nginxions/learning/hosts/${id}/learned`);
+					return { ok: assets.length > 0, error };
+				},
+				{ timeout: 240000, every: 15000 },
+			);
+			await go("/agents/open-appsec?tab=learning");
+			await page.getByRole("button", { name: "Learning profiles" }).click();
+			await modal().getByRole("button", { name: "New profile" }).click();
+			await modal().locator("#profile-name").fill("gui profile");
+			await modal().locator("label.form-check", { hasText: d }).locator("input").check();
+			await modal().locator("label.form-check", { hasText: "With the WAF policy" }).locator("input").check();
+			await modal().getByRole("button", { name: "Make the profile" }).click();
+			try {
+				await page.getByText("The profile is made").waitFor({ timeout: 15000 });
+			} catch {
+				throw new Error(`the profile was not made: ${(await shownError()) || "no confirmation shown"}`);
+			}
+			const row = modal().locator("tr", { hasText: "gui profile" });
+			await row.waitFor();
+			const made = (await api("GET", "/nginxions/learning/profiles")).profiles?.find((p) => p.name === "gui profile");
+			if (!made?.policy) throw new Error(`the profile carries no WAF policy: ${JSON.stringify(made)?.slice(0, 300)}`);
+			const { startedAt } = await api("GET", "/nginxions/services/openappsec");
+			if (!startedAt) throw new Error("the agent has no start time before applying the profile");
+			await row.getByRole("button", { name: "Apply", exact: true }).click();
+			await page.locator(".modal.show").last().getByRole("button", { name: "Apply", exact: true }).click();
+			await page.getByText("The profile is applied, the agent restarts").waitFor({ timeout: 30000 });
+			await panelRestarted(60000, startedAt);
+			if ((await api("GET", `/nginxions/waf/hosts/${id}`)).mode !== "prevent-learn")
+				throw new Error("the WAF of the site changed");
+			await go("/agents/open-appsec?tab=learning");
+			await page.getByRole("button", { name: "Learning profiles" }).click();
+			await modal().locator("tr", { hasText: "gui profile" }).getByRole("button", { name: "Remove", exact: true }).click();
+			await page.locator(".modal.show").last().getByRole("button", { name: "Remove", exact: true }).click();
+			await modal().locator("tr", { hasText: "gui profile" }).waitFor({ state: "detached", timeout: 15000 });
+		},
+		async cleanup() {
+			for (const p of (await api("GET", "/nginxions/learning/profiles").catch(() => ({}))).profiles ?? []) {
+				if (p.name === "gui profile") await api("DELETE", `/nginxions/learning/profiles/${p.id}`).catch(() => {});
+			}
+			await removeProxyHost("gui-profile.local").catch(() => {});
 		},
 	},
 	{
@@ -809,6 +952,8 @@ for (const s of scenarios) {
 	pageErrors.length = 0;
 	console.log(`==> ${s.title}`);
 	try {
+		// a scenario before may have restarted the panel (the nodes)
+		await panelUp();
 		await s.run();
 		if (pageErrors.length) throw new Error(`errors in the page: ${pageErrors.join("; ")}`);
 		r.ok = true;
@@ -821,6 +966,7 @@ for (const s of scenarios) {
 		await page.screenshot({ path: `${OUT}/${s.name}.png`, fullPage: true }).catch(() => {});
 	}
 	try {
+		await panelUp().catch(() => {});
 		await s.cleanup?.();
 	} catch (err) {
 		console.log(`    cleanup of ${s.name}: ${String(err.message || err).slice(0, 200)}`);

@@ -99,7 +99,9 @@ const unsupported = (kind, spec, lenient) => {
 				spec[engine].overrideMode = "inactive";
 				dropped.push(`/${engine}`);
 			} else {
-				errors.push(`/${engine}: not in the agent of NginxionS (Premium edition or the opensophy)`);
+				errors.push(
+					`/${engine}: not in the agent of NginxionS (Premium edition or the cloud of the vendor of the agent)`,
+				);
 			}
 		}
 		// antiBot: paths ({uri} as in v1beta2; a plain string is taken too)

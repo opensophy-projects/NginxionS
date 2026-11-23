@@ -353,7 +353,7 @@ private:
         log << LogField(
             "eventRemediation",
             "Please verify your NGINX configuration and enforce policy again. "
-            "Contact opensophy support if the issue persists."
+            "Contact support if the issue persists."
         );
     }
 

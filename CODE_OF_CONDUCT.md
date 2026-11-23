@@ -85,6 +85,7 @@ flowchart TB
         agent["Агент open-appsec (ML-WAF)<br/>127.0.0.1:7777<br/>политика /ext/appsec/local_policy.yaml"]
         storage["Shared storage<br/>127.0.0.1:7811<br/>обучение, decisions.data"]
         tuning["Tuning<br/>127.0.0.1:7813<br/>статистика, подсказки"]
+        smartsync["smartsync<br/>127.0.0.1:7815<br/>общее обучение (управляющий с узлами)"]
 
         subgraph np["контейнер nginxions"]
             nginx["nginx (NPMplus)<br/>+ attachment open-appsec"]
@@ -108,6 +109,7 @@ flowchart TB
     backend --> storage
     backend --> tuning
     tuning --> postgres
+    smartsync --> storage
     control --> docker
     crowdsec -. "читает логи nginx и агента (тома)" .-> nginx
     init -. "до остальных сервисов" .-> postgres
@@ -206,6 +208,7 @@ flowchart LR
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
   - `compose.airgap.yaml` — стек без выхода в интернет
+  - `compose.cluster.yaml` — несколько стеков на одной машине (`scripts/test-cluster.sh`): имена контейнеров с именем стека, без опубликованных портов, общая внутренняя сеть `cluster` с постоянными адресами
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
   - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
@@ -249,7 +252,9 @@ flowchart LR
 - **`smartsync-tuning/`** — tuning (Go): события WAF, статистика и предложения обучения; пароль базы не пишется в
   лог; значения запроса логов экранированы (`queries_nginxions_test.go`); библиотеки подняты в `go.mod` (chi v5,
   client-go 0.20 и др.)
-- **`smartsync/`** — централизованное обучение нескольких агентов (Go); в образ пока не входит, нужен для нескольких серверов (фаза 15 в ROADMAP)
+- **`smartsync/`** — общее обучение нескольких агентов (Go): в образе агента, работает на управляющем сервере с
+  узлами (standalone: REST `/api/sync`, блокировка файлом, без Kafka и Redis); tenant `local` — корень хранилища, как
+  у агента без облака (`internal/pkg/db/s3/s3_test.go`); ADR-0012, п. 5c
 
 Не используемое NginxionS удалено из upstream (`CLAUDE.md`, «Удалено из upstream»): примеры деплоя, плагины шлюзов
 (kong, apisix, envoy), webhook, Dockerfile upstream, Helm-чарты, готовые бинарники без исходников.
@@ -258,7 +263,7 @@ flowchart LR
 
 - `build-images.sh` — локальная сборка всех образов (тег `local/<имя>:dev`)
 - `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh` (все группы или `SMOKE_GROUPS`), затем проверки после него
-- `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `gui`, `waf-score`, `upgrade`, `chaos`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
+- `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `gui`, `waf-score`, `upgrade`, `chaos`, `cluster`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
 - `ci-level.mjs` (+ `ci-level.test.mjs`) — глубина прогона CI по событию, сообщению коммита и изменённым файлам: `fast`/`full`/`extended`, какие тесты стека (`[smoke:waf]`, `[dast]`…), нужен ли CodeQL C++ и Go (инкрементальный скан)
 - `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
 - `flaky-report.mjs` (+ тест) — флейки smoke: по `steps.json` последних прогонов CI (ночной workflow) — какие шаги падали, какие падали и проходили на одном коммите, самые долгие
@@ -268,6 +273,7 @@ flowchart LR
 - `test-policy-contract.sh` — контрактный тест политики: политики, которые пишет бэкенд, по одной подаются агенту из образа; каждая должна примениться как написана
 - `policy-contract.mjs` — политики контрактного теста (`write`) и сверка того, что из них сделал агент (`check`)
 - `test-chaos.sh` — отказы частей стека: убитый агент, backend, остановленные CrowdSec и PostgreSQL; сайт должен работать, а после восстановления — снова блокировать атаки и не терять события
+- `test-cluster.sh` — несколько серверов (шаг 15.7): manager и два узла, каждый — свой стек на одной машине в закрытом контуре; подключение узлов, выкатка хоста с WAF, события узла на manager, откат пакета, который nginx не принял, вывод из работы, обрыв связи с manager, команда узлу, отключение узла
 - `test-soak.sh` — длительный прогон под смешанной нагрузкой (ночной): рост памяти, базы и логов, 5xx, задержка, блокировка атак
 - `test-waf-score.sh`, `waf-score.mjs` — оценка WAF: GoTestWAF (атаки и легитимные запросы) против хоста в режиме блокировки в закрытом контуре, сводка в Summary прогона
 - `test-lua.sh`, `lua/` — тесты Lua-модулей nginx (File Security) на LuaJIT с подставным nginx: вердикты clamd, критичность, архивы, документы Office, файлы без имени, эмуляция угроз
@@ -333,6 +339,7 @@ flowchart LR
   - `usr/local/nginx/conf/nginx.conf` — главный конфиг nginx, в том числе формат лога запросов `nginxions_requests`
   - `usr/local/nginx/conf/conf.d/nginxions-block-page.conf` — страница блокировки NginxionS для отказов 403
   - `usr/local/nginx/conf/conf.d/nginxions-crowdsec-hub.conf` — локальная раздача снимка hub CrowdSec
+  - `usr/local/nginx/conf/conf.d/nginxions-cluster.conf` — сертификат узла на его канале к manager (сервер `nginxions-cluster` в `npmplus.conf`) для backend, пустой на любом другом имени
   - `usr/local/nginx/conf/conf.d/nginxions-geo.conf` — страны по GeoIP (переписывается backend при загрузке базы)
   - `usr/local/nginx/conf/conf.d/nginxions-methods.conf` — отладочные методы TRACK, DEBUG и TRACE получают 405 на всех хостах и в интерфейсе (DAST: Proxy Disclosure)
   - `usr/local/nginx/conf/conf.d/nginxions-mtls-log.conf` — лог отказов mTLS
@@ -371,6 +378,7 @@ flowchart LR
     - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
+      - `cluster-bans.js` — общие баны кластера (шаг 15.3): свои баны сервера, баны остальных через manager, решения CrowdSec с origin `nginxions-cluster`; `cluster-bans.test.js` — их тесты
       - `lapi.js` — клиент локального API CrowdSec (LAPI)
       - `config.js` — генерация файлов CrowdSec из настроек
       - `apply.js` — применение настроек: файлы, нужные элементы hub, перезапуск, откат при ошибке
@@ -400,6 +408,10 @@ flowchart LR
       - `appsec.js` — клиенты shared storage и tuning
       - `policy.js` — исключения из разметки в политике (мгновенный эффект)
       - `snapshots.js` — снимки обученного состояния агента: ежедневно и по кнопке, сдвиг нормы, откат, скачивание и загрузка
+      - `profiles.js` — профили обучения (шаг 15.5): выученное по выбранным сайтам с подписью сервера; применение, файл для другого NginxionS, профиль для новых узлов
+      - `profile-model.js` — чистая часть профилей: подпись, какие файлы берёт профиль, слияние с выученным на сервере (тест `profile-model.test.js`)
+      - `profile-store.js` — где лежат профили: список и файл профиля для пакета узла (без остальной части обучения)
+      - `profile-policy.js` — политика WAF в профиле (шаг 15.5): режимы сайтов и объекты политики по виду и имени, применение на другом сервере (тест `profile-policy.test.js`)
     - **`migration/`** — перенос из NPM, NPMplus и open-appsec-npm
       - `index.js` — порядок переноса и отчёт
       - `source.js` — что лежит в резервной копии и где
@@ -413,7 +425,14 @@ flowchart LR
       - `model.js` — чистые функции узлов: идентификаторы, коды, хэши, состояние (без базы и сети)
       - `package.js` — пакет конфигурации узла на управляющем: его хосты, их сертификаты, списки доступа и режимы WAF; ключ подписи Ed25519
       - `package-model.js` — чистые функции пакета: каноническая форма, версия, подпись и проверка, перевод идентификаторов
+      - `settings-apply.js` — страница блокировки и настройки CrowdSec manager на узле: применяются, только когда отличаются; секрет капчи остаётся на каждом сервере свой
       - `apply.js` — узел применяет пакет: управляемые строки, удаление лишнего, домены своих хостов не трогает, nginx с проверкой
+      - `learning.js` — общее обучение на управляющем: запросы агента узла к его shared storage и smartsync
+      - `learning-model.js` — что узлу можно в хранилище управляющего: чтение, запись только данных окна под id узла
+      - `relay.js` — ретранслятор обучения на узле (127.0.0.1:7817 хранилище, :7818 smartsync) к управляющему
+      - `cluster-settings.js` — пороги общего обучения узлов (источники, окна, доля) из GUI → файл, который читает smartsync
+      - `cluster-learning.js` — общее состояние обучения узлов (файлы smartsync `remote/`) в снимке обучения и его откат
+      - `role.js` — роль сервера в общем обучении: smartsync (есть узлы), обучение через управляющего (сам узел)
     - **`notifications/`** — `index.js` (каналы, правила, движок проверки), `rules.js` (что проверяется и текст сообщений), `channels.js` (отправка: email, webhook с HMAC, Telegram)
     - **`pki/`** — свой PKI и mTLS
       - `index.js` — CA, выпуск, отзыв, CRL, OCSP, ссылки на скачивание
@@ -429,6 +448,7 @@ flowchart LR
       - `agent.js` — состояние агента
       - `metrics.js` — метрики агента (его служба prometheus на 127.0.0.1:7465)
       - `agent-settings.js` — настройки агента и ML-модели
+      - `model-file.js` — файл продвинутой модели агента: прежняя модель, SHA-256 для пакета узлов (шаг 15.5)
       - `policy.js` — сборка `local_policy.yaml` (всегда v1beta2) и его запись
       - `applied.js` — что агент применяет на самом деле: его конфигурация (через nginxions-control) против сгенерированной политики
       - `hosts.js` — режимы WAF хостов и их location
@@ -492,7 +512,8 @@ flowchart LR
     - **`acme/`** — ACME-серверы (`AcmeServers.tsx`), поля сервера и DNS (`AcmeFields.tsx`), API
     - **`certs/`** — выпуск ACME (`AcmeCertificateModal.tsx`), свой CSR (`CsrModal.tsx`), полный лог ошибки (`AcmeLog.tsx`)
     - **`crowdsec/`** — окна бана (`BanModal.tsx`), заблокированного адреса (`DecisionModal.tsx`), блок-листа (`BlocklistModal.tsx`), профиля (`ProfileModal.tsx`); подписи (`labels.ts`), API
-    - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), пробный режим хоста (`TrialModal.tsx`), что выучил агент (`LearnedModal.tsx`), снимки обучения (`SnapshotsModal.tsx`), API
+    - **`learning/`** — обучение: страница (`Learning.tsx`), разметка (`LabelModal.tsx`), пробный режим хоста (`TrialModal.tsx`), что выучил агент (`LearnedModal.tsx`), снимки обучения (`SnapshotsModal.tsx`), профили обучения (`ProfilesModal.tsx`), API
+    - **`nodes/`** — узлы в страницах агентов (`NodeView.tsx`): выбор «Этот сервер» или узел в «open-appsec» и «CrowdSec», состояние сервисов узла из его heartbeat, логи узла по запросу; план выкатки (`RolloutPlan.tsx`): хосты по меткам, канарейки и поэтапная выкатка, пакеты узла и откат на прежний
     - **`notifications/`** — канал (`ChannelModal.tsx`), правило (`RuleModal.tsx`), быстрая настройка (`SetupModal.tsx`), API
     - **`pki/`** — блоки страницы «Сертификаты»: центры сертификации, шаблоны и настройки PKI (`Sections.tsx`), хосты с mTLS и «Защитить хост» (`MtlsHosts.tsx`), окно настроек раздела (`SettingsModal.tsx`); CA (`CaModal.tsx`), выпуск (`IssueModal.tsx`), сертификат (`CertModal.tsx`), доступ к хосту (`AccessModal.tsx`, `HostCertsModal.tsx`), mTLS хоста (`MtlsModal.tsx`), отзыв (`RevokeModal.tsx`), ключи (`SecretModal.tsx`), шаблоны (`TemplateModal.tsx`), выдача файлов (`Delivery.tsx`), API
     - **`policy/`** — редактор политики: объект (`ObjectModal.tsx`, поля в `fields.ts`), файлы OpenAPI практики (`SchemaFiles.tsx`), ссылки на объекты (`RefsEditor.tsx`), просмотр изменения (`Review.tsx`, `ReviewModal.tsx`), код (`CodePane.tsx`), импорт (`ImportModal.tsx`), имена встроенных объектов (`names.ts`), API
