@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { repairNamespaces } from "./watchdog.js";
+import { coordinateRestarts, repairNamespaces } from "./watchdog.js";
 
 const run = async (nginxions, inspect) => {
 	const restarted = [];
@@ -32,4 +32,42 @@ test("nginxions started before openappsec (old namespace) is restarted, a later 
 test("nginxions someone stopped stays stopped", async () => {
 	const { restarted } = await run({ state: "exited" }, { npm1: { State: { ExitCode: 143 } }, oa1: { State: {} } });
 	assert.deepEqual(restarted, []);
+});
+
+test("the watchdog only repairs after a planned namespace restart finishes", async () => {
+	const coordinator = coordinateRestarts();
+	const ready = Promise.withResolvers();
+	const operations = [];
+	const planned = coordinator.restart(async () => {
+		operations.push("agent");
+		await ready.promise;
+		operations.push("nginxions");
+	});
+	const repair = () => {
+		operations.push("watchdog");
+		return ["nginxions"];
+	};
+	assert.deepEqual(await coordinator.repair(repair), []);
+	assert.deepEqual(operations, ["agent"]);
+	ready.resolve();
+	await planned;
+	assert.deepEqual(await coordinator.repair(repair), ["nginxions"]);
+	assert.deepEqual(operations, ["agent", "nginxions", "watchdog"]);
+});
+
+test("a planned restart waits for a running watchdog repair and proceeds even if the repair fails", async () => {
+	const coordinator = coordinateRestarts();
+	const repairing = Promise.withResolvers();
+	const repair = coordinator.repair(() => repairing.promise);
+	let restarted = false;
+	const planned = coordinator.restart(() => {
+		restarted = true;
+	});
+	assert.deepEqual(await coordinator.repair(assert.fail), []);
+	assert.equal(restarted, false);
+	const rejected = assert.rejects(repair, /Docker is unavailable/);
+	repairing.reject(new Error("Docker is unavailable"));
+	await rejected;
+	await planned;
+	assert.equal(restarted, true);
 });

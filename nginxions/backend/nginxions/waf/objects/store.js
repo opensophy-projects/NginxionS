@@ -183,7 +183,7 @@ export const buildDoc = async (candidate = {}) => {
 			hosts++;
 		}
 		for (const location of locationRows.get(proxyHost.id) || []) {
-			const index = locations.findIndex((l) => l.path === location.path);
+			const index = locations.findIndex((l) => l.path === location.path && l.npmplus_enabled !== false);
 			if (index === -1) continue;
 			addRules(
 				`npm-managed-specific-rule-proxyhost-${proxyHost.id}-${index}`,

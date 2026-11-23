@@ -26,7 +26,7 @@ import {
 	stageRestore,
 } from "./learning.js";
 import { untarOne } from "./tar.js";
-import { repairNamespaces } from "./watchdog.js";
+import { coordinateRestarts, repairNamespaces } from "./watchdog.js";
 
 const PORT = Number.parseInt(process.env.NGINXIONS_CONTROL_PORT || "7080", 10);
 // every address of this container: its only network is "control" (deploy/compose.yaml)
@@ -50,6 +50,7 @@ const PROJECT_LABEL = "com.docker.compose.project";
 const SERVICE_LABEL = "com.docker.compose.service";
 // CrowdSec rereads acquisition, parsers, scenarios and profiles on SIGHUP: seconds instead of a restart
 const RELOADABLE = ["crowdsec"];
+const namespaceRestarts = coordinateRestarts();
 
 const token = Buffer.from(readFileSync(TOKEN_FILE, "utf8").trim());
 if (token.length < 32) {
@@ -371,7 +372,7 @@ const server = http.createServer(async (req, res) => {
 			// the agent and nginxions are restarted as by a restart of this service (base64: a third more than the files)
 			const files = await stageRestore(await readJson(req, Math.ceil(MAX_SNAPSHOT_BYTES * 1.4) + 65536));
 			const container = await findService(AGENT_SERVICE);
-			after = () => restartWithDependents(container, entry);
+			after = () => namespaceRestarts.restart(() => restartWithDependents(container, entry));
 			result = { restored: files, restarting: true };
 		} else if (parts[0] === "v1" && parts[1] === "services" && parts.length >= 3) {
 			const service = decodeURIComponent(parts[2]);
@@ -397,7 +398,7 @@ const server = http.createServer(async (req, res) => {
 					container.service === "nginxions" ||
 					(await listManaged()).some((c) => c.networkMode === `container:${container.id}`);
 				if (reachesBackend) {
-					after = doRestart;
+					after = () => namespaceRestarts.restart(doRestart);
 					result = { service, restarted: false, restarting: true };
 				} else {
 					await doRestart();
@@ -441,7 +442,7 @@ const WATCHDOG_MS = 30 * 1000;
 const repairAll = () => repairNamespaces(listManaged, inspectContainer, restartContainer);
 if (process.env.NGINXIONS_CONTROL_WATCHDOG !== "false") {
 	const tick = () =>
-		repairAll().then(
+		namespaceRestarts.repair(repairAll).then(
 			(repaired) => {
 				for (const service of repaired)
 					audit({ actor: "watchdog", result: "restarted", service, reason: "network namespace" });
