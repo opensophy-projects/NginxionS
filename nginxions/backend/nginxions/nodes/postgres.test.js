@@ -10,6 +10,7 @@ import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { freshDatabase, postgres } from "../test/postgres.js";
 
 const ADMIN = { can: async () => true, token: { getUserId: () => 1 } };
@@ -323,7 +324,10 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			rmSync(PREVIOUS_FILE, { force: true });
 		});
 		const previous = gzipSync("the model running now");
-		const model = gzipSync("the model from the manager");
+		const resources = fileURLToPath(
+			new URL("../../../../openappsec/agent/components/security_apps/waap/resources/", import.meta.url),
+		);
+		const model = execFileSync("tar", ["-czf", "-", "-C", resources, "waap.data"], { maxBuffer: 16 * 1024 * 1024 });
 		const originalHash = createHash("sha256").update(previous).digest("hex");
 		const ref = { sha256: createHash("sha256").update(model).digest("hex"), size: model.length };
 		mkdirSync(MODEL_DIR, { recursive: true });

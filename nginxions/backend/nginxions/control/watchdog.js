@@ -1,4 +1,24 @@
 // NginxionS: nginxions-control repairs containers that share the network namespace of another (server.js runs it).
+
+/** An explicit restart owns the namespace until both the owner and its dependents are restarted. */
+export const coordinateRestarts = () => {
+	let tail = Promise.resolve();
+	let pending = 0;
+	const restart = (action) => {
+		pending++;
+		const result = tail.then(action).finally(() => {
+			pending--;
+		});
+		tail = result.catch(() => {});
+		return result;
+	};
+	return {
+		restart,
+		// Skip a tick while a restart or another watchdog tick is working on the namespace.
+		repair: (action) => (pending === 0 ? restart(action) : Promise.resolve([])),
+	};
+};
+
 /**
  * Watchdog of shared network namespaces: nginxions lives in the namespaces of openappsec. After a restart of openappsec
  * outside this service (an update, docker restart, a crash), nginxions either fails to start ("cannot join network

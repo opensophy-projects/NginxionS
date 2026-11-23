@@ -32,5 +32,17 @@ $CURL -X POST "$ADMIN/api/nginxions/nginx/regenerate" | grep -q '"regenerated": 
 curl -sS --max-time 10 -H 'Host: test.local' "$HTTP/" | grep -q '^Hostname:' || fail "proxy host is down after regenerate"
 
 step "System → Services: diagnostic archive"
+$CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginx/proxy-hosts/1" \
+  -d '{"advanced_config": "# password=fixture-phase-one-diagnostic\n"}' > /dev/null
 $CURL -o /tmp/diagnostics.zip "$ADMIN/api/nginxions/diagnostics"
-[ "$(head -c 2 /tmp/diagnostics.zip)" = PK ] || fail "diagnostic archive is not a zip"
+$CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginx/proxy-hosts/1" \
+  -d '{"advanced_config": ""}' > /dev/null
+unzip -l /tmp/diagnostics.zip > /tmp/diagnostics-files || fail "diagnostic archive is not a readable ZIP"
+for file in nginxions.json services.json logs/nginxions.log nginx-T.txt; do
+  awk '{print $NF}' /tmp/diagnostics-files | grep -Fxq "$file" || fail "diagnostic archive is missing $file"
+done
+unzip -p /tmp/diagnostics.zip nginx-T.txt > /tmp/diagnostics-nginx
+grep -Fq '# password=***' /tmp/diagnostics-nginx || fail "nginx configuration did not contain the redacted fixture"
+if unzip -p /tmp/diagnostics.zip | grep -Fq 'fixture-phase-one-diagnostic'; then
+  fail "diagnostic archive exposed the fixture password"
+fi

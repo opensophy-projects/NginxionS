@@ -13,6 +13,7 @@ import YAML from "yaml";
 import db from "../../db.js";
 import errs from "../../lib/error.js";
 import { fromV1, SECTIONS_V2 } from "./objects/format.js";
+import { POLICY_MODES, RULE_FIELDS } from "./objects/model.js";
 
 const NAMED_SECTIONS = [
 	"practices",
@@ -26,6 +27,26 @@ const NAMED_SECTIONS = [
 const MAX_BYTES = 256 * 1024;
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+const checkRule = (rule, where) => {
+	if (rule.mode !== undefined && !POLICY_MODES.includes(rule.mode)) {
+		throw new errs.ValidationError(`${where}.mode: must be one of ${POLICY_MODES.join(", ")}`);
+	}
+	if (rule.host !== undefined && (typeof rule.host !== "string" || !rule.host.trim())) {
+		throw new errs.ValidationError(`${where}.host: must be a nonempty string`);
+	}
+	for (const [field, { many }] of Object.entries(RULE_FIELDS)) {
+		const value = rule[field];
+		if (value === undefined) continue;
+		if (
+			many
+				? !Array.isArray(value) || value.some((name) => typeof name !== "string" || !name)
+				: typeof value !== "string"
+		) {
+			throw new errs.ValidationError(`${where}.${field}: must be ${many ? "a list of names" : "a name"}`);
+		}
+	}
+};
 
 const checkNamedList = (list, where) => {
 	if (!Array.isArray(list)) {
@@ -94,7 +115,12 @@ const parseCustom = (content) => {
 			throw new errs.ValidationError(`${key}: unknown section (policies, ${NAMED_SECTIONS.join(", ")})`);
 		}
 	}
-	return fromV1(doc);
+	const fragment = fromV1(doc);
+	if (fragment.policies?.default) checkRule(fragment.policies.default, "policies.default");
+	for (const [index, rule] of (fragment.policies?.specificRules ?? []).entries()) {
+		checkRule(rule, `policies.specificRules[${index}]`);
+	}
+	return fragment;
 };
 
 const mergeNamed = (generated = [], custom = []) => {
@@ -122,6 +148,9 @@ const mergeCustom = (policy, custom) => {
 		if (custom[key]) {
 			result[key] = mergeNamed(result[key], custom[key]);
 		}
+	}
+	for (const trigger of result.logTriggers ?? []) {
+		trigger.logDestination = { ...trigger.logDestination, cloud: false };
 	}
 	return result;
 };

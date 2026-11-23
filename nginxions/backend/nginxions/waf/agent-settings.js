@@ -9,7 +9,7 @@
 // The role of this server in the learning of several servers (step 15.4, docs/adr/0012-nodes.md 5c) goes in the same
 // file: it is not a setting, it follows the nodes (applyLearningRole).
 import { createWriteStream } from "node:fs";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import internalAuditLog from "../../internal/audit-log.js";
@@ -18,7 +18,7 @@ import { debug, global as logger } from "../../logger.js";
 import control from "../control/client.js";
 import { learningRole } from "../nodes/role.js";
 import { getSetting, setSetting } from "../settings.js";
-import { fileInfo, MODEL_DIR, MODEL_FILE, PREVIOUS_FILE, sha256Of } from "./model-file.js";
+import { fileInfo, MODEL_DIR, MODEL_FILE, PREVIOUS_FILE, sha256Of, validateModelArchive } from "./model-file.js";
 
 const LOCALCONFIG_DIR = path.dirname(process.env.NGINXIONS_APPSEC_POLICY_FILE || "/ext/appsec/local_policy.yaml");
 const ENV_FILE = path.join(LOCALCONFIG_DIR, "nginxions-agent.env");
@@ -83,6 +83,27 @@ const keepPrevious = async () => {
 	}
 };
 
+let modelChanges = Promise.resolve();
+const changeModel = (change) => {
+	const result = modelChanges.then(change);
+	modelChanges = result.catch(() => {});
+	return result;
+};
+
+const replaceModel = async (incoming) => {
+	// Keep the running model at its original path until the replacement is ready to rename over it.
+	const backup = `${incoming}.previous`;
+	try {
+		await link(MODEL_FILE, backup);
+		await rename(backup, PREVIOUS_FILE);
+	} catch (err) {
+		if (err.code !== "ENOENT") throw err;
+	} finally {
+		await rm(backup, { force: true });
+	}
+	await rename(incoming, MODEL_FILE);
+};
+
 // The agent loads its model at startup. A queued restart can also restart this backend, so check the agent's
 // start time against the file's change time (updated by rename) even on a later heartbeat.
 const restartForModel = async (changedAt) => {
@@ -105,32 +126,34 @@ const restartForModel = async (changedAt) => {
  * @param {string} sha256  the hash the package names
  * @returns {Promise<{applied: boolean, error?: Error}>} whether the agent has restarted with the model
  */
-export const installManagerModel = async (fetchTo, sha256) => {
-	if ((await fileInfo(MODEL_FILE)).sha256 !== sha256) {
-		await mkdir(MODEL_DIR, { recursive: true });
-		const tmp = `${MODEL_FILE}.manager`;
-		try {
-			await fetchTo(tmp);
-			const got = await sha256Of(tmp);
-			if (got !== sha256)
-				throw new Error(`the model is not the one of the package (SHA-256 ${got.slice(0, 12)})`);
-			await keepPrevious();
-			await rename(tmp, MODEL_FILE);
-		} finally {
-			await rm(tmp, { force: true });
+export const installManagerModel = (fetchTo, sha256) =>
+	changeModel(async () => {
+		if ((await fileInfo(MODEL_FILE)).sha256 !== sha256) {
+			await mkdir(MODEL_DIR, { recursive: true });
+			const tmp = `${MODEL_FILE}.manager`;
+			try {
+				await fetchTo(tmp);
+				const got = await sha256Of(tmp);
+				if (got !== sha256)
+					throw new Error(`the model is not the one of the package (SHA-256 ${got.slice(0, 12)})`);
+				await validateModelArchive(tmp);
+				await replaceModel(tmp);
+			} finally {
+				await rm(tmp, { force: true });
+			}
 		}
-	}
-	return restartForModel((await stat(MODEL_FILE)).ctimeMs);
-};
+		return restartForModel((await stat(MODEL_FILE)).ctimeMs);
+	});
 
 /** On a node: return to the model of the image, keeping the advanced model as the previous one. */
-export const removeManagerModel = async () => {
-	await keepPrevious();
-	const previous = await stat(PREVIOUS_FILE).catch((err) => {
-		if (err.code !== "ENOENT") throw err;
+export const removeManagerModel = () =>
+	changeModel(async () => {
+		await keepPrevious();
+		const previous = await stat(PREVIOUS_FILE).catch((err) => {
+			if (err.code !== "ENOENT") throw err;
+		});
+		return previous ? restartForModel(previous.ctimeMs) : { applied: true };
 	});
-	return previous ? restartForModel(previous.ctimeMs) : { applied: true };
-};
 
 const state = async (settings) => {
 	const applied = await readText(APPLIED_FILE);
@@ -258,7 +281,8 @@ const internalWafAgent = {
 			throw new errs.ValidationError("The model file is larger than 1 GB");
 		}
 		await mkdir(MODEL_DIR, { recursive: true });
-		const tmp = `${MODEL_FILE}.upload`;
+		const staging = await mkdtemp(path.join(MODEL_DIR, ".upload-"));
+		const tmp = path.join(staging, "model.tgz");
 		let size = 0;
 		req.on("data", (chunk) => {
 			size += chunk.length;
@@ -266,18 +290,14 @@ const internalWafAgent = {
 		});
 		try {
 			await pipeline(req, createWriteStream(tmp, { mode: 0o644 }));
-			const handle = await open(tmp, "r");
-			const magic = Buffer.alloc(2);
-			await handle.read(magic, 0, 2, 0);
-			await handle.close();
-			if (size === 0 || magic[0] !== 0x1f || magic[1] !== 0x8b) {
-				throw new errs.ValidationError("The model must be a .tgz file (open-appsec-advanced-model.tgz)");
-			}
-			await keepPrevious();
-			await rename(tmp, MODEL_FILE);
+			await changeModel(async () => {
+				await validateModelArchive(tmp);
+				await replaceModel(tmp);
+			});
 		} catch (err) {
-			await rm(tmp, { force: true });
 			throw err instanceof errs.ValidationError ? err : new errs.ValidationError(err.message);
+		} finally {
+			await rm(staging, { recursive: true, force: true });
 		}
 		await internalAuditLog.add(access, {
 			action: "updated",
@@ -299,8 +319,11 @@ const internalWafAgent = {
 		if (await managedByManager()) {
 			throw new errs.ValidationError("The model of this node is given by its manager: change it there");
 		}
-		const had = (await getModel()).present;
-		if (had) await keepPrevious();
+		const had = await changeModel(async () => {
+			const { present } = await fileInfo(MODEL_FILE);
+			if (present) await keepPrevious();
+			return present;
+		});
 		if (had) {
 			await internalAuditLog.add(access, {
 				action: "deleted",
@@ -327,19 +350,25 @@ internalWafAgent.previousModel = async (access, apply = true) => {
 	if (await managedByManager()) {
 		throw new errs.ValidationError("The model of this node is given by its manager: change it there");
 	}
-	if (!(await fileInfo(PREVIOUS_FILE)).present) throw new errs.ValidationError("There is no model before this one");
-	const swap = `${MODEL_FILE}.swap`;
-	try {
-		await rename(MODEL_FILE, swap);
-	} catch (err) {
-		if (err.code !== "ENOENT") throw err;
-	}
-	await rename(PREVIOUS_FILE, MODEL_FILE);
-	try {
-		await rename(swap, PREVIOUS_FILE);
-	} catch (err) {
-		if (err.code !== "ENOENT") throw err;
-	}
+	await changeModel(async () => {
+		if (!(await fileInfo(PREVIOUS_FILE)).present)
+			throw new errs.ValidationError("There is no model before this one");
+		await validateModelArchive(PREVIOUS_FILE);
+		const swap = `${MODEL_FILE}.swap`;
+		try {
+			await link(MODEL_FILE, swap);
+		} catch (err) {
+			if (err.code !== "ENOENT") throw err;
+		}
+		try {
+			await rename(PREVIOUS_FILE, MODEL_FILE);
+			await rename(swap, PREVIOUS_FILE).catch((err) => {
+				if (err.code !== "ENOENT") throw err;
+			});
+		} finally {
+			await rm(swap, { force: true });
+		}
+	});
 	await internalAuditLog.add(access, {
 		action: "updated",
 		object_type: "waf",

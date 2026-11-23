@@ -160,6 +160,7 @@ if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
   docker rm -f "$pw" > /dev/null 2>&1 || true
   docker run -d --name "$pw" --init -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     -v "$PWD/deploy/test/ui-e2e.mjs:/e2e/ui-e2e.mjs:ro" -v "$PWD/deploy/test/gui-e2e.mjs:/e2e/gui-e2e.mjs:ro" \
+    -v "$PWD/openappsec/agent/components/security_apps/waap/resources/waap.data:/e2e/waap.data:ro" \
     -v "${COMPOSE_PROJECT_NAME}_test-state:/state:ro" \
     -v "$PWD/reports/ui:/out" -v "$PWD/reports/gui:/out-gui" -w /e2e "$pw_image" sleep 3600 > /dev/null
   docker exec "$pw" sh -c "npm init -y > /dev/null && npm install --no-save --no-audit --no-fund playwright@$pw_version > /dev/null"

@@ -69,8 +69,20 @@ const versions = async () => {
 	}));
 };
 
+const candidatePolicy = async (content) => {
+	const custom = parseCustom(content);
+	const candidate = await buildPolicy({ custom });
+	const missing = candidate.warnings.filter((warning) => warning.startsWith("missing:"));
+	if (missing.length) {
+		throw new errs.ValidationError(
+			`Unknown policy references: ${missing.map((warning) => warning.slice(8)).join(", ")}`,
+		);
+	}
+	return { ...candidate, withCustom: Object.keys(custom).length > 0 };
+};
+
 const save = async (access, content, comment) => {
-	parseCustom(content);
+	await candidatePolicy(content);
 	const [row] = await db()("nginxions_waf_custom_policy")
 		.insert({
 			content,
@@ -106,17 +118,17 @@ const internalWafExpert = {
 	 */
 	check: async (access, content) => {
 		await access.can("waf_policy:view");
-		let custom;
+		let candidate;
 		try {
-			custom = parseCustom(content);
+			candidate = await candidatePolicy(content);
 		} catch (err) {
 			if (err instanceof errs.ValidationError) {
 				return { valid: false, error: err.message };
 			}
 			throw err;
 		}
-		const { policy, format, reasons, warnings } = await buildPolicy({ custom });
-		const next = render(policy, Object.keys(custom).length > 0);
+		const { policy, format, reasons, warnings, withCustom } = candidate;
+		const next = render(policy, withCustom);
 		const current = (await readPolicyFile()) ?? "";
 		const diff = diffLines(current, next);
 		return {
