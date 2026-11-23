@@ -106,11 +106,7 @@ jobs:
           if [ "$EVENT" = push ] && [[ "$REF" == refs/heads/* ]] && [ "$REF" != refs/heads/work ]; then
             open_prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.state == "open")] | length' 2>/dev/null || echo 0)
             if [[ "$open_prs" =~ ^[0-9]+$ ]] && [ "$open_prs" -gt 0 ]; then
-              echo "level=none" >> "$GITHUB_OUTPUT"
-              echo 'suites=[]' >> "$GITHUB_OUTPUT"
-              echo "cpp=false" >> "$GITHUB_OUTPUT"
-              echo "go=false" >> "$GITHUB_OUTPUT"
-              echo "dast=false" >> "$GITHUB_OUTPUT"
+              printf '%s\n' level=none 'suites=[]' cpp=false go=false dast=false >> "$GITHUB_OUTPUT"
               echo "### CI skipped: this commit is already validated by its pull request." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
@@ -143,8 +139,6 @@ jobs:
         with:
           node-version: lts/*
           package-manager-cache: false
-          cache: pnpm
-          cache-dependency-path: nginxions/backend/pnpm-lock.yaml
       - name: backend
         working-directory: nginxions/backend
         env:
@@ -180,8 +174,6 @@ jobs:
         with:
           node-version: lts/*
           package-manager-cache: false
-          cache: pnpm
-          cache-dependency-path: nginxions/frontend/pnpm-lock.yaml
       - name: frontend
         working-directory: nginxions/frontend
         run: |
