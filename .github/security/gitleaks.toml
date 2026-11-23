@@ -47,7 +47,7 @@ commits = ["1d6a369223b4f7089df34e3db8bb5f25587c46dc"]
 paths = ['''^deploy/openappsec/agent/patches/0005-feature-dump-for-training\.patch$''']
 
 [[allowlists]]
-description = "the model of the agent (the advanced model of Opensophy): attack keywords and regular expressions of the signatures, not secrets; model/waap.data is where it was first uploaded"
+description = "the model of the agent (the advanced model): attack keywords and regular expressions of the signatures, not secrets; model/waap.data is where it was first uploaded"
 paths = ['''^openappsec/agent/components/security_apps/waap/resources/[^/]+\.data$''', '''^model/waap\.data$''']
 
 [[allowlists]]

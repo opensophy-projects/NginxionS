@@ -37,6 +37,7 @@ import {
 } from "src/modules/Permissions";
 import { showError, showSuccess } from "src/notifications";
 import { setWafHost, WAF_DEFAULTS } from "../../api";
+import { setHostBouncer, useCrowdsecHosts } from "../../crowdsec/api";
 import {
 	useCertTerms,
 	useHostAttacks,
@@ -45,10 +46,11 @@ import {
 	useWafHosts,
 	useWafStatus,
 } from "../../hooks";
+import { PanelHostWarning, servesPanel } from "../../hosts/panel";
+import { getLearningHosts } from "../../learning/api";
 import { showConfirmModal } from "../../modals/ConfirmModal";
-import { InfoTip } from "../../ui/InfoTip";
 import { showHostHistoryModal } from "../../modals/HostHistoryModal";
-import { setHostBouncer, useCrowdsecHosts } from "../../crowdsec/api";
+import { showAccessModal } from "../../pki/AccessModal";
 import {
 	enableMtlsHost,
 	fromApiRule,
@@ -58,11 +60,10 @@ import {
 	useMtlsHosts,
 	usePki,
 } from "../../pki/api";
-import { showAccessModal } from "../../pki/AccessModal";
 import { showHostCertsModal } from "../../pki/HostCertsModal";
 import { showMtlsModal } from "../../pki/MtlsModal";
-import { getLearningHosts } from "../../learning/api";
 import { useCan } from "../../rbac/hooks";
+import { InfoTip } from "../../ui/InfoTip";
 import { createHost, deleteHost, OBJECT, QUERY_KEY, toggleHost, updateHost } from "./api";
 import {
 	AccessCell,
@@ -70,13 +71,13 @@ import {
 	AttacksCell,
 	type CellContext,
 	ChangedCell,
+	CrowdsecCell,
 	MtlsCell,
 	NameCell,
 	StatusCell,
 	TargetCell,
 	TlsCell,
 	WafCell,
-	CrowdsecCell,
 } from "./Cells";
 import styles from "./Hosts.module.css";
 import { Recommendations } from "./Recommendations";
@@ -115,7 +116,6 @@ import {
 	TransferMenu,
 	type View,
 } from "./Toolbar";
-import { PanelHostWarning, servesPanel } from "../../hosts/panel";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 

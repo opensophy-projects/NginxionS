@@ -7,6 +7,9 @@
 #include "i_instance_awareness.h"
 #include "buffered_compressed_stream.h"
 #include "unified_learning_comp.h"
+// NginxionS: cap the sync delays in stacks that explicitly request short test windows (waitSync).
+#include "WaapParameters.h"
+#include <algorithm>
 #include <boost/regex.hpp>
 #include <sstream>
 #include <fstream>
@@ -576,7 +579,11 @@ SerializeToLocalAndRemoteSyncBaseT<ComponentType>::SerializeToLocalAndRemoteSync
                 ") is not set";
         }
     }
-    if (remotePath != "") {
+    // NginxionS: without a tenant, /<assetId>/<type> already starts at the asset.
+    const string localAssetPrefix = "/" + assetId + "/";
+    if (!assetId.empty() && m_remotePath.compare(0, localAssetPrefix.size(), localAssetPrefix) == 0) {
+        m_type = m_remotePath.substr(localAssetPrefix.size());
+    } else if (remotePath != "") {
         // remote path is /<tenantId>/<assetId>/<type>
         auto parts = split(m_remotePath, '/');
         if (parts.size() > 2) {
@@ -609,7 +616,12 @@ void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::waitSync()
     {
         return;
     }
-    m_pMainLoop->yield(m_waitForSync);
+    // NginxionS: in tests a window can be shorter than either of the two waits in a sync cycle.
+    const auto testInterval = Waap::Parameters::WaapParameters::learningIntervalOfEnv();
+    const auto wait = testInterval.empty()
+        ? m_waitForSync
+        : std::min(m_waitForSync, ch::duration_cast<ch::microseconds>(ch::minutes(std::stoi(testInterval))) / 4);
+    m_pMainLoop->yield(wait);
 }
 
 template<typename ComponentType>

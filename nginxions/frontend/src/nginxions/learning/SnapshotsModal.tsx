@@ -161,6 +161,14 @@ const SnapshotsModal = EasyModal.create(({ label, manage, visible, remove }: Pro
 										</td>
 										<td>
 											<T id={`nginxions.learning.snapshots.reason.${s.reason}`} />
+											{Boolean(s.cluster) && (
+												<div className={styles.muted}>
+													<T
+														id="nginxions.learning.snapshots.cluster"
+														data={{ count: s.cluster }}
+													/>
+												</div>
+											)}
 											{s.sourceTakenOn && (
 												<div className={styles.muted}>
 													<T

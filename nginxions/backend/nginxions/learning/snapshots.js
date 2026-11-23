@@ -7,6 +7,9 @@
 //     the page and told by the notification rule learning_shift;
 //   - a snapshot is restored in place of the learned state (the agent and nginxions restart; the state before is
 //     kept as a snapshot first), downloaded, and uploaded on another NginxionS (transfer).
+//   - on a manager with nodes (step 15.4, docs/adr/0012-nodes.md 5c) a snapshot also keeps the state smartsync put
+//     together from all the servers (cluster), restored with it; the automatic snapshot is taken every hour there, so
+//     a sync of smartsync that brings a shift can be rolled back to the hour before.
 // RBAC: who sees learning sees the snapshots; who labels takes and downloads them; restore, upload and delete also need
 // waf_policy:manage (they change what the WAF blocks).
 import { randomBytes } from "node:crypto";
@@ -18,6 +21,8 @@ import errs from "../../lib/error.js";
 import { global as logger } from "../../logger.js";
 import control from "../control/client.js";
 import { checkSnapshot, LearningError, MAX_SNAPSHOT_BYTES, parseLearned } from "../control/learning.js";
+import { isClusterStatePath, readClusterState, restoreClusterState } from "../nodes/cluster-learning.js";
+import { learningRole } from "../nodes/role.js";
 import { shiftOf, summarize } from "./model.js";
 
 export const SNAPSHOT_DIR = process.env.NGINXIONS_LEARNING_SNAPSHOT_DIR || "/data/nginxions/learning/snapshots";
@@ -25,6 +30,9 @@ export const FORMAT = "nginxions-learning-snapshot";
 export const REASONS = ["auto", "manual", "before-restore", "import"];
 const KEEP_AUTO = 14;
 const AUTO_MS = 24 * 3600 * 1000;
+/** on a manager with nodes: a snapshot every hour, two days of them kept */
+const CLUSTER_AUTO_MS = 3600 * 1000;
+const CLUSTER_KEEP_AUTO = 48;
 const CHECK_MS = 3600 * 1000;
 const ID = /^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}$/;
 
@@ -89,11 +97,21 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 		modifiedAt: f.modifiedAt ?? null,
 		content: f.content,
 	}));
+	// the state of the cluster (a manager with nodes), kept beside the files of the agent
+	const cluster = bundle.cluster?.map((f) => ({ path: f.path, content: f.content }));
 	const assets = summarize(parsedFiles(files));
 	const previous = (await listSnapshots())[0];
 	const takenOn = new Date();
 	const id = newId(takenOn);
-	const payload = gzipSync(JSON.stringify({ format: FORMAT, version: 1, takenOn: takenOn.toISOString(), files }));
+	const payload = gzipSync(
+		JSON.stringify({
+			format: FORMAT,
+			version: 1,
+			takenOn: takenOn.toISOString(),
+			files,
+			cluster,
+		}),
+	);
 	const meta = {
 		id,
 		takenOn: takenOn.toISOString(),
@@ -101,6 +119,7 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 		userId,
 		size: payload.length,
 		files: files.length,
+		cluster: cluster?.length ?? 0,
 		assets,
 		// the shift from the snapshot before (none for the first one)
 		shift: previous ? shiftOf(previous.assets ?? [], assets) : [],
@@ -115,9 +134,9 @@ const keep = async (bundle, { reason, userId = 0, sourceTakenOn = null }) => {
 };
 
 /** the automatic snapshots beyond the newest KEEP_AUTO are deleted; the others stay until deleted in the GUI */
-const prune = async () => {
+const prune = async (keepAuto = KEEP_AUTO) => {
 	const autos = (await listSnapshots()).filter((m) => m.reason === "auto");
-	for (const m of autos.slice(KEEP_AUTO)) {
+	for (const m of autos.slice(keepAuto)) {
 		await rm(fileOf(m.id, "json.gz"), { force: true });
 		await rm(fileOf(m.id, "meta.json"), { force: true });
 	}
@@ -127,10 +146,22 @@ const prune = async () => {
  * A snapshot of what the agent learned now.
  * @param {string} reason
  * @param {number} [userId]
+ * @param {{requireCluster?: boolean}} [options]  a cluster restore needs a backup of the previous state
  */
-export const takeSnapshot = async (reason, userId = 0) => {
-	const meta = await keep(await control.snapshotAgentLearning(), { reason, userId });
-	if (reason === "auto") await prune();
+export const takeSnapshot = async (reason, userId = 0, { requireCluster = false } = {}) => {
+	const bundle = await control.snapshotAgentLearning();
+	const { smartsync } = await learningRole();
+	if (smartsync || requireCluster) {
+		try {
+			bundle.cluster = await readClusterState();
+		} catch (err) {
+			if (requireCluster) throw err;
+			// the snapshot of this server is still taken; the cluster part is told
+			logger.warn(`Learning snapshots: the state of the cluster was not kept: ${err.message}`);
+		}
+	}
+	const meta = await keep(bundle, { reason, userId });
+	if (reason === "auto") await prune(smartsync ? CLUSTER_KEEP_AUTO : KEEP_AUTO);
 	if (meta.shift.length) {
 		logger.warn(
 			`Learning: a sharp shift of the norm of ${meta.shift.map((s) => s.asset).join(", ")} (snapshot ${meta.id})`,
@@ -139,8 +170,11 @@ export const takeSnapshot = async (reason, userId = 0) => {
 	return meta;
 };
 
+/** the size of what was learned per asset, for files of a bundle (a snapshot, a profile) */
+export const summaryOf = (files) => summarize(parsedFiles(files));
+
 /** the files of a kept snapshot */
-const loadSnapshot = async (id) => {
+export const loadSnapshot = async (id) => {
 	let content;
 	try {
 		content = await readFile(fileOf(id, "json.gz"));
@@ -169,6 +203,13 @@ export const readPayload = (content) => {
 		if (err instanceof LearningError) throw new errs.ValidationError(`the snapshot: ${err.message}`);
 		throw err;
 	}
+	// the state of the cluster: files under remote/ of the shared storage only
+	if (payload.cluster !== undefined) {
+		const ok =
+			Array.isArray(payload.cluster) &&
+			payload.cluster.every((f) => isClusterStatePath(f?.path) && typeof f?.content === "string");
+		if (!ok) throw new errs.ValidationError("the snapshot: the state of the cluster is not valid");
+	}
 	return payload;
 };
 
@@ -180,16 +221,18 @@ export const recentShifts = async (now = new Date()) => {
 };
 
 // ------------------------------------------------------------------ the daily snapshot
-const autoDue = async (now = new Date()) => {
+const autoDue = async (now = new Date(), every = AUTO_MS) => {
 	const last = (await listSnapshots()).find((m) => m.reason === "auto");
-	return !last || now.getTime() - new Date(last.takenOn).getTime() >= AUTO_MS;
+	// a minute of slack: the hourly check does not miss an hourly snapshot by a few seconds
+	return !last || now.getTime() - new Date(last.takenOn).getTime() >= every - 60 * 1000;
 };
 
 let timer = null;
 export const start = () => {
 	if (timer) clearInterval(timer);
 	const run = async () => {
-		if (!(await autoDue())) return;
+		const { smartsync } = await learningRole();
+		if (!(await autoDue(new Date(), smartsync ? CLUSTER_AUTO_MS : AUTO_MS))) return;
 		// nothing learned yet: no snapshot
 		if (!(await control.listAgentLearning()).length) return;
 		await takeSnapshot("auto");
@@ -233,14 +276,20 @@ const internalLearningSnapshots = {
 	restore: async (access, id) => {
 		await canManage(access);
 		const payload = await loadSnapshot(id);
-		const before = await takeSnapshot("before-restore", access.token.getUserId(0));
+		// An empty cluster list clears the merged state. A snapshot without the field leaves that state alone.
+		const restoreCluster = payload.cluster !== undefined;
+		if (restoreCluster) await access.can("waf_learning:sync");
+		const before = await takeSnapshot("before-restore", access.token.getUserId(0), {
+			requireCluster: restoreCluster,
+		});
+		const cluster = restoreCluster ? await restoreClusterState(payload.cluster) : 0;
 		await control.restoreAgentLearning({ files: payload.files }, access.token.getUserId(0));
 		const metaFile = fileOf(id, "meta.json");
 		const meta = JSON.parse(await readFile(metaFile, "utf8"));
 		meta.restoredOn = new Date().toISOString();
 		await writeAtomic(metaFile, JSON.stringify(meta));
-		await audit(access, { action: "restored", id, before: before.id });
-		return { restored: id, before: before.id, restarting: true };
+		await audit(access, { action: "restored", id, before: before.id, cluster });
+		return { restored: id, before: before.id, cluster, restarting: true };
 	},
 
 	/**

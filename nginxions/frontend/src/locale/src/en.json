@@ -1053,7 +1053,7 @@
 		"defaultMessage": "For example: write to security@example.com"
 	},
 	"nginxions.block-page.description": {
-		"defaultMessage": "What a visitor sees when a request is refused: by open-appsec, by the CrowdSec bouncer or by an access list. It replaces the page of the agent with the text of opensophy."
+		"defaultMessage": "What a visitor sees when a request is refused: by open-appsec, by the CrowdSec bouncer or by an access list. It replaces the page of the agent with the text of the vendor of the agent."
 	},
 	"nginxions.block-page.details": {
 		"defaultMessage": "Show the request ID, IP, host and time (for a request to the administrator)"
@@ -1322,6 +1322,9 @@
 	"nginxions.cluster.fingerprint": {
 		"defaultMessage": "Certificate of the manager (SHA-256)"
 	},
+	"nginxions.cluster.fingerprint.hint": {
+		"defaultMessage": "Enter the SHA-256 fingerprint of the manager’s TLS certificate that you verified over a trusted channel."
+	},
 	"nginxions.cluster.hint": {
 		"defaultMessage": "Connect this server to a manager: it will be managed from there and keep protecting its sites if the manager is unreachable."
 	},
@@ -1333,6 +1336,42 @@
 	},
 	"nginxions.cluster.last-ok": {
 		"defaultMessage": "Last contact"
+	},
+	"nginxions.cluster.learning": {
+		"defaultMessage": "Learning"
+	},
+	"nginxions.cluster.learning-hint": {
+		"defaultMessage": "The agent of this server sends what it learns to the manager and takes back what all the servers learned together. Without the manager it keeps protecting with what it has."
+	},
+	"nginxions.cluster.learning-ok": {
+		"defaultMessage": "together with the other servers, through the manager (last answer {time})"
+	},
+	"nginxions.cluster.learning-waiting": {
+		"defaultMessage": "through the manager: no request of the agent yet (it starts after the restart of the agent)"
+	},
+	"nginxions.cluster.learning.hint": {
+		"defaultMessage": "How the norm of the sites is put together from all the servers (smartsync on this server, when it has nodes). A value becomes normal when enough different sources have seen it, in enough windows of learning; one node alone never makes it normal. Applied at the next sync, no restart."
+	},
+	"nginxions.cluster.learning.minIntervals": {
+		"defaultMessage": "Windows of learning"
+	},
+	"nginxions.cluster.learning.minSources": {
+		"defaultMessage": "Sources for a parameter"
+	},
+	"nginxions.cluster.learning.minSourcesTypes": {
+		"defaultMessage": "Sources for a type of value"
+	},
+	"nginxions.cluster.learning.ratioThreshold": {
+		"defaultMessage": "Share of the sources (0.1–1)"
+	},
+	"nginxions.cluster.learning.save": {
+		"defaultMessage": "Save"
+	},
+	"nginxions.cluster.learning.saved": {
+		"defaultMessage": "The learning of the nodes is saved"
+	},
+	"nginxions.cluster.learning.title": {
+		"defaultMessage": "Learning of the nodes"
 	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Disconnect"
@@ -1346,8 +1385,20 @@
 	"nginxions.cluster.manager.placeholder": {
 		"defaultMessage": "https://manager.example.com:81"
 	},
+	"nginxions.cluster.model": {
+		"defaultMessage": "Model of the agent"
+	},
+	"nginxions.cluster.model-applied": {
+		"defaultMessage": "The model of the manager (SHA-256 {sha}…)"
+	},
 	"nginxions.cluster.node": {
 		"defaultMessage": "This node"
+	},
+	"nginxions.cluster.profile": {
+		"defaultMessage": "Learning profile"
+	},
+	"nginxions.cluster.profile-applied": {
+		"defaultMessage": "Started with the profile of the manager: {count, plural, =0 {nothing to fill, this server had learned its sites already} one {# site filled} other {# sites filled}}"
 	},
 	"nginxions.cluster.standalone": {
 		"defaultMessage": "This server works on its own."
@@ -2468,6 +2519,9 @@
 	"nginxions.events.newer": {
 		"defaultMessage": "Newer"
 	},
+	"nginxions.events.node": {
+		"defaultMessage": "Node"
+	},
 	"nginxions.events.older": {
 		"defaultMessage": "Older"
 	},
@@ -3368,6 +3422,108 @@
 	"nginxions.learning.prevent.done": {
 		"defaultMessage": "{name}: prevention on"
 	},
+	"nginxions.learning.profiles.applied": {
+		"defaultMessage": "The profile is applied, the agent restarts"
+	},
+	"nginxions.learning.profiles.applied-on": {
+		"defaultMessage": "applied {time}"
+	},
+	"nginxions.learning.profiles.apply": {
+		"defaultMessage": "Apply"
+	},
+	"nginxions.learning.profiles.apply.text": {
+		"defaultMessage": "What the agent learned of the sites of \"{name}\" ({sites} site(s)) is replaced by the profile; the other sites stay as they are. A snapshot of the state now is taken first. The agent restarts: about a minute without the WAF answering."
+	},
+	"nginxions.learning.profiles.apply.title": {
+		"defaultMessage": "Apply the learning profile?"
+	},
+	"nginxions.learning.profiles.apply.with-policy": {
+		"defaultMessage": "Apply the WAF policy of the sites too (missing objects are created, existing ones of the same name are kept)"
+	},
+	"nginxions.learning.profiles.create": {
+		"defaultMessage": "Make the profile"
+	},
+	"nginxions.learning.profiles.created": {
+		"defaultMessage": "The profile is made"
+	},
+	"nginxions.learning.profiles.delete.text": {
+		"defaultMessage": "The profile \"{name}\" is deleted. Nodes that started with it keep what it gave them."
+	},
+	"nginxions.learning.profiles.delete.title": {
+		"defaultMessage": "Delete the profile?"
+	},
+	"nginxions.learning.profiles.empty": {
+		"defaultMessage": "No profiles yet."
+	},
+	"nginxions.learning.profiles.for-new-nodes": {
+		"defaultMessage": "for new nodes"
+	},
+	"nginxions.learning.profiles.for-new-nodes.off": {
+		"defaultMessage": "Stop giving to new nodes"
+	},
+	"nginxions.learning.profiles.for-new-nodes.on": {
+		"defaultMessage": "Give to new nodes"
+	},
+	"nginxions.learning.profiles.from": {
+		"defaultMessage": "Learned state"
+	},
+	"nginxions.learning.profiles.from.now": {
+		"defaultMessage": "As the agent knows it now"
+	},
+	"nginxions.learning.profiles.from.snapshot": {
+		"defaultMessage": "Snapshot of {time}"
+	},
+	"nginxions.learning.profiles.has-policy": {
+		"defaultMessage": "WAF policy"
+	},
+	"nginxions.learning.profiles.key": {
+		"defaultMessage": "Key of this server: {fingerprint}"
+	},
+	"nginxions.learning.profiles.name": {
+		"defaultMessage": "Name"
+	},
+	"nginxions.learning.profiles.new": {
+		"defaultMessage": "New profile"
+	},
+	"nginxions.learning.profiles.open": {
+		"defaultMessage": "Learning profiles"
+	},
+	"nginxions.learning.profiles.origin": {
+		"defaultMessage": "Made by"
+	},
+	"nginxions.learning.profiles.origin.import": {
+		"defaultMessage": "Uploaded, made on {server}"
+	},
+	"nginxions.learning.profiles.origin.own": {
+		"defaultMessage": "This server ({server})"
+	},
+	"nginxions.learning.profiles.policy.partial": {
+		"defaultMessage": "Applied, but not all of the WAF policy: objects not found here: {missing}; sites not found here: {notFound}."
+	},
+	"nginxions.learning.profiles.signed": {
+		"defaultMessage": "Signed: {fingerprint}…"
+	},
+	"nginxions.learning.profiles.sites": {
+		"defaultMessage": "Sites"
+	},
+	"nginxions.learning.profiles.text": {
+		"defaultMessage": "A profile is what the agent learned for chosen sites, signed by this server. Apply it here, take its file to another NginxionS (a closed network too), or give it to new nodes: they start with the learned norm instead of learning from nothing, then learn on with the others. A new node fills only the sites it has learned nothing of yet."
+	},
+	"nginxions.learning.profiles.title": {
+		"defaultMessage": "Learning profiles"
+	},
+	"nginxions.learning.profiles.upload": {
+		"defaultMessage": "Upload a profile"
+	},
+	"nginxions.learning.profiles.uploaded": {
+		"defaultMessage": "The profile is uploaded: its signature is valid"
+	},
+	"nginxions.learning.profiles.with-policy": {
+		"defaultMessage": "With the WAF policy of the sites"
+	},
+	"nginxions.learning.profiles.with-policy.hint": {
+		"defaultMessage": "The modes of the WAF of the sites and the policy objects they use go with the profile, to protect them the same way on another cluster."
+	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Queue"
 	},
@@ -3478,6 +3634,9 @@
 	},
 	"nginxions.learning.severity": {
 		"defaultMessage": "Severity"
+	},
+	"nginxions.learning.snapshots.cluster": {
+		"defaultMessage": "with the learning of the nodes ({count} files), restored with it"
 	},
 	"nginxions.learning.snapshots.delete.text": {
 		"defaultMessage": "The snapshot of {time} is removed for good."
@@ -4322,6 +4481,39 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Add node"
 	},
+	"nginxions.nodes.canary": {
+		"defaultMessage": "Canary nodes"
+	},
+	"nginxions.nodes.canary.badge": {
+		"defaultMessage": "canary"
+	},
+	"nginxions.nodes.canary.hint": {
+		"defaultMessage": "A staged rollout reaches them first."
+	},
+	"nginxions.nodes.cluster-learning.empty": {
+		"defaultMessage": "No data of learning in the storage yet: the agents send it with the traffic of the sites."
+	},
+	"nginxions.nodes.cluster-learning.hint": {
+		"defaultMessage": "Per site of the shared storage of this server: how many windows of learning this server and each node sent, and when smartsync last put them together into the common norm. A node that sends nothing for long does not take part in the learning."
+	},
+	"nginxions.nodes.cluster-learning.merged": {
+		"defaultMessage": "Last merge"
+	},
+	"nginxions.nodes.cluster-learning.nodes": {
+		"defaultMessage": "Nodes"
+	},
+	"nginxions.nodes.cluster-learning.site": {
+		"defaultMessage": "Site (asset)"
+	},
+	"nginxions.nodes.cluster-learning.this-server": {
+		"defaultMessage": "This server"
+	},
+	"nginxions.nodes.cluster-learning.title": {
+		"defaultMessage": "Learning of the cluster"
+	},
+	"nginxions.nodes.cluster-learning.windows": {
+		"defaultMessage": "{count, plural, one {# window} other {# windows}}"
+	},
 	"nginxions.nodes.code.how": {
 		"defaultMessage": "On the new server open «Agents → Nodes → This server», enter the address {address} and this code. The code is valid until {time} and works once."
 	},
@@ -4330,6 +4522,15 @@
 	},
 	"nginxions.nodes.code.until": {
 		"defaultMessage": "code valid until {time}"
+	},
+	"nginxions.nodes.command.restart_agent": {
+		"defaultMessage": "restart of the agent"
+	},
+	"nginxions.nodes.command.sent": {
+		"defaultMessage": "The command waits for the next heartbeat of the node"
+	},
+	"nginxions.nodes.command.waiting": {
+		"defaultMessage": "Waits for the node"
 	},
 	"nginxions.nodes.copied": {
 		"defaultMessage": "Copied"
@@ -4342,6 +4543,18 @@
 	},
 	"nginxions.nodes.delete.confirm": {
 		"defaultMessage": "Delete the node {name} from the list?"
+	},
+	"nginxions.nodes.drain": {
+		"defaultMessage": "Take out of work"
+	},
+	"nginxions.nodes.drain.confirm": {
+		"defaultMessage": "\"{name}\" removes its hosts with its next package and serves nothing; its hosts stay given to it. Point the traffic (DNS, balancer) away from it first."
+	},
+	"nginxions.nodes.drained": {
+		"defaultMessage": "Out of work"
+	},
+	"nginxions.nodes.events": {
+		"defaultMessage": "Events"
 	},
 	"nginxions.nodes.hint": {
 		"defaultMessage": "Servers of NginxionS managed from this one. Add a node to get its one-time join code, then enter it on the new server in «This server»."
@@ -4367,11 +4580,47 @@
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Labels"
 	},
+	"nginxions.nodes.labels.count": {
+		"defaultMessage": "{hosts} hosts, {nodes} active nodes"
+	},
+	"nginxions.nodes.labels.hosts": {
+		"defaultMessage": "Hosts by label"
+	},
+	"nginxions.nodes.labels.hosts.button": {
+		"defaultMessage": "Hosts"
+	},
+	"nginxions.nodes.labels.hosts.hint": {
+		"defaultMessage": "Every node with the label «{label}» serves the ticked hosts, besides the hosts given to it."
+	},
+	"nginxions.nodes.labels.hosts.saved": {
+		"defaultMessage": "The hosts of «{label}» go to its nodes with their next heartbeat."
+	},
+	"nginxions.nodes.labels.hosts.title": {
+		"defaultMessage": "Hosts of a label"
+	},
+	"nginxions.nodes.labels.none": {
+		"defaultMessage": "No labels yet: give labels to nodes when you add them."
+	},
 	"nginxions.nodes.labels.placeholder": {
 		"defaultMessage": "eu edge (space or comma)"
 	},
 	"nginxions.nodes.last-seen": {
 		"defaultMessage": "Last contact"
+	},
+	"nginxions.nodes.logs": {
+		"defaultMessage": "Logs"
+	},
+	"nginxions.nodes.logs.collect": {
+		"defaultMessage": "Collect fresh logs"
+	},
+	"nginxions.nodes.logs.collected": {
+		"defaultMessage": "Collected on the node {time}. Secrets are masked by the node."
+	},
+	"nginxions.nodes.logs.none": {
+		"defaultMessage": "The node has not sent its logs yet: ask for them."
+	},
+	"nginxions.nodes.logs.title": {
+		"defaultMessage": "Logs of {name}"
 	},
 	"nginxions.nodes.name": {
 		"defaultMessage": "Name"
@@ -4400,14 +4649,155 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Waits for the node"
 	},
+	"nginxions.nodes.packages": {
+		"defaultMessage": "Packages"
+	},
+	"nginxions.nodes.packages.applied": {
+		"defaultMessage": "Runs now"
+	},
+	"nginxions.nodes.packages.follow": {
+		"defaultMessage": "Follow the configuration"
+	},
+	"nginxions.nodes.packages.follows": {
+		"defaultMessage": "The node follows the configuration again."
+	},
+	"nginxions.nodes.packages.given": {
+		"defaultMessage": "Given"
+	},
+	"nginxions.nodes.packages.held": {
+		"defaultMessage": "The node gets this package with its next heartbeat."
+	},
+	"nginxions.nodes.packages.hint": {
+		"defaultMessage": "The last packages of configuration this manager gave the node. Hold it on one of them to roll back a change on this node only; it keeps that package until it follows the configuration again."
+	},
+	"nginxions.nodes.packages.hold": {
+		"defaultMessage": "Back to this package"
+	},
+	"nginxions.nodes.packages.none": {
+		"defaultMessage": "The node was given no package yet."
+	},
+	"nginxions.nodes.packages.pinned": {
+		"defaultMessage": "Held"
+	},
+	"nginxions.nodes.packages.title": {
+		"defaultMessage": "Packages of {name}"
+	},
+	"nginxions.nodes.packages.version": {
+		"defaultMessage": "Version"
+	},
+	"nginxions.nodes.picker": {
+		"defaultMessage": "Server"
+	},
+	"nginxions.nodes.picker.this-server": {
+		"defaultMessage": "This server"
+	},
+	"nginxions.nodes.pinned.manual": {
+		"defaultMessage": "Held on the package {version}: changes of the configuration do not reach this node."
+	},
+	"nginxions.nodes.pinned.short.manual": {
+		"defaultMessage": "Held on a package before"
+	},
+	"nginxions.nodes.pinned.short.staged": {
+		"defaultMessage": "Waits for the staged rollout"
+	},
+	"nginxions.nodes.pinned.staged": {
+		"defaultMessage": "Waits for the staged rollout on the package {version}: changes reach it with «Roll out to all nodes»."
+	},
+	"nginxions.nodes.plan.hint": {
+		"defaultMessage": "Which hosts go to the nodes by their labels, and in which order a change reaches them."
+	},
+	"nginxions.nodes.plan.title": {
+		"defaultMessage": "Rollout plan"
+	},
+	"nginxions.nodes.restart-agent": {
+		"defaultMessage": "Restart the agent"
+	},
+	"nginxions.nodes.restart-agent.confirm": {
+		"defaultMessage": "The agent of \"{name}\" restarts with its next heartbeat (within half a minute): about a minute without the WAF answering on that server."
+	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Disable"
 	},
 	"nginxions.nodes.revoke.confirm": {
 		"defaultMessage": "Disable the node {name}? Its certificate is revoked and it stops being managed from here. It keeps protecting its sites on its own."
 	},
+	"nginxions.nodes.rollout.all": {
+		"defaultMessage": "All nodes"
+	},
+	"nginxions.nodes.rollout.applied": {
+		"defaultMessage": "applied"
+	},
+	"nginxions.nodes.rollout.empty": {
+		"defaultMessage": "Nothing rolled out yet."
+	},
+	"nginxions.nodes.rollout.failed": {
+		"defaultMessage": "failed"
+	},
+	"nginxions.nodes.rollout.hint": {
+		"defaultMessage": "What each node applied of this server and when: the package of configuration, the model of the agent, the learning profile; and what failed. A package nginx refused is rolled back on the node to the one before; the model goes back with \"Back to the model before\" in WAF → Agent."
+	},
+	"nginxions.nodes.rollout.kind.command": {
+		"defaultMessage": "Command"
+	},
+	"nginxions.nodes.rollout.kind.model": {
+		"defaultMessage": "Model of the agent"
+	},
+	"nginxions.nodes.rollout.kind.package": {
+		"defaultMessage": "Package of configuration"
+	},
+	"nginxions.nodes.rollout.kind.profile": {
+		"defaultMessage": "Learning profile"
+	},
+	"nginxions.nodes.rollout.node": {
+		"defaultMessage": "Node"
+	},
+	"nginxions.nodes.rollout.result": {
+		"defaultMessage": "Result"
+	},
+	"nginxions.nodes.rollout.time": {
+		"defaultMessage": "Time"
+	},
+	"nginxions.nodes.rollout.title": {
+		"defaultMessage": "Rollout"
+	},
+	"nginxions.nodes.rollout.what": {
+		"defaultMessage": "What"
+	},
 	"nginxions.nodes.server": {
 		"defaultMessage": "Server"
+	},
+	"nginxions.nodes.service.crowdsec": {
+		"defaultMessage": "CrowdSec"
+	},
+	"nginxions.nodes.service.openappsec": {
+		"defaultMessage": "Agent open-appsec"
+	},
+	"nginxions.nodes.service.unknown": {
+		"defaultMessage": "not told yet"
+	},
+	"nginxions.nodes.staged": {
+		"defaultMessage": "Staged rollout"
+	},
+	"nginxions.nodes.staged.hint": {
+		"defaultMessage": "On: a change reaches the canary nodes first; the other nodes keep the package they run until «Roll out to all nodes». Off: every node gets each change."
+	},
+	"nginxions.nodes.staged.off": {
+		"defaultMessage": "Staged rollout off: every node gets each change."
+	},
+	"nginxions.nodes.staged.on": {
+		"defaultMessage": "Staged rollout on: changes reach the canaries first."
+	},
+	"nginxions.nodes.staged.promote": {
+		"defaultMessage": "Roll out to all nodes"
+	},
+	"nginxions.nodes.staged.promote.confirm": {
+		"defaultMessage": "The configuration now reaches every node with its next heartbeat. Check the canaries first."
+	},
+	"nginxions.nodes.staged.promoted": {
+		"defaultMessage": "Rolled out: the nodes get the configuration with their next heartbeat."
+	},
+	"nginxions.nodes.staged.waiting": {
+		"defaultMessage": "Nodes waiting for the rollout: {count}"
 	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "State"
@@ -4427,8 +4817,17 @@
 	"nginxions.nodes.state.revoked": {
 		"defaultMessage": "Disabled"
 	},
+	"nginxions.nodes.undrain": {
+		"defaultMessage": "Put back to work"
+	},
+	"nginxions.nodes.undrain.confirm": {
+		"defaultMessage": "The hosts given to \"{name}\" come back to it with its next package."
+	},
 	"nginxions.nodes.version": {
 		"defaultMessage": "version {version}"
+	},
+	"nginxions.nodes.view.hint": {
+		"defaultMessage": "What the node tells with its heartbeat (every 30 s). Its policies and settings come from this server with its package; its events are in Events with the filter of the node."
 	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Problem"
@@ -5838,7 +6237,7 @@
 		"defaultMessage": "Mode"
 	},
 	"nginxions.policy.f.fileSecurity.threatEmulationEnabled": {
-		"defaultMessage": "Threat emulation: the deep static analysis of ClamAV (Office macros, broken executables and media) instead of the sandbox of opensophy"
+		"defaultMessage": "Threat emulation: the deep static analysis of ClamAV (Office macros, broken executables and media) instead of the sandbox of the vendor of the agent"
 	},
 	"nginxions.policy.f.fileSecurity.unnamedFilesAction": {
 		"defaultMessage": "Action for a file with no name (a binary upload with no name in Content-Disposition or the path)"
@@ -6487,6 +6886,12 @@
 	},
 	"nginxions.rbac.action.revoke.desc": {
 		"defaultMessage": "Revoke certificates"
+	},
+	"nginxions.rbac.action.sync": {
+		"defaultMessage": "Learning of the cluster"
+	},
+	"nginxions.rbac.action.sync.desc": {
+		"defaultMessage": "The thresholds of smartsync, the learning profile for new nodes, a snapshot restored with the state of the cluster"
 	},
 	"nginxions.rbac.action.view": {
 		"defaultMessage": "View"
@@ -7319,6 +7724,9 @@
 	"nginxions.traffic.filter.mitigated.yes": {
 		"defaultMessage": "refused"
 	},
+	"nginxions.traffic.filter.node": {
+		"defaultMessage": "Server"
+	},
 	"nginxions.traffic.filter.origin": {
 		"defaultMessage": "Origin server"
 	},
@@ -7655,6 +8063,9 @@
 	"nginxions.traffic.no-data": {
 		"defaultMessage": "No data"
 	},
+	"nginxions.traffic.node.local": {
+		"defaultMessage": "This server"
+	},
 	"nginxions.traffic.note": {
 		"defaultMessage": "Requests: the request log of nginx (the interface of NginxionS is not counted). Attacks: events of open-appsec, CrowdSec and mTLS. Countries: the GeoIP database of NginxionS, offline."
 	},
@@ -7876,6 +8287,9 @@
 	},
 	"nginxions.traffic.top.mitigated-paths.info": {
 		"defaultMessage": "The paths of refused requests."
+	},
+	"nginxions.traffic.top.nodes": {
+		"defaultMessage": "Servers"
 	},
 	"nginxions.traffic.top.origin-paths": {
 		"defaultMessage": "Top paths by origin requests"
@@ -8304,19 +8718,31 @@
 		"defaultMessage": "Advanced ML model"
 	},
 	"nginxions.waf.model.basic": {
-		"defaultMessage": "Built-in model: opensophy advanced model (V2.0)"
+		"defaultMessage": "Built-in model: advanced model (V2.0)"
 	},
 	"nginxions.waf.model.description": {
-		"defaultMessage": "NginxionS ships with the advanced model of opensophy (Advanced model, V2.0). Another model (open-appsec-advanced-model.tgz, for example one trained by NginxionS, see docs/MODEL.md) replaces it: it is unpacked when the agent starts; the upload restarts the agent."
+		"defaultMessage": "NginxionS ships with the advanced model (Advanced model, V2.0). Another model (open-appsec-advanced-model.tgz, for example one trained by NginxionS, see docs/MODEL.md) replaces it: it is unpacked when the agent starts; the upload restarts the agent."
+	},
+	"nginxions.waf.model.managed": {
+		"defaultMessage": "This server is a node: its model is given by its manager and changes there."
 	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Uploaded: {size}, {date}"
+	},
+	"nginxions.waf.model.previous": {
+		"defaultMessage": "Back to the model before"
+	},
+	"nginxions.waf.model.previous-done": {
+		"defaultMessage": "The model before is back, the agent restarts"
+	},
+	"nginxions.waf.model.previous-warning": {
+		"defaultMessage": "The model before the last upload or removal is put back, the current one is kept as the one before. The agent restarts. On a manager, its nodes take the same model with their next package."
 	},
 	"nginxions.waf.model.remove": {
 		"defaultMessage": "Remove model"
 	},
 	"nginxions.waf.model.remove-warning": {
-		"defaultMessage": "The agent restarts and goes back to the built-in model of the image (opensophy advanced model)."
+		"defaultMessage": "The agent restarts and goes back to the built-in model of the image (advanced model)."
 	},
 	"nginxions.waf.model.removed": {
 		"defaultMessage": "Model removed, the agent is restarting"

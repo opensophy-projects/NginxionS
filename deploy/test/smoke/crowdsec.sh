@@ -29,7 +29,12 @@ for i in $(seq 1 30); do
   [ "$i" = 30 ] && fail "the local API of CrowdSec does not answer: $($CURL "$ADMIN/api/nginxions/crowdsec")"
   sleep 2
 done
-$CURL "$ADMIN/api/nginxions/crowdsec/registry" | grep -q '"name": *"nginxions-' || fail "NginxionS is not a machine of CrowdSec"
+# the backend registers its machine once the local API answers: a moment after it is healthy
+for i in $(seq 1 30); do
+  $CURL "$ADMIN/api/nginxions/crowdsec/registry" | grep -q '"name": *"nginxions-' && break
+  [ "$i" = 30 ] && fail "NginxionS is not a machine of CrowdSec: $($CURL "$ADMIN/api/nginxions/crowdsec/registry" | head -c 400)"
+  sleep 2
+done
 
 # the closed network has private addresses only: they are not allowlisted here
 step "CrowdSec: settings from the GUI are applied (bouncer and AppSec on)"

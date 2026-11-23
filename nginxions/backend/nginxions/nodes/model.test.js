@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	CODE,
+	nodeLogsOf,
+	rolloutOf,
 	hash,
 	newCode,
 	newToken,
@@ -68,11 +70,18 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 	});
 	assert.deepEqual(Object.keys(info).sort(), [
 		"agent",
+		"command_done",
+		"command_error",
 		"hostname",
 		"hosts",
+		"model_error",
+		"model_sha256",
 		"package_error",
 		"package_skipped",
 		"package_version",
+		"profile_error",
+		"profile_version",
+		"services",
 		"uptime",
 		"version",
 	]);
@@ -81,6 +90,8 @@ test("the heartbeat keeps only known, typed and short fields", () => {
 	assert.equal(info.uptime, null);
 	assert.equal(normalizeInfo({ agent: "hacked" }).agent, "");
 	assert.equal(normalizeInfo(null).version, "");
+	assert.equal(normalizeInfo({ profile_version: "x" }).profile_version, "");
+	assert.equal(normalizeInfo({ profile_version: "a".repeat(64) }).profile_version, "a".repeat(64));
 });
 
 test("the address of a manager: https, host and port only", () => {
@@ -91,4 +102,44 @@ test("the address of a manager: https, host and port only", () => {
 	assert.equal(normalizeManagerUrl("https://manager:81/api"), null);
 	assert.equal(normalizeManagerUrl("manager:81"), null);
 	assert.equal(normalizeManagerUrl(""), null);
+});
+
+test("the rollout a heartbeat tells: a new version applied, a new error, nothing twice", () => {
+	const v1 = "a".repeat(64);
+	const v2 = "b".repeat(64);
+	assert.deepEqual(rolloutOf({}, { package_version: v1 }), [
+		{ kind: "package", version: v1, result: "applied", error: "" },
+	]);
+	assert.deepEqual(rolloutOf({ package_version: v1 }, { package_version: v1 }), []);
+	assert.deepEqual(rolloutOf({ package_version: v1 }, { package_version: v1, package_error: "nginx refused" }), [
+		{ kind: "package", version: v1, result: "failed", error: "nginx refused" },
+	]);
+	// the same error again: told once
+	assert.deepEqual(
+		rolloutOf({ package_version: v1, package_error: "x" }, { package_version: v1, package_error: "x" }),
+		[],
+	);
+	assert.deepEqual(
+		rolloutOf({ model_sha256: v1, profile_version: "" }, { model_sha256: v2, profile_version: v1 }).map(
+			(r) => `${r.kind}:${r.result}`,
+		),
+		["model:applied", "profile:applied"],
+	);
+});
+
+test("services and logs of a node: known names, bounded", () => {
+	const info = normalizeInfo({ services: { openappsec: "running", "Bad Name": "x", crowdsec: "exited".repeat(9) } });
+	assert.deepEqual(info.services, { openappsec: "running", crowdsec: "exited".repeat(9).slice(0, 16) });
+	assert.deepEqual(normalizeInfo({ services: ["x"] }).services, {});
+	const many = Array.from({ length: 400 }, (_, i) => ({ stream: "stdout", line: `line ${i}` }));
+	const logs = nodeLogsOf({
+		openappsec: many,
+		crowdsec: [{ stream: "stderr", line: "x".repeat(3000) }, { line: 5 }],
+	});
+	assert.equal(logs.openappsec.length, 300);
+	assert.equal(logs.openappsec.at(-1).line, "line 399");
+	assert.deepEqual(logs.crowdsec[1], { stream: "stdout", line: "5" });
+	assert.equal(logs.crowdsec[0].line.length, 2000);
+	assert.equal(nodeLogsOf({ "../x": [] }), null);
+	assert.equal(nodeLogsOf("text"), null);
 });

@@ -1,5 +1,3 @@
- 
-
 package sharedfiles
 
 import (
@@ -15,6 +13,7 @@ type FileSystem interface {
 	GetFilesList(ctx context.Context, pathPrefix string) ([]models.FileMetadata, error)
 	GetFile(ctx context.Context, path string) ([]byte, error)
 	PutFile(ctx context.Context, path string, content []byte, isTemp bool) error
+	DeleteClusterFile(path string) error
 }
 
 // Service struct

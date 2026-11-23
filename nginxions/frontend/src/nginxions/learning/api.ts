@@ -217,6 +217,8 @@ export interface LearningSnapshot {
 	userId: number;
 	size: number;
 	files: number;
+	/** files of the learning put together from the nodes (a manager with nodes), restored with the snapshot */
+	cluster?: number;
 	assets: { asset: string; params: number; values: number }[];
 	shift: LearningShift[];
 	comparedWith: string | null;
@@ -241,8 +243,9 @@ export const downloadLearningSnapshot = (id: string) =>
 		`nginxions-learning-${id}.json.gz`,
 	);
 
-export const uploadLearningSnapshot = async (file: File): Promise<LearningSnapshot> => {
-	const response = await fetch("/api/nginxions/learning/snapshots/upload", {
+/** a file (a snapshot, a profile) as the body of a POST; the error of the backend as the message */
+const uploadFile = async (url: string, file: File) => {
+	const response = await fetch(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/octet-stream" },
 		body: file,
@@ -252,9 +255,81 @@ export const uploadLearningSnapshot = async (file: File): Promise<LearningSnapsh
 	return payload;
 };
 
+export const uploadLearningSnapshot = (file: File): Promise<LearningSnapshot> =>
+	uploadFile("/api/nginxions/learning/snapshots/upload", file);
+
 /** the shift of the latest snapshot (automatic or manual) of the last two days: what the page warns about */
 export const recentShift = (snapshots: LearningSnapshot[], now = Date.now()) => {
 	const latest = snapshots.find((s) => s.reason === "auto" || s.reason === "manual");
 	if (!latest || now - new Date(latest.takenOn).getTime() > 2 * 24 * 3600 * 1000) return null;
 	return latest.shift.length ? latest : null;
 };
+
+// ---- learning profiles: what the agent learned of chosen sites, signed, applied here, elsewhere or on new nodes ----
+export interface LearningProfile {
+	id: string;
+	name: string;
+	createdOn: string;
+	/** taken here, or uploaded (made on another NginxionS) */
+	origin: "taken" | "import";
+	source: { server: string; snapshot: string | null } | null;
+	sites: { domains: string[] }[];
+	/** the WAF of its sites it carries (sites, policy objects), or null */
+	policy: { sites: number; objects: number } | null;
+	assets: { asset: string; params: number; values: number }[];
+	files: number;
+	size: number;
+	version: string;
+	/** the key that signed it (SHA-256), and whether it is the key of this server */
+	fingerprint: string;
+	own: boolean;
+	/** the profile new nodes of this manager start with */
+	forNewNodes: boolean;
+	appliedOn: string | null;
+}
+
+export const getLearningProfiles = (): Promise<{ profiles: LearningProfile[]; fingerprint: string }> =>
+	api.get({ url: "/nginxions/learning/profiles" });
+
+export const createLearningProfile = (data: {
+	name: string;
+	host_ids: number[];
+	snapshot_id?: string;
+	/** the WAF of the sites goes with it (to move them to another cluster) */
+	with_policy?: boolean;
+}): Promise<LearningProfile> => api.post({ url: "/nginxions/learning/profiles", data });
+
+/** what applying the WAF of a profile did */
+export interface ProfilePolicyResult {
+	sites: number;
+	created: string[];
+	missing: string[];
+	notFound: string[];
+}
+
+export const applyLearningProfile = (
+	id: string,
+	opts: { hostIds?: number[]; withPolicy?: boolean } = {},
+): Promise<{ assets: string[]; policy: ProfilePolicyResult | null }> =>
+	api.post({
+		url: `/nginxions/learning/profiles/${encodeURIComponent(id)}/apply`,
+		data: {
+			...(opts.hostIds?.length ? { host_ids: opts.hostIds } : {}),
+			...(opts.withPolicy ? { with_policy: true } : {}),
+		},
+	});
+
+export const setProfileForNewNodes = (id: string, on: boolean): Promise<LearningProfile> =>
+	api.put({ url: `/nginxions/learning/profiles/${encodeURIComponent(id)}`, data: { for_new_nodes: on } });
+
+export const deleteLearningProfile = (id: string) =>
+	api.del({ url: `/nginxions/learning/profiles/${encodeURIComponent(id)}` });
+
+export const downloadLearningProfile = (id: string) =>
+	api.download(
+		{ url: `/nginxions/learning/profiles/${encodeURIComponent(id)}/download` },
+		`nginxions-profile-${id}.json.gz`,
+	);
+
+export const uploadLearningProfile = (file: File): Promise<LearningProfile> =>
+	uploadFile("/api/nginxions/learning/profiles/upload", file);

@@ -19,11 +19,11 @@ import {
 	downloadCert,
 	getCertLinks,
 	type HostRef,
+	linkBase,
 	type PkiCert,
 	saveFile,
 	updateCert,
 	usePki,
-	linkBase,
 } from "./api";
 import { showIssueModal } from "./IssueModal";
 import { showRevokeModal } from "./RevokeModal";

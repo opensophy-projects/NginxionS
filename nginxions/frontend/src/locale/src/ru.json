@@ -1053,7 +1053,7 @@
 		"defaultMessage": "Например: напишите на security@example.com"
 	},
 	"nginxions.block-page.description": {
-		"defaultMessage": "Что видит посетитель, когда запрос отклонён: open-appsec, баунсером CrowdSec или списком доступа. Заменяет страницу агента с текстом opensophy."
+		"defaultMessage": "Что видит посетитель, когда запрос отклонён: open-appsec, баунсером CrowdSec или списком доступа. Заменяет страницу агента с текстом производителя агента."
 	},
 	"nginxions.block-page.details": {
 		"defaultMessage": "Показывать ID запроса, IP, хост и время (для обращения к администратору)"
@@ -1322,6 +1322,9 @@
 	"nginxions.cluster.fingerprint": {
 		"defaultMessage": "Сертификат управляющего (SHA-256)"
 	},
+	"nginxions.cluster.fingerprint.hint": {
+		"defaultMessage": "Введите SHA-256-отпечаток TLS-сертификата управляющего сервера, который вы заранее сверили по доверенному каналу."
+	},
 	"nginxions.cluster.hint": {
 		"defaultMessage": "Подключите этот сервер к управляющему: им будут управлять оттуда, а если управляющий недоступен, он продолжит защищать свои сайты."
 	},
@@ -1333,6 +1336,42 @@
 	},
 	"nginxions.cluster.last-ok": {
 		"defaultMessage": "Последняя связь"
+	},
+	"nginxions.cluster.learning": {
+		"defaultMessage": "Обучение"
+	},
+	"nginxions.cluster.learning-hint": {
+		"defaultMessage": "Агент этого сервера отправляет обученное на управляющий сервер и получает то, чему научились все серверы вместе. Без управляющего сервера он продолжает защищать с тем, что знает."
+	},
+	"nginxions.cluster.learning-ok": {
+		"defaultMessage": "вместе с другими серверами, через управляющий сервер (последний ответ {time})"
+	},
+	"nginxions.cluster.learning-waiting": {
+		"defaultMessage": "через управляющий сервер: запросов агента ещё не было (начнутся после перезапуска агента)"
+	},
+	"nginxions.cluster.learning.hint": {
+		"defaultMessage": "Как норма сайтов сводится со всех серверов (smartsync на этом сервере, когда у него есть узлы). Значение становится нормой, когда его увидело достаточно разных источников за достаточное число окон обучения; один узел в одиночку норму не задаёт. Применяется при следующей сводке, без перезапуска."
+	},
+	"nginxions.cluster.learning.minIntervals": {
+		"defaultMessage": "Окон обучения"
+	},
+	"nginxions.cluster.learning.minSources": {
+		"defaultMessage": "Источников для параметра"
+	},
+	"nginxions.cluster.learning.minSourcesTypes": {
+		"defaultMessage": "Источников для типа значения"
+	},
+	"nginxions.cluster.learning.ratioThreshold": {
+		"defaultMessage": "Доля источников (0,1–1)"
+	},
+	"nginxions.cluster.learning.save": {
+		"defaultMessage": "Сохранить"
+	},
+	"nginxions.cluster.learning.saved": {
+		"defaultMessage": "Настройки обучения узлов сохранены"
+	},
+	"nginxions.cluster.learning.title": {
+		"defaultMessage": "Обучение узлов"
 	},
 	"nginxions.cluster.leave": {
 		"defaultMessage": "Отключить от управляющего"
@@ -1346,8 +1385,20 @@
 	"nginxions.cluster.manager.placeholder": {
 		"defaultMessage": "https://manager.example.com:81"
 	},
+	"nginxions.cluster.model": {
+		"defaultMessage": "Модель агента"
+	},
+	"nginxions.cluster.model-applied": {
+		"defaultMessage": "Модель manager (SHA-256 {sha}…)"
+	},
 	"nginxions.cluster.node": {
 		"defaultMessage": "Этот узел"
+	},
+	"nginxions.cluster.profile": {
+		"defaultMessage": "Профиль обучения"
+	},
+	"nginxions.cluster.profile-applied": {
+		"defaultMessage": "Начал с профиля manager: {count, plural, =0 {заполнять нечего, этот сервер уже выучил свои сайты} one {заполнен # сайт} few {заполнено # сайта} other {заполнено # сайтов}}"
 	},
 	"nginxions.cluster.standalone": {
 		"defaultMessage": "Этот сервер работает самостоятельно."
@@ -2468,6 +2519,9 @@
 	"nginxions.events.newer": {
 		"defaultMessage": "Новее"
 	},
+	"nginxions.events.node": {
+		"defaultMessage": "Узел"
+	},
 	"nginxions.events.older": {
 		"defaultMessage": "Старше"
 	},
@@ -3368,6 +3422,108 @@
 	"nginxions.learning.prevent.done": {
 		"defaultMessage": "{name}: включена блокировка"
 	},
+	"nginxions.learning.profiles.applied": {
+		"defaultMessage": "Профиль применён, агент перезапускается"
+	},
+	"nginxions.learning.profiles.applied-on": {
+		"defaultMessage": "применён {time}"
+	},
+	"nginxions.learning.profiles.apply": {
+		"defaultMessage": "Применить"
+	},
+	"nginxions.learning.profiles.apply.text": {
+		"defaultMessage": "Выученное агентом по сайтам профиля «{name}» ({sites} сайт(ов)) заменится профилем, остальные сайты не изменятся. Сначала будет снят снимок текущего состояния. Агент перезапустится: около минуты WAF не отвечает."
+	},
+	"nginxions.learning.profiles.apply.title": {
+		"defaultMessage": "Применить профиль обучения?"
+	},
+	"nginxions.learning.profiles.apply.with-policy": {
+		"defaultMessage": "Применить и политику WAF сайтов (недостающие объекты создаются, существующие с тем же именем остаются как есть)"
+	},
+	"nginxions.learning.profiles.create": {
+		"defaultMessage": "Снять профиль"
+	},
+	"nginxions.learning.profiles.created": {
+		"defaultMessage": "Профиль снят"
+	},
+	"nginxions.learning.profiles.delete.text": {
+		"defaultMessage": "Профиль «{name}» будет удалён. Узлы, которые начали с него, сохранят полученное."
+	},
+	"nginxions.learning.profiles.delete.title": {
+		"defaultMessage": "Удалить профиль?"
+	},
+	"nginxions.learning.profiles.empty": {
+		"defaultMessage": "Профилей пока нет."
+	},
+	"nginxions.learning.profiles.for-new-nodes": {
+		"defaultMessage": "для новых узлов"
+	},
+	"nginxions.learning.profiles.for-new-nodes.off": {
+		"defaultMessage": "Не выдавать новым узлам"
+	},
+	"nginxions.learning.profiles.for-new-nodes.on": {
+		"defaultMessage": "Выдавать новым узлам"
+	},
+	"nginxions.learning.profiles.from": {
+		"defaultMessage": "Выученное состояние"
+	},
+	"nginxions.learning.profiles.from.now": {
+		"defaultMessage": "Текущее состояние агента"
+	},
+	"nginxions.learning.profiles.from.snapshot": {
+		"defaultMessage": "Снимок от {time}"
+	},
+	"nginxions.learning.profiles.has-policy": {
+		"defaultMessage": "политика WAF"
+	},
+	"nginxions.learning.profiles.key": {
+		"defaultMessage": "Ключ этого сервера: {fingerprint}"
+	},
+	"nginxions.learning.profiles.name": {
+		"defaultMessage": "Название"
+	},
+	"nginxions.learning.profiles.new": {
+		"defaultMessage": "Новый профиль"
+	},
+	"nginxions.learning.profiles.open": {
+		"defaultMessage": "Профили обучения"
+	},
+	"nginxions.learning.profiles.origin": {
+		"defaultMessage": "Откуда"
+	},
+	"nginxions.learning.profiles.origin.import": {
+		"defaultMessage": "Загружен, снят на {server}"
+	},
+	"nginxions.learning.profiles.origin.own": {
+		"defaultMessage": "Этот сервер ({server})"
+	},
+	"nginxions.learning.profiles.policy.partial": {
+		"defaultMessage": "Применено, но политика WAF — не полностью: не найдены объекты: {missing}; не найдены сайты: {notFound}."
+	},
+	"nginxions.learning.profiles.signed": {
+		"defaultMessage": "Подпись: {fingerprint}…"
+	},
+	"nginxions.learning.profiles.sites": {
+		"defaultMessage": "Сайты"
+	},
+	"nginxions.learning.profiles.text": {
+		"defaultMessage": "Профиль — то, чему агент научился на выбранных сайтах, с подписью этого сервера. Его можно применить здесь, перенести файлом на другой NginxionS (в том числе в закрытом контуре) или выдавать новым узлам: они начинают с выученной нормы, а не с нуля, и дальше учатся вместе со всеми. Новый узел заполняет только те сайты, по которым сам ещё ничего не выучил."
+	},
+	"nginxions.learning.profiles.title": {
+		"defaultMessage": "Профили обучения"
+	},
+	"nginxions.learning.profiles.upload": {
+		"defaultMessage": "Загрузить профиль"
+	},
+	"nginxions.learning.profiles.uploaded": {
+		"defaultMessage": "Профиль загружен: подпись верна"
+	},
+	"nginxions.learning.profiles.with-policy": {
+		"defaultMessage": "С политикой WAF сайтов"
+	},
+	"nginxions.learning.profiles.with-policy.hint": {
+		"defaultMessage": "Режимы WAF сайтов и объекты политики, которые они используют, войдут в профиль: на другом кластере сайты будут защищены так же."
+	},
 	"nginxions.learning.queue": {
 		"defaultMessage": "Очередь разметки"
 	},
@@ -3478,6 +3634,9 @@
 	},
 	"nginxions.learning.severity": {
 		"defaultMessage": "Важность"
+	},
+	"nginxions.learning.snapshots.cluster": {
+		"defaultMessage": "с общим обучением узлов ({count} файлов), откатывается вместе с ним"
 	},
 	"nginxions.learning.snapshots.delete.text": {
 		"defaultMessage": "Снимок от {time} будет удалён насовсем."
@@ -4322,6 +4481,39 @@
 	"nginxions.nodes.add": {
 		"defaultMessage": "Добавить узел"
 	},
+	"nginxions.nodes.canary": {
+		"defaultMessage": "Узлы-канарейки"
+	},
+	"nginxions.nodes.canary.badge": {
+		"defaultMessage": "канарейка"
+	},
+	"nginxions.nodes.canary.hint": {
+		"defaultMessage": "Поэтапная выкатка сначала доходит до них."
+	},
+	"nginxions.nodes.cluster-learning.empty": {
+		"defaultMessage": "Данных обучения в хранилище пока нет: агенты присылают их вместе с трафиком сайтов."
+	},
+	"nginxions.nodes.cluster-learning.hint": {
+		"defaultMessage": "По каждому сайту общего хранилища этого сервера: сколько окон обучения прислали этот сервер и каждый узел и когда smartsync последний раз свёл их в общую норму. Узел, который долго ничего не присылает, в обучении не участвует."
+	},
+	"nginxions.nodes.cluster-learning.merged": {
+		"defaultMessage": "Последняя сводка"
+	},
+	"nginxions.nodes.cluster-learning.nodes": {
+		"defaultMessage": "Узлы"
+	},
+	"nginxions.nodes.cluster-learning.site": {
+		"defaultMessage": "Сайт (asset)"
+	},
+	"nginxions.nodes.cluster-learning.this-server": {
+		"defaultMessage": "Этот сервер"
+	},
+	"nginxions.nodes.cluster-learning.title": {
+		"defaultMessage": "Обучение кластера"
+	},
+	"nginxions.nodes.cluster-learning.windows": {
+		"defaultMessage": "{count, plural, one {# окно} few {# окна} other {# окон}}"
+	},
 	"nginxions.nodes.code.how": {
 		"defaultMessage": "На новом сервере откройте «Агенты → Узлы → Этот сервер», введите адрес {address} и этот код. Код действует до {time} и срабатывает один раз."
 	},
@@ -4330,6 +4522,15 @@
 	},
 	"nginxions.nodes.code.until": {
 		"defaultMessage": "код действует до {time}"
+	},
+	"nginxions.nodes.command.restart_agent": {
+		"defaultMessage": "перезапуск агента"
+	},
+	"nginxions.nodes.command.sent": {
+		"defaultMessage": "Команда ждёт следующего heartbeat узла"
+	},
+	"nginxions.nodes.command.waiting": {
+		"defaultMessage": "Ждёт узел"
 	},
 	"nginxions.nodes.copied": {
 		"defaultMessage": "Скопировано"
@@ -4342,6 +4543,18 @@
 	},
 	"nginxions.nodes.delete.confirm": {
 		"defaultMessage": "Удалить узел {name} из списка?"
+	},
+	"nginxions.nodes.drain": {
+		"defaultMessage": "Вывести из работы"
+	},
+	"nginxions.nodes.drain.confirm": {
+		"defaultMessage": "«{name}» со следующим пакетом уберёт свои хосты и перестанет их обслуживать; назначение хостов сохранится. Сначала уведите с него трафик (DNS, балансировщик)."
+	},
+	"nginxions.nodes.drained": {
+		"defaultMessage": "Выведен из работы"
+	},
+	"nginxions.nodes.events": {
+		"defaultMessage": "События"
 	},
 	"nginxions.nodes.hint": {
 		"defaultMessage": "Серверы NginxionS, которыми управляет этот. Добавьте узел — получите одноразовый код подключения, затем введите его на новом сервере в «Этот сервер»."
@@ -4367,11 +4580,47 @@
 	"nginxions.nodes.labels": {
 		"defaultMessage": "Метки"
 	},
+	"nginxions.nodes.labels.count": {
+		"defaultMessage": "Хостов: {hosts}, активных узлов: {nodes}"
+	},
+	"nginxions.nodes.labels.hosts": {
+		"defaultMessage": "Хосты по меткам"
+	},
+	"nginxions.nodes.labels.hosts.button": {
+		"defaultMessage": "Хосты"
+	},
+	"nginxions.nodes.labels.hosts.hint": {
+		"defaultMessage": "Каждый узел с меткой «{label}» обслуживает отмеченные хосты в дополнение к своим."
+	},
+	"nginxions.nodes.labels.hosts.saved": {
+		"defaultMessage": "Хосты метки «{label}» уйдут на её узлы со следующим heartbeat."
+	},
+	"nginxions.nodes.labels.hosts.title": {
+		"defaultMessage": "Хосты метки"
+	},
+	"nginxions.nodes.labels.none": {
+		"defaultMessage": "Меток пока нет: задайте метки узлам при добавлении."
+	},
 	"nginxions.nodes.labels.placeholder": {
 		"defaultMessage": "eu edge (через пробел или запятую)"
 	},
 	"nginxions.nodes.last-seen": {
 		"defaultMessage": "Последняя связь"
+	},
+	"nginxions.nodes.logs": {
+		"defaultMessage": "Логи"
+	},
+	"nginxions.nodes.logs.collect": {
+		"defaultMessage": "Собрать свежие логи"
+	},
+	"nginxions.nodes.logs.collected": {
+		"defaultMessage": "Собраны на узле {time}. Секреты узел скрывает сам."
+	},
+	"nginxions.nodes.logs.none": {
+		"defaultMessage": "Узел ещё не присылал логи: запросите их."
+	},
+	"nginxions.nodes.logs.title": {
+		"defaultMessage": "Логи узла {name}"
 	},
 	"nginxions.nodes.name": {
 		"defaultMessage": "Имя"
@@ -4400,14 +4649,155 @@
 	"nginxions.nodes.package.waiting": {
 		"defaultMessage": "Ждёт узел"
 	},
+	"nginxions.nodes.packages": {
+		"defaultMessage": "Пакеты"
+	},
+	"nginxions.nodes.packages.applied": {
+		"defaultMessage": "Работает сейчас"
+	},
+	"nginxions.nodes.packages.follow": {
+		"defaultMessage": "Вернуть к текущей конфигурации"
+	},
+	"nginxions.nodes.packages.follows": {
+		"defaultMessage": "Узел снова получает текущую конфигурацию."
+	},
+	"nginxions.nodes.packages.given": {
+		"defaultMessage": "Выдан"
+	},
+	"nginxions.nodes.packages.held": {
+		"defaultMessage": "Узел получит этот пакет со следующим heartbeat."
+	},
+	"nginxions.nodes.packages.hint": {
+		"defaultMessage": "Последние пакеты конфигурации, которые manager выдал узлу. Узел можно удержать на одном из них, чтобы откатить изменение только на нём; он держит этот пакет, пока его не вернут к текущей конфигурации."
+	},
+	"nginxions.nodes.packages.hold": {
+		"defaultMessage": "Вернуть этот пакет"
+	},
+	"nginxions.nodes.packages.none": {
+		"defaultMessage": "Узлу ещё не выдано ни одного пакета."
+	},
+	"nginxions.nodes.packages.pinned": {
+		"defaultMessage": "Удерживается"
+	},
+	"nginxions.nodes.packages.title": {
+		"defaultMessage": "Пакеты узла {name}"
+	},
+	"nginxions.nodes.packages.version": {
+		"defaultMessage": "Версия"
+	},
+	"nginxions.nodes.picker": {
+		"defaultMessage": "Сервер"
+	},
+	"nginxions.nodes.picker.this-server": {
+		"defaultMessage": "Этот сервер"
+	},
+	"nginxions.nodes.pinned.manual": {
+		"defaultMessage": "Удерживается на пакете {version}: изменения конфигурации на этот узел не приходят."
+	},
+	"nginxions.nodes.pinned.short.manual": {
+		"defaultMessage": "Удерживается на прежнем пакете"
+	},
+	"nginxions.nodes.pinned.short.staged": {
+		"defaultMessage": "Ждёт поэтапной выкатки"
+	},
+	"nginxions.nodes.pinned.staged": {
+		"defaultMessage": "Ждёт поэтапной выкатки на пакете {version}: изменения придут с кнопкой «Выкатить на все узлы»."
+	},
+	"nginxions.nodes.plan.hint": {
+		"defaultMessage": "Какие хосты получают узлы по меткам и в каком порядке до них доходят изменения."
+	},
+	"nginxions.nodes.plan.title": {
+		"defaultMessage": "План выкатки"
+	},
+	"nginxions.nodes.restart-agent": {
+		"defaultMessage": "Перезапустить агент"
+	},
+	"nginxions.nodes.restart-agent.confirm": {
+		"defaultMessage": "Агент узла «{name}» перезапустится со следующим heartbeat (в течение полминуты): около минуты WAF на этом сервере не отвечает."
+	},
 	"nginxions.nodes.revoke": {
 		"defaultMessage": "Отключить"
 	},
 	"nginxions.nodes.revoke.confirm": {
 		"defaultMessage": "Отключить узел {name}? Его сертификат будет отозван, и он перестанет управляться отсюда. Свои сайты он продолжит защищать самостоятельно."
 	},
+	"nginxions.nodes.rollout.all": {
+		"defaultMessage": "Все узлы"
+	},
+	"nginxions.nodes.rollout.applied": {
+		"defaultMessage": "применено"
+	},
+	"nginxions.nodes.rollout.empty": {
+		"defaultMessage": "Выкатки ещё не было."
+	},
+	"nginxions.nodes.rollout.failed": {
+		"defaultMessage": "ошибка"
+	},
+	"nginxions.nodes.rollout.hint": {
+		"defaultMessage": "Что и когда применил каждый узел с этого сервера: пакет конфигурации, модель агента, профиль обучения, — и что не удалось. Пакет, который отверг nginx, узел сам откатывает на прежний; модель возвращается кнопкой «Вернуть прежнюю модель» в «WAF → Агент»."
+	},
+	"nginxions.nodes.rollout.kind.command": {
+		"defaultMessage": "Команда"
+	},
+	"nginxions.nodes.rollout.kind.model": {
+		"defaultMessage": "Модель агента"
+	},
+	"nginxions.nodes.rollout.kind.package": {
+		"defaultMessage": "Пакет конфигурации"
+	},
+	"nginxions.nodes.rollout.kind.profile": {
+		"defaultMessage": "Профиль обучения"
+	},
+	"nginxions.nodes.rollout.node": {
+		"defaultMessage": "Узел"
+	},
+	"nginxions.nodes.rollout.result": {
+		"defaultMessage": "Результат"
+	},
+	"nginxions.nodes.rollout.time": {
+		"defaultMessage": "Время"
+	},
+	"nginxions.nodes.rollout.title": {
+		"defaultMessage": "Выкатка"
+	},
+	"nginxions.nodes.rollout.what": {
+		"defaultMessage": "Что"
+	},
 	"nginxions.nodes.server": {
 		"defaultMessage": "Сервер"
+	},
+	"nginxions.nodes.service.crowdsec": {
+		"defaultMessage": "CrowdSec"
+	},
+	"nginxions.nodes.service.openappsec": {
+		"defaultMessage": "Агент open-appsec"
+	},
+	"nginxions.nodes.service.unknown": {
+		"defaultMessage": "ещё не сообщил"
+	},
+	"nginxions.nodes.staged": {
+		"defaultMessage": "Поэтапная выкатка"
+	},
+	"nginxions.nodes.staged.hint": {
+		"defaultMessage": "Включена: изменение сначала получают узлы-канарейки, остальные держат свой пакет до кнопки «Выкатить на все узлы». Выключена: каждое изменение сразу получают все узлы."
+	},
+	"nginxions.nodes.staged.off": {
+		"defaultMessage": "Поэтапная выкатка выключена: изменения получают все узлы."
+	},
+	"nginxions.nodes.staged.on": {
+		"defaultMessage": "Поэтапная выкатка включена: изменения сначала получают канарейки."
+	},
+	"nginxions.nodes.staged.promote": {
+		"defaultMessage": "Выкатить на все узлы"
+	},
+	"nginxions.nodes.staged.promote.confirm": {
+		"defaultMessage": "Текущая конфигурация уйдёт на все узлы со следующим heartbeat. Сначала проверьте канарейки."
+	},
+	"nginxions.nodes.staged.promoted": {
+		"defaultMessage": "Выкатка запущена: узлы получат конфигурацию со следующим heartbeat."
+	},
+	"nginxions.nodes.staged.waiting": {
+		"defaultMessage": "Узлов ждут выкатки: {count}"
 	},
 	"nginxions.nodes.state": {
 		"defaultMessage": "Состояние"
@@ -4427,8 +4817,17 @@
 	"nginxions.nodes.state.revoked": {
 		"defaultMessage": "Отключён"
 	},
+	"nginxions.nodes.undrain": {
+		"defaultMessage": "Вернуть в работу"
+	},
+	"nginxions.nodes.undrain.confirm": {
+		"defaultMessage": "Хосты, назначенные «{name}», вернутся к нему со следующим пакетом."
+	},
 	"nginxions.nodes.version": {
 		"defaultMessage": "версия {version}"
+	},
+	"nginxions.nodes.view.hint": {
+		"defaultMessage": "То, что узел сообщает в heartbeat (каждые 30 с). Его политики и настройки приходят с этого сервера в пакете; его события — в «Событиях» с фильтром по узлу."
 	},
 	"nginxions.notice.alert": {
 		"defaultMessage": "Проблема"
@@ -5838,7 +6237,7 @@
 		"defaultMessage": "Режим"
 	},
 	"nginxions.policy.f.fileSecurity.threatEmulationEnabled": {
-		"defaultMessage": "Эмуляция угроз: углублённый статический анализ ClamAV (макросы Office, повреждённые исполняемые файлы и медиа) вместо песочницы opensophy"
+		"defaultMessage": "Эмуляция угроз: углублённый статический анализ ClamAV (макросы Office, повреждённые исполняемые файлы и медиа) вместо песочницы производителя агента"
 	},
 	"nginxions.policy.f.fileSecurity.unnamedFilesAction": {
 		"defaultMessage": "Действие для файла без имени (двоичная загрузка без имени в Content-Disposition или пути)"
@@ -6018,7 +6417,7 @@
 		"defaultMessage": "Новых объектов: {count}"
 	},
 	"nginxions.policy.import.dropped": {
-		"defaultMessage": "Не импортируется (Kubernetes, облако opensophy, движки Premium-версии, лишние практики правила):"
+		"defaultMessage": "Не импортируется (Kubernetes, облако производителя агента, движки Premium-версии, лишние практики правила):"
 	},
 	"nginxions.policy.import.file": {
 		"defaultMessage": "Файл local_policy.yaml"
@@ -6487,6 +6886,12 @@
 	},
 	"nginxions.rbac.action.revoke.desc": {
 		"defaultMessage": "Отзывать сертификаты"
+	},
+	"nginxions.rbac.action.sync": {
+		"defaultMessage": "Обучение кластера"
+	},
+	"nginxions.rbac.action.sync.desc": {
+		"defaultMessage": "Пороги smartsync, профиль обучения для новых узлов, откат снимка вместе с общим состоянием кластера"
 	},
 	"nginxions.rbac.action.view": {
 		"defaultMessage": "Просмотр"
@@ -7319,6 +7724,9 @@
 	"nginxions.traffic.filter.mitigated.yes": {
 		"defaultMessage": "отклонённые"
 	},
+	"nginxions.traffic.filter.node": {
+		"defaultMessage": "Сервер"
+	},
 	"nginxions.traffic.filter.origin": {
 		"defaultMessage": "Сервер за хостом"
 	},
@@ -7655,6 +8063,9 @@
 	"nginxions.traffic.no-data": {
 		"defaultMessage": "Нет данных"
 	},
+	"nginxions.traffic.node.local": {
+		"defaultMessage": "Этот сервер"
+	},
 	"nginxions.traffic.note": {
 		"defaultMessage": "Запросы — журнал запросов nginx (интерфейс NginxionS не считается). Атаки — события open-appsec, CrowdSec и mTLS. Страны — база GeoIP NginxionS, без интернета."
 	},
@@ -7876,6 +8287,9 @@
 	},
 	"nginxions.traffic.top.mitigated-paths.info": {
 		"defaultMessage": "Пути отклонённых запросов."
+	},
+	"nginxions.traffic.top.nodes": {
+		"defaultMessage": "Серверы"
 	},
 	"nginxions.traffic.top.origin-paths": {
 		"defaultMessage": "Топ путей по запросам к серверам"
@@ -8304,19 +8718,31 @@
 		"defaultMessage": "Расширенная ML-модель"
 	},
 	"nginxions.waf.model.basic": {
-		"defaultMessage": "Встроенная модель: продвинутая модель opensophy (V2.0)"
+		"defaultMessage": "Встроенная модель: продвинутая модель (V2.0)"
 	},
 	"nginxions.waf.model.description": {
-		"defaultMessage": "В NginxionS встроена продвинутая модель opensophy (Advanced model, V2.0). Загруженная модель (open-appsec-advanced-model.tgz, например обученная NginxionS, см. docs/MODEL.md) заменяет её: распаковывается при старте агента; после загрузки агент перезапускается."
+		"defaultMessage": "В NginxionS встроена продвинутая модель (Advanced model, V2.0). Загруженная модель (open-appsec-advanced-model.tgz, например обученная NginxionS, см. docs/MODEL.md) заменяет её: распаковывается при старте агента; после загрузки агент перезапускается."
+	},
+	"nginxions.waf.model.managed": {
+		"defaultMessage": "Этот сервер — узел: его модель задаёт manager, меняется она там."
 	},
 	"nginxions.waf.model.present": {
 		"defaultMessage": "Загружена: {size}, {date}"
+	},
+	"nginxions.waf.model.previous": {
+		"defaultMessage": "Вернуть прежнюю модель"
+	},
+	"nginxions.waf.model.previous-done": {
+		"defaultMessage": "Прежняя модель возвращена, агент перезапускается"
+	},
+	"nginxions.waf.model.previous-warning": {
+		"defaultMessage": "Вернётся модель, которая была до последней загрузки или удаления, а текущая станет прежней. Агент перезапустится. На manager узлы получат ту же модель со следующим пакетом."
 	},
 	"nginxions.waf.model.remove": {
 		"defaultMessage": "Удалить модель"
 	},
 	"nginxions.waf.model.remove-warning": {
-		"defaultMessage": "Агент перезапустится и вернётся к встроенной модели образа (продвинутой модели opensophy)."
+		"defaultMessage": "Агент перезапустится и вернётся к встроенной модели образа (продвинутой модели)."
 	},
 	"nginxions.waf.model.removed": {
 		"defaultMessage": "Модель удалена, агент перезапускается"

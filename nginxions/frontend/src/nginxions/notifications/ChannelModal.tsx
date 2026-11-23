@@ -8,6 +8,7 @@ import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { showSuccess } from "src/notifications";
+import { HiddenUsername } from "../ui/HiddenUsername";
 import {
 	type Channel,
 	type ChannelConfig,
@@ -19,7 +20,6 @@ import {
 	updateChannel,
 	type WebhookConfig,
 } from "./api";
-import { HiddenUsername } from "../ui/HiddenUsername";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 

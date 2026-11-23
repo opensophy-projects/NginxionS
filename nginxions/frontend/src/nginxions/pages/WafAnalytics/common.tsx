@@ -8,9 +8,9 @@ import { useSearchParams } from "react-router-dom";
 import { intl } from "src/locale";
 import type { AnalyticsPeriod, TopRow, TrafficFilters, TrafficTab } from "../../api";
 import { BarList } from "../../ui/Charts";
-import { InfoTip, infoOfNode } from "../../ui/InfoTip";
 import chartStyles from "../../ui/charts/charts.module.css";
 import { countryName, formatCount } from "../../ui/charts/format";
+import { InfoTip, infoOfNode } from "../../ui/InfoTip";
 import styles from "./Analytics.module.css";
 
 export const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
@@ -35,6 +35,7 @@ export const FILTER_KEYS: (keyof TrafficFilters)[] = [
 	"origin",
 	"referer",
 	"port",
+	"node",
 	"originStatus",
 	"minMs",
 	"maxMs",

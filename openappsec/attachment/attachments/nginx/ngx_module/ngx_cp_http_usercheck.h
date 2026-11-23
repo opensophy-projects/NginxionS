@@ -3,7 +3,7 @@
 /// @file ngx_cp_http_usercheck.h
 /// \brief This file contains the string for the block-page returned instead of the normal server response
 
-// NginxionS: a small neutral page instead of the page of opensophy (278 KB: its logos in base64, its name in the
+// NginxionS: a small neutral page instead of the page of the vendor of the agent (278 KB: its logos in base64, its name in the
 // footer). The agent fills in the title and the text of the custom response of the policy (GUI: WAF -> Policy ->
 // custom responses) and the incident ID; a 403 is replaced by the block page of NginxionS (Agents -> Block page).
 // The three placeholders stay in this order: title, body, incident ID (initialize_web_response_data).

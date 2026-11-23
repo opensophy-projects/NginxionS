@@ -28,5 +28,5 @@ gen_package(
 	install-cp-nano-service-prometheus.sh
 	prometheus_service
     ./install-cp-nano-prometheus.sh
-	opensophy Prometheus Agent Version ${PACKAGE_VERSION} Install Package
+	Prometheus Agent Version ${PACKAGE_VERSION} Install Package
 )

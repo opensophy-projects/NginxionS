@@ -11,10 +11,10 @@ import { Button, Loading } from "src/components";
 import { intl, T } from "src/locale";
 import { showSuccess } from "src/notifications";
 import { createRole, type Role, type RoleInput, type Scope, updateRole } from "./api";
+import { HostPicker } from "./HostPicker";
 import { useCan, useRbacMe, useRbacModel, useRbacRefresh, useRoles } from "./hooks";
 import { actionHint, actionLabel, resourceHint, resourceLabel, roleName } from "./labels";
 import styles from "./RoleModal.module.css";
-import { HostPicker } from "./HostPicker";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 

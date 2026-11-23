@@ -1039,7 +1039,7 @@ install_orchestration()
     cp_exec "cp ${CP_PACKAGE_LIST_NAME} ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_PACKAGE_LIST_NAME}"
     cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_PACKAGE_LIST_NAME}"
 
-    cp_exec "cp -f EULA.txt ${FILESYSTEM_PATH}/EULA.txt"
+    # NginxionS: no EULA.txt in the package of the agent
     cp_exec "cp -f Licenses-for-Third-Party-Components.txt ${FILESYSTEM_PATH}/Licenses-for-Third-Party-Components.txt"
 
     install_public_key

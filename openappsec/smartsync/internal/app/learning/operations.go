@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -84,6 +85,7 @@ func (lc *LearnCore) getTuningDecisions(ctx context.Context, ids models.SyncID) 
 
 func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map[models.SyncID]models.SyncHandler, error) {
 	ret := map[models.SyncID]models.SyncHandler{}
+	settings := readNginxionsSettings() // NginxionS: thresholds from the GUI of NginxionS
 	switch id.Type {
 	case models.IndicatorsConfidence:
 		params := models.ConfidenceParams{
@@ -93,6 +95,7 @@ func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map
 			NullObject:     "",
 			Interval:       2 * time.Hour,
 		}
+		params = withSettings(params, false, settings) // NginxionS
 		ret[id] = handlers.NewConfidenceCalculator(id, params, lc.getTuningDecisions(ctx, id), lc.repo)
 	case models.IndicatorsTrusted:
 		ret[id] = handlers.NewTrustedSources(id)
@@ -106,6 +109,7 @@ func (lc *LearnCore) handlersFactory(ctx context.Context, id models.SyncID) (map
 			NullObject:     "unknown",
 			Interval:       time.Hour,
 		}
+		params = withSettings(params, true, settings) // NginxionS
 		ret[id] = handlers.NewConfidenceCalculator(id, params, lc.getTuningDecisions(ctx, id), lc.repo)
 	case models.TypesTrusted:
 		ret[id] = handlers.NewTrustedSources(id)
@@ -317,6 +321,10 @@ func (lc *LearnCore) processData(
 		if err != nil {
 			return false, nil, errors.Wrapf(err, "failed to get file: %v", file)
 		}
+		// NginxionS: the node the data came from (the path segment after the window)
+		if nodeAware, ok := handler.(models.NodeAwareCollector); ok {
+			nodeAware.SetDataNode(nodeOfFile(file))
+		}
 		handler.MergeData(data)
 	}
 
@@ -386,4 +394,16 @@ func (lc *LearnCore) ReadS3Files(ctx context.Context, ids models.SyncID) ([]byte
 	}
 
 	return outJSON, nil
+}
+
+// windowNode is the segment after the window in the path of the data of an agent: the id of the node on a manager of
+// NginxionS (its relay puts it there), the id of the agent for the agent of the manager itself
+var windowNode = regexp.MustCompile(`/window_[0-9]+(?:_[0-9]+)?/([^/]+)/`)
+
+// nodeOfFile is the node the data of a file came from, "" when its path has none (NginxionS)
+func nodeOfFile(file string) string {
+	if m := windowNode.FindStringSubmatch(file); m != nil {
+		return m[1]
+	}
+	return ""
 }

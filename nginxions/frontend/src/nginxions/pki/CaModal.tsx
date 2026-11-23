@@ -7,8 +7,8 @@ import Alert from "react-bootstrap/Alert";
 import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
-import { createCa, importCa, KEY_TYPES, type PkiCa, type PkiOverview, type Subject, updateCa } from "./api";
 import { HiddenUsername } from "../ui/HiddenUsername";
+import { createCa, importCa, KEY_TYPES, type PkiCa, type PkiOverview, type Subject, updateCa } from "./api";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 

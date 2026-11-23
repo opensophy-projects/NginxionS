@@ -74,6 +74,13 @@ const ROUTES: [RegExp, unknown][] = [
 		},
 	],
 	[/\/nginxions\/learning\/hosts$/, [f.learningHost]],
+	[/\/nginxions\/nodes$/, [f.node]],
+	[/\/nginxions\/nodes\/rollout$/, f.rollout],
+	[/\/nginxions\/nodes\/label-hosts$/, [{ label: "eu", hostIds: [1] }]],
+	[/\/nginxions\/nodes\/staged$/, { staged: true }],
+	[/\/nginxions\/nodes\/\d+\/packages$/, f.nodePackages],
+	[/\/nginxions\/nodes\/\d+\/logs$/, f.nodeLogs],
+	[/\/nginxions\/nodes\/cluster-learning$/, f.clusterLearningSites],
 	[/\/nginxions\/learning\/queue$/, { groups: [f.queueGroup], suggestions: [f.suggestion], total: 1 }],
 	[/\/nginxions\/waf\/policy\/objects$/, f.policyObjects],
 	[/\/nginxions\/waf\/agent$/, f.wafAgent],
@@ -84,6 +91,7 @@ const ROUTES: [RegExp, unknown][] = [
 	[/\/nginxions\/block-page$/, f.blockPage],
 	[/\/nginxions\/mtls\/[a-z_]+\/\d+$/, f.mtlsHost],
 	[/\/nginxions\/learning\/snapshots$/, f.snapshots],
+	[/\/nginxions\/learning\/profiles$/, f.profiles],
 	[/\/nginxions\/learning\/hosts\/\d+\/learned$/, f.learned],
 ];
 

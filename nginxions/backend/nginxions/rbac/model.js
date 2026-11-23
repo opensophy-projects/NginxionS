@@ -17,7 +17,9 @@ export const RESOURCES = {
 	pki: ["view", "manage", "issue", "revoke", "export_key"],
 	waf_policy: ["view", "manage", "apply"],
 	waf_events: ["view"],
-	waf_learning: ["view", "label"],
+	// sync: the learning of the cluster (docs/adr/0012-nodes.md 5c-5d): the thresholds of smartsync, the learning profile
+	// for new nodes, a snapshot restored with the state of the cluster
+	waf_learning: ["view", "label", "sync"],
 	analytics: ["view"],
 	// decide: ban and unban by hand, sync blocklists; manage: settings, hub, blocklists
 	crowdsec: ["view", "decide", "manage"],

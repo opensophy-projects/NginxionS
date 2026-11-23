@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # go vet and go test of the Go services of the agent (openappsec/), in the Go image of deploy/openappsec/Dockerfile
-# (the same Go that builds them into nginxions-openappsec). smartsync is not in the image: it is vetted and tested too,
-# so that its code stays buildable.
+# (the same Go that builds them into nginxions-openappsec): shared storage, tuning and smartsync (run on a manager).
 #
 #   scripts/test-go.sh                       # vet and tests
 #   COVERAGE_DIR=out scripts/test-go.sh      # also out/coverage-go-<service>.txt (go tool cover -func) for the report

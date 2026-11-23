@@ -2,8 +2,9 @@
 // Visitors, Performance, Security, Cache, Origin; KPI cards with sparklines; area charts; a world map; top lists that
 // filter the page). Data: the request log of nginx (nginxions/events/traffic.js) and the security events of open-appsec,
 // CrowdSec and mTLS. "Now": the last hour, refreshed every few seconds, with what is happening now above it.
-import { useQuery } from "@tanstack/react-query";
+
 import { IconFilter, IconX } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import cn from "classnames";
 import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -17,7 +18,7 @@ import { dateTime } from "../../ui/time";
 import hostStyles from "../Hosts/Hosts.module.css";
 import eventStyles from "../WafEvents/Events.module.css";
 import styles from "./Analytics.module.css";
-import { FILTER_KEYS, PERIODS, t, TABS, useTrafficParams } from "./common";
+import { FILTER_KEYS, PERIODS, TABS, t, useTrafficParams } from "./common";
 import { LIVE_MS, LiveNow } from "./Live";
 import { TAB_VIEWS } from "./tabs";
 
@@ -41,6 +42,7 @@ const FILTER_FIELDS: { key: keyof TrafficFilters; choices?: string[]; placeholde
 	{ key: "originStatus", placeholder: "502, 5xx" },
 	{ key: "referer", placeholder: "google.com" },
 	{ key: "port", placeholder: "443" },
+	{ key: "node", placeholder: "local, n-0123456789abcdef" },
 	{ key: "unknown", choices: ["1"] },
 	{ key: "mitigated", choices: ["1", "0"] },
 ];

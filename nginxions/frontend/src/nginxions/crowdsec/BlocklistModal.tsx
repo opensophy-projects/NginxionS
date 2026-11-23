@@ -7,8 +7,8 @@ import Modal from "react-bootstrap/Modal";
 import { Button } from "src/components";
 import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
-import { type Blocklist, type BlocklistData, DECISION_TYPES, DURATIONS, saveBlocklist } from "./api";
 import { HiddenUsername } from "../ui/HiddenUsername";
+import { type Blocklist, type BlocklistData, DECISION_TYPES, DURATIONS, saveBlocklist } from "./api";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 

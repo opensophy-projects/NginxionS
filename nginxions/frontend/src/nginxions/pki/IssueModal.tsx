@@ -12,6 +12,7 @@ import {
 	type IssueResult,
 	issueCert,
 	KEY_TYPES,
+	linkBase,
 	type PkiCert,
 	type PkiOverview,
 	PROFILES,
@@ -19,7 +20,6 @@ import {
 	renewCert,
 	type Subject,
 	type SubjectField,
-	linkBase,
 } from "./api";
 import { Delivery } from "./Delivery";
 

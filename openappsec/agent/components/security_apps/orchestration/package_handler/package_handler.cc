@@ -361,7 +361,7 @@ PackageHandler::Impl::uninstallPackage(
     string watchdog_path = getConfigurationWithDefault<string>(
         filesystem_prefix,
         "orchestration",
-        "Default opensophy directory"
+        "Default agent directory"
     ) + "/watchdog/cp-nano-watchdog";
     auto action = packageHandlerActionsToString(PackageHandlerActions::UNREGISTER);
     if (!orchestration_tools->executeCmd(InstallEnvPrefix + watchdog_path + action + package_path)) {

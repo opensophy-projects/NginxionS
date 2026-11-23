@@ -594,7 +594,7 @@ FogAuthenticator::authenticateAgent()
             orc_status->setFieldStatus(
                 OrchestrationStatusFieldType::REGISTRATION,
                 OrchestrationStatusResult::FAILED,
-                "Warning: Agent/Gateway failed the authentication. Contact opensophy support."
+                "Warning: Agent/Gateway failed the authentication. Contact support."
             );
             return genError(credentials.getErr());
         }
@@ -634,7 +634,7 @@ FogAuthenticator::authenticateAgent()
                         orc_status->setFieldStatus(
                             OrchestrationStatusFieldType::REGISTRATION,
                             OrchestrationStatusResult::FAILED,
-                            "Warning: Agent/Gateway failed to receive access token. Contact opensophy support."
+                            "Warning: Agent/Gateway failed to receive access token. Contact support."
                         );
                     }
                     int next_session_req = max(

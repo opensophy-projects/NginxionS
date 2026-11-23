@@ -16,40 +16,40 @@ import { hostLabel, showRequestModal, statusTone } from "../../modals/RequestMod
 import { showWafEventModal } from "../../modals/WafEventModal";
 import { useCan } from "../../rbac/hooks";
 import { Label } from "../../ui/InfoTip";
+import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 import { Popover } from "../../ui/Popover";
+import { SearchField } from "../../ui/SearchField";
 import hostStyles from "../Hosts/Hosts.module.css";
-import { ActionBadge, EventTime, SeverityBadge } from "./badges";
 import { RequestLogView } from "../RequestLog";
 import logStyles from "../RequestLog/RequestLog.module.css";
+import { ActionBadge, EventTime, SeverityBadge } from "./badges";
 import styles from "./Events.module.css";
 import {
 	AGENT_OF,
 	AGENTS,
 	AGENTS_OF_ALL,
-	CLIENTS,
-	OUTCOMES,
-	STATUS_CLASSES,
-	DEFAULT_FILTERS,
 	actionsFor,
 	activeCount,
+	CLIENTS,
+	DEFAULT_FILTERS,
 	type EventFilters,
 	FILTERS_OF,
 	filtersFromParams,
-	forKind,
-	type Kind,
 	filtersToParams,
 	filtersToQuery,
+	forKind,
 	KINDS,
+	type Kind,
 	LIST_FIELDS,
 	type ListField,
+	OUTCOMES,
 	PERIODS,
 	SEVERITIES,
+	STATUS_CLASSES,
 	withoutValue,
 	withValue,
 } from "./filters";
 import { RetentionPopover } from "./Retention";
-import { SearchField } from "../../ui/SearchField";
-import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const PAGE_SIZE = 50;
@@ -410,6 +410,7 @@ const FIELD_LABEL: Record<ListField, string> = {
 	type: "nginxions.events.attack-type",
 	status: "nginxions.traffic.filter.status",
 	client: "nginxions.traffic.filter.client",
+	node: "nginxions.events.node",
 };
 
 function ActiveFilters({ filters, onChange }: { filters: EventFilters; onChange: (f: EventFilters) => void }) {

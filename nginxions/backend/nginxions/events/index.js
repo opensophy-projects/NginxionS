@@ -106,6 +106,8 @@ export const parseFilters = (query, now = new Date()) => {
 		nginx: list(query.agent).some((a) => a.toLowerCase() === "nginx"),
 		important: query.important === "true" || query.important === true,
 		host: list(query.host).map((h) => h.toLowerCase()),
+		// the server an event came from: "local" (this one) or the id of a node (docs/adr/0012-nodes.md)
+		node: list(query.node).filter((n) => /^(local|n-[0-9a-f]{16})$/.test(n)),
 		ip: list(query.ip),
 		action: list(query.action).map((a) => a.toLowerCase()),
 		severity: list(query.severity).map((s) => s.toLowerCase()),
@@ -130,6 +132,7 @@ const applyFilters = (builder, f) => {
 	if (f.important)
 		builder.whereRaw(`lower(severity) in (${IMPORTANT_SEVERITIES.map(() => "?").join(",")})`, IMPORTANT_SEVERITIES);
 	if (f.host.length) builder.whereIn("host", f.host);
+	if (f.node.length) builder.whereIn("node_id", f.node);
 	if (f.ip.length) builder.whereIn("source_ip", f.ip);
 	if (f.action.length) builder.whereRaw(`lower(action) in (${f.action.map(() => "?").join(",")})`, f.action);
 	if (f.severity.length) builder.whereRaw(`lower(severity) in (${f.severity.map(() => "?").join(",")})`, f.severity);
