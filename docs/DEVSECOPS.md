@@ -9,7 +9,7 @@
 |---|---|
 | Быстрые проверки | ничего: идут на PR и на push в ветки без открытого PR (push в ветку с PR пропускается, PR-run его заменяет); локально — `scripts/check.sh` (`--install-hook` — перед каждым push) |
 | Полная проверка (образы, закрытый контур, DAST) | push в `work` или тег `v*`, любой PR, `[full]` в сообщении коммита, изменение агента, `deploy/`, Dockerfile или rootfs nginx, либо Actions → CI → Run workflow → уровень `full` |
-| Только некоторые тесты стека | `[smoke:waf]` (`[smoke:learning]`), `[smoke:crowdsec]`, `[smoke:core]`, `[dast]`, `[waf-score]`, `[upgrade]`, `[chaos]` в сообщении коммита: образы собираются, идут только названные тесты |
+| Только некоторые тесты стека | `[smoke:waf]` (`[smoke:learning]`), `[smoke:crowdsec]`, `[smoke:core]`, `[dast]`, `[waf-score]`, `[upgrade]`, `[chaos]`, `[cluster]` в сообщении коммита: образы собираются, идут только названные тесты |
 | Расширенная проверка (тяжёлые сканеры) | метка `security-scan` на PR, либо ветка `security/<что угодно>`, либо Actions → CI → Run workflow → уровень `extended` |
 | Еженедельный отчёт | сам, по понедельникам (`security-weekly.yml`); вне расписания: Actions → Weekly security → Run workflow |
 | Где смотреть итог | Summary прогона и артефакт `security-report`; еженедельный — issue с меткой `security` |
@@ -85,7 +85,7 @@ frontend — быстрая (образы — по `[full]`). **Инкремен
 1. `images` — стартует параллельно с кодовыми проверками; сборка двух образов, контрактный тест политики с агентом этой сборки (`scripts/test-policy-contract.sh`,
    минуты), скан образов; образы уходят артефактом `images` (zstd, хранится сутки).
 2. `stack` — матрица, каждый тест на своей машине и своём стеке (`scripts/ci-stack.sh <тест>`): `smoke-waf`,
-   `smoke-crowdsec`, `smoke-core` (группы smoke из `deploy/test/smoke/`), `waf-score`, `upgrade`, `chaos`, `dast`.
+   `smoke-crowdsec`, `smoke-core` (группы smoke из `deploy/test/smoke/`), `waf-score`, `upgrade`, `chaos`, `cluster` (manager и два узла, `scripts/test-cluster.sh`), `dast`.
    Падение одного не останавливает другие (`fail-fast: false`), и внутри smoke упавшая группа не обрывает следующие:
    за один прогон видны все сломанные места. Отчёт smoke (группы, упавшие и самые долгие шаги) — в Summary.
 3. `publish` — ждёт все четыре code-check jobs, `contract`, `security`, `images` и `stack`; затем выполняет шлюз безопасности по результатам скана образов и DAST, затем (на `work` и тегах) публикация.

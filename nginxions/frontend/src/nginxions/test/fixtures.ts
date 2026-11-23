@@ -445,6 +445,29 @@ export const snapshots = {
 	keepAuto: 7,
 };
 
+export const profiles = {
+	profiles: [
+		{
+			id: "p-0123456789ab",
+			name: "Shop prod",
+			createdOn: now,
+			origin: "taken",
+			source: { server: "manager", snapshot: null },
+			sites: [{ domains: ["app.example.com"] }],
+			assets: [{ asset: "app.example.com", params: 4, values: 20 }],
+			files: 2,
+			size: 2048,
+			version: "a".repeat(64),
+			fingerprint: Array(32).fill("AB").join(":"),
+			own: true,
+			forNewNodes: true,
+			policy: { sites: 1, objects: 2 },
+			appliedOn: null,
+		},
+	],
+	fingerprint: Array(32).fill("AB").join(":"),
+};
+
 export const learned = {
 	id: 1,
 	name: "app.example.com",
@@ -611,4 +634,74 @@ export const traffic = {
 	percentiles: [bucket("2026-11-18T09:00:00.000Z")],
 	breakdown: { connectMs: 2, upstreamMs: 30 },
 	actions: [{ kind: "security", action: "Prevent", events: 4 }],
+};
+
+export const node = {
+	id: 1,
+	uid: "n-0123456789abcdef",
+	name: "edge-1",
+	status: "active",
+	state: "online",
+	labels: ["eu"],
+	fingerprint: Array(32).fill("AB").join(":"),
+	address: "198.51.100.7",
+	info: { version: "2.0.0", hostname: "edge-1", hosts: 2, packageVersion: "a".repeat(64), packageSkipped: 0 },
+	hostIds: [1],
+	createdOn: now,
+	registeredOn: now,
+	lastSeenOn: now,
+	codeExpiresOn: null,
+	drained: false,
+	command: null,
+	canary: true,
+	pinned: { version: "b".repeat(64), by: "staged" },
+};
+
+export const nodePackages = [
+	{ version: "a".repeat(64), createdOn: now, applied: true, pinned: false },
+	{ version: "b".repeat(64), createdOn: now, applied: false, pinned: true },
+];
+
+export const rollout = [
+	{
+		id: 2,
+		nodeId: 1,
+		nodeName: "edge-1",
+		kind: "model",
+		version: "b".repeat(64),
+		result: "failed",
+		error: "the model is not the one of the package",
+		createdOn: now,
+	},
+	{
+		id: 1,
+		nodeId: 1,
+		nodeName: "edge-1",
+		kind: "package",
+		version: "a".repeat(64),
+		result: "applied",
+		error: "",
+		createdOn: now,
+	},
+];
+
+export const clusterLearningSites = {
+	available: true,
+	error: "",
+	assets: [
+		{
+			asset: "app.example.com",
+			local: { windows: 3, lastOn: now },
+			nodes: [{ uid: "n-0123456789abcdef", name: "edge-1", windows: 5, lastOn: now }],
+			mergedOn: now,
+		},
+	],
+};
+
+export const nodeLogs = {
+	collectedOn: now,
+	logs: {
+		openappsec: [{ stream: "stdout", line: "agent started" }],
+		crowdsec: [{ stream: "stderr", line: "lapi ready" }],
+	},
 };

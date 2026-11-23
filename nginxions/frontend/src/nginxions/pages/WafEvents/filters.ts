@@ -22,7 +22,8 @@ export const AGENT_OF: Record<string, string> = {
 };
 /** list filters: comma-separated in the URL and the API */
 /** status and client: of the requests of the log (Events → All) */
-export const LIST_FIELDS = ["agent", "host", "ip", "action", "severity", "type", "status", "client"] as const;
+/** node: the server of NginxionS an event came from ("local" or the id of a node, Agents → Nodes) */
+export const LIST_FIELDS = ["agent", "host", "ip", "action", "severity", "type", "status", "client", "node"] as const;
 export type ListField = (typeof LIST_FIELDS)[number];
 
 export interface EventFilters {
@@ -41,6 +42,7 @@ export interface EventFilters {
 	type: string[];
 	status: string[];
 	client: string[];
+	node: string[];
 	minScore: string;
 	maxScore: string;
 	/** requests of the log (Events → All): refused or passed, "" for both */
@@ -62,6 +64,7 @@ export const DEFAULT_FILTERS: EventFilters = {
 	type: [],
 	status: [],
 	client: [],
+	node: [],
 	minScore: "",
 	maxScore: "",
 	outcome: "",
@@ -107,6 +110,7 @@ export const filtersFromParams = (params: URLSearchParams): EventFilters => {
 		maxScore: validScore(params.get("max")),
 		status: split(params.get("status")).filter((v) => (STATUS_CLASSES as readonly string[]).includes(v)),
 		client: split(params.get("client")).filter((v) => (CLIENTS as readonly string[]).includes(v)),
+		node: split(params.get("node")).filter((v) => /^(local|n-[0-9a-f]{16})$/.test(v)),
 		outcome: OUTCOMES.find((o) => o === params.get("outcome")) ?? "",
 	};
 };

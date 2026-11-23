@@ -187,7 +187,7 @@ public:
     run(const std::string &nano_service_name)
     {
         LogGen(
-            "opensophy Nano-service started",
+            "Nano-service started",
             ReportIS::Audience::SECURITY,
             ReportIS::Severity::INFO,
             ReportIS::Priority::MEDIUM,

@@ -309,7 +309,7 @@ Downloader::Impl::downloadCertificatesFromFog(const vector<string> &certificate_
     return file_path;
 }
 
-// NginxionS: a host of the cloud of open-appsec (opensophy)
+// NginxionS: a host of the cloud of open-appsec
 static bool
 isCloudHost(string host)
 {
@@ -361,7 +361,7 @@ Downloader::Impl::downloadFileFromURL(
     URLParser parsed_url(new_url);
     Maybe<string> base_url = parsed_url.getBaseURL();
     if (!base_url.ok()) return base_url;
-    // NginxionS: the agent of NginxionS has no cloud: nothing is downloaded from a host of open-appsec (opensophy)
+    // NginxionS: the agent of NginxionS has no cloud: nothing is downloaded from a host of open-appsec
     if (parsed_url.getProtocol() != URLProtocol::LOCAL_FILE && isCloudHost(base_url.unpack())) {
         return genError("NginxionS: the agent has no cloud, no download from " + base_url.unpack());
     }

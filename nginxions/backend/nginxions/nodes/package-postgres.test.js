@@ -127,6 +127,9 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal(content.access_lists[0].items[0].username, "alice");
 		assert.equal(content.access_lists[0].clients[0].address, "10.0.0.0/8");
 		assert.equal(content.waf_hosts[0].mode, "prevent-learn");
+		// the block page and CrowdSec of the manager, never the secret of a captcha
+		assert.equal(typeof content.block_page.enabled, "boolean");
+		assert.equal(content.crowdsec.bouncer.captcha.secret_key, "");
 
 		// the version changes only with the content
 		const a = await pkg.packageOf(node.id);
@@ -134,7 +137,60 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal(a.version, b.version);
 		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
 		assert.notEqual((await pkg.packageOf(node.id)).version, a.version);
+		// out of work: no hosts in its package, its hosts stay given to it; back: they are in the package again
+		assert.equal((await nodes.drain(ADMIN, node.id, true)).drained, true);
+		assert.deepEqual((await pkg.contentOf(node.id)).hosts, []);
+		assert.deepEqual((await nodes.hosts(ADMIN, node.id)).sort(), [shop, blog].sort());
+		await nodes.drain(ADMIN, node.id, false);
 		content = await pkg.contentOf(node.id);
+		assert.equal(content.hosts.length, 2);
+
+		// a host given to a label: every node with the label serves it, the others do not
+		const only = await knex("proxy_host").whereRaw("domain_names::text like ?", ["%manager-only%"]).first();
+		await assert.rejects(() => nodes.setLabelHosts(ADMIN, "Not A Label!", [only.id]), /Not a label/);
+		assert.deepEqual(await nodes.setLabelHosts(ADMIN, "eu", [only.id]), [only.id]);
+		assert.deepEqual(await nodes.labelHosts(ADMIN), [{ label: "eu", host_ids: [only.id] }]);
+		assert.equal((await pkg.contentOf(node.id)).hosts.length, 2, "no label yet");
+		await nodes.update(ADMIN, node.id, { labels: ["eu"] });
+		assert.deepEqual(
+			await pkg.servedHostIdsOf(node.id),
+			[shop, blog, only.id].sort((x, y) => x - y),
+		);
+		await nodes.update(ADMIN, node.id, { labels: [] });
+
+		// held on a package given before (a rollback), then following the configuration again
+		await knex("nginxions_node").where({ id: node.id }).update({ status: "active" });
+		const first = await pkg.packageOf(node.id);
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "prevent-learn" });
+		const second = await pkg.packageOf(node.id);
+		assert.notEqual(first.version, second.version);
+		const kept = await nodes.packages(ADMIN, node.id);
+		assert.ok(kept.some((p) => p.version === first.version) && kept.some((p) => p.version === second.version));
+		await assert.rejects(() => nodes.hold(ADMIN, node.id, "0".repeat(64)), /never given/);
+		assert.deepEqual((await nodes.hold(ADMIN, node.id, first.version)).pinned, {
+			version: first.version,
+			by: "manual",
+		});
+		assert.equal((await pkg.packageOf(node.id)).version, first.version, "held on the package before");
+		assert.equal((await nodes.hold(ADMIN, node.id, null)).pinned, null);
+		assert.equal((await pkg.packageOf(node.id)).version, second.version);
+
+		// a staged rollout: a node that is not a canary keeps its package, a canary gets the change; promoted, all
+		await knex("nginxions_node")
+			.where({ id: node.id })
+			.update({ info: JSON.stringify({ package_version: second.version }) });
+		assert.deepEqual(await nodes.setStaged(ADMIN, true), { staged: true });
+		assert.equal((await nodes.list(ADMIN))[0].pinned.by, "staged");
+		await knex("nginxions_waf_host").where({ proxy_host_id: shop }).update({ mode: "detect-learn" });
+		assert.equal((await pkg.packageOf(node.id)).version, second.version, "the change waits");
+		assert.deepEqual(await nodes.promote(ADMIN), { promoted: 1 });
+		const third = await pkg.packageOf(node.id);
+		assert.notEqual(third.version, second.version, "promoted: the change reaches the node");
+		assert.equal((await nodes.setCanary(ADMIN, node.id, true)).pinned, null, "a canary follows the configuration");
+		await nodes.setCanary(ADMIN, node.id, false);
+		assert.equal((await nodes.setStaged(ADMIN, false)).staged, false);
+		assert.equal((await nodes.list(ADMIN))[0].pinned, null);
+		await knex("nginxions_node").where({ id: node.id }).update({ status: "pending" });
 
 		// this database becomes "the node": the rows of the manager are gone, only the package is left
 		await knex("nginxions_waf_host").delete();
@@ -197,6 +253,43 @@ describe("packages of nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL 
 		assert.equal((await knex("certificate")).length, 0);
 		assert.equal((await knex("access_list")).length, 0);
 		assert.equal((await knex("access_list_auth")).length, 0);
+	});
+
+	test("the block page and CrowdSec of the package: applied when they differ, a captcha needs its own secret", async () => {
+		const { applySettings } = await import("./settings-apply.js");
+		const { getSetting, setSetting } = await import("../settings.js");
+		const calls = [];
+		const io = {
+			setBlockPage: async (d) => {
+				calls.push(["page", d.title]);
+				await setSetting("block.page", d);
+			},
+			setCrowdsec: async (d) => {
+				calls.push(["crowdsec", d.log_level]);
+				await setSetting("crowdsec", d);
+			},
+		};
+		const page = { ...(await getSetting("block.page")), title: "Blocked by the manager" };
+		const crowdsec = { ...(await getSetting("crowdsec")), log_level: "debug" };
+		assert.equal(await applySettings({ block_page: page, crowdsec }, io), "");
+		assert.deepEqual(calls, [
+			["page", "Blocked by the manager"],
+			["crowdsec", "debug"],
+		]);
+		// the same again: nothing to do
+		calls.length = 0;
+		assert.equal(await applySettings({ block_page: page, crowdsec }, io), "");
+		assert.deepEqual(calls, []);
+		// a captcha of the manager, no secret here: told, CrowdSec left as it is
+		const captcha = {
+			...crowdsec,
+			bouncer: {
+				...crowdsec.bouncer,
+				captcha: { ...crowdsec.bouncer.captcha, provider: "hcaptcha", secret_key: "" },
+			},
+		};
+		assert.match(await applySettings({ crowdsec: captcha }, io), /CrowdSec: the captcha needs its secret key/);
+		assert.deepEqual(calls, []);
 	});
 
 	test("a host nginx refuses is in the result (the node then goes back to the package before)", async () => {

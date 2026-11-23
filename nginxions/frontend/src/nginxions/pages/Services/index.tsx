@@ -5,13 +5,13 @@ import { useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import { Button, HasPermission, LoadingPage } from "src/components";
 import { intl, T } from "src/locale";
+import { showProxyHostModal } from "src/modals";
 import { VIEW } from "src/modules/Permissions";
 import { showSuccess } from "src/notifications";
 import { downloadDiagnostics, getApps, regenerateNginx, restartService, type Service } from "../../api";
 import { useServices } from "../../hooks";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showServiceLogsModal } from "../../modals/ServiceLogsModal";
-import { showProxyHostModal } from "src/modals";
 import { useCan } from "../../rbac/hooks";
 
 const STATE_COLORS: Record<string, string> = {

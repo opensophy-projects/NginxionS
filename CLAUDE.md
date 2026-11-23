@@ -77,7 +77,7 @@ scripts/test-airgap.sh
 
 Исходники open-appsec лежат в `openappsec/` и меняются прямо в коде (метка `NginxionS:`). Коммиты upstream, от которых они взяты, — в `deploy/openappsec/sources.env` (полные хэши, проверяется в CI). Обновление: `git subtree pull --prefix=openappsec/<каталог> https://github.com/openappsec/<репозиторий> <коммит> --squash`, конфликты — по меткам `NginxionS:`, новый коммит — в `sources.env`; при обновлении `agent/` обновите примеры политик в `nginxions/backend/nginxions/waf/objects/examples/`. Локальная сборка всех образов: `scripts/build-images.sh` (тег `local/<имя>:dev`), затем `NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/test-airgap.sh`. Долгие сборки (nginxions, openappsec) делаются в CI или разработчиком, не в сессии агента.
 
-Контейнер `openappsec` владеет сетью и IPC: порты опубликованы на нём, `nginxions` подключается к ним (`network_mode: service:openappsec`). Его процессы (`deploy/openappsec/nginxions-openappsec.sh`) слушают на 127.0.0.1: агент 7777, shared storage 7811, tuning 7813. `nginxions-control` — отдельный контейнер `control` (образ агента, своя команда) на сети `control`, порт 7080. Архитектура целиком — в `CODE_OF_CONDUCT.md`.
+Контейнер `openappsec` владеет сетью и IPC: порты опубликованы на нём, `nginxions` подключается к ним (`network_mode: service:openappsec`). Его процессы (`deploy/openappsec/nginxions-openappsec.sh`) слушают на 127.0.0.1: агент 7777, shared storage 7811, tuning 7813, smartsync 7815 (на управляющем сервере с узлами); backend `nginxions` на узле держит там ретранслятор обучения 7817/7818. `nginxions-control` — отдельный контейнер `control` (образ агента, своя команда) на сети `control`, порт 7080. Архитектура целиком — в `CODE_OF_CONDUCT.md`.
 
 ## Разработка
 

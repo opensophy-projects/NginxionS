@@ -78,6 +78,7 @@ func (a *Adapter) newRouter(ctx context.Context) *chi.Mux {
 			r.Get("/", a.GetFilesList)
 			r.Get("/*", a.GetFile)
 			r.Put("/*", a.PutFile)
+			r.Delete("/*", a.DeleteClusterFile)
 		})
 	})
 

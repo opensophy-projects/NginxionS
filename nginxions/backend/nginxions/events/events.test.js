@@ -95,7 +95,7 @@ test("an event of the IPS as the open agent writes it: tagged IPS, the CWE in wa
 });
 
 test("notices, telemetry and noise", () => {
-	const notice = classify({ eventTime: "2026-10-28T03:38:23.773", eventName: "opensophy Nano-service started" });
+	const notice = classify({ eventTime: "2026-10-28T03:38:23.773", eventName: "Nano-service started" });
 	assert.equal(notice.row.kind, "system");
 	assert.equal(classify({ eventTime: "x", eventName: "y" }), null);
 	assert.equal(

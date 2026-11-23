@@ -195,7 +195,7 @@ Report::getCef() const
     }
     string version = "";
     report.pushMandatory("CEF:0");
-    report.pushMandatory("opensophy");
+    report.pushMandatory("open-appsec");
     report.pushMandatory(*service_name);
     report.pushMandatory(version);
     report.pushMandatory(TagAndEnumManagement::convertToString(type));

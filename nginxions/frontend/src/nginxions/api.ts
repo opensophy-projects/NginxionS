@@ -415,6 +415,8 @@ export interface TrafficFilters {
 	maxBytes?: string;
 	/** a part of the host, path, IP, user agent or referer (the request log) */
 	q?: string;
+	/** the server: "local" (this one) or the id of a node of this manager */
+	node?: string;
 }
 
 export interface Traffic {
@@ -511,10 +513,18 @@ export const getEventsSettings = () => api.get({ url: "/nginxions/events/setting
 export const setEventsSettings = (retention: EventsSettings["retention"]) =>
 	api.put({ url: "/nginxions/events/settings", data: retention }) as Promise<EventsSettings>;
 
-interface WafAgentModel {
+interface WafAgentModelFile {
 	present: boolean;
 	size?: number;
 	modifiedOn?: string;
+	sha256?: string;
+}
+
+interface WafAgentModel extends WafAgentModelFile {
+	/** the model before the last upload or removal: "back" puts it in place */
+	previous?: WafAgentModelFile;
+	/** a node: its model is given by its manager (no upload here) */
+	managed?: boolean;
 }
 
 export interface WafAgentSettings {
@@ -543,6 +553,10 @@ export const getWafAgentMetrics = (): Promise<{ reachable: boolean; metrics: Age
 
 export const setWafAgent = (data: WafAgentSettings, apply = true): Promise<WafAgentState> =>
 	api.put({ url: "/nginxions/waf/agent", data: { ...data, apply } });
+
+/** back to the model before the last upload or removal; the agent restarts (on a manager the nodes follow) */
+export const previousWafModel = (): Promise<WafAgentModel & { restarting: boolean }> =>
+	api.post({ url: "/nginxions/waf/agent/model/previous" });
 
 /** back to the basic model of the image; the agent restarts */
 export const removeWafModel = (): Promise<WafAgentModel & { restarting: boolean }> =>
@@ -706,44 +720,141 @@ export interface ClusterNode {
 		hosts?: number | null;
 		uptime?: number | null;
 		agent?: string;
-		package_version?: string;
-		package_skipped?: number | null;
-		package_error?: string;
+		packageVersion?: string;
+		packageSkipped?: number | null;
+		packageError?: string;
+		/** the containers of its stack and their state (its heartbeat) */
+		services?: Record<string, string>;
+		modelSha256?: string;
+		profileVersion?: string;
 	};
-	host_ids: number[];
-	created_on: string;
-	registered_on: string | null;
-	last_seen_on: string | null;
-	code_expires_on: string | null;
+	hostIds: number[];
+	createdOn: string;
+	registeredOn: string | null;
+	lastSeenOn: string | null;
+	codeExpiresOn: string | null;
+	/** taken out of work: its package has no hosts */
+	drained: boolean;
+	/** a command waiting for the next heartbeat of the node */
+	command: { action: string; on: string } | null;
+	/** reached first by a staged rollout */
+	canary: boolean;
+	/** held on a package it was given before: a rollback ("manual") or a staged rollout that has not reached it */
+	pinned: { version: string; by: "manual" | "staged" } | null;
+}
+
+/** a package a node was given (the last 20 are kept) */
+export interface NodePackage {
+	version: string;
+	createdOn: string;
+	applied: boolean;
+	pinned: boolean;
 }
 
 export interface NodeCode {
 	node: ClusterNode;
 	code: string;
-	code_expires_on: string;
+	codeExpiresOn: string;
 }
 
 export interface ClusterMember {
 	joined: boolean;
-	manager_url?: string;
+	managerUrl?: string;
 	uid?: string;
 	name?: string;
 	fingerprint?: string;
-	joined_on?: string;
-	last_ok_on?: string | null;
-	last_error?: string;
+	joinedOn?: string;
+	lastOkOn?: string | null;
+	lastError?: string;
 	disabled?: boolean;
+	/** the learning of the agent through the manager: what the relay of this node did last */
+	learning?: { requests: number; lastOkOn: string | null; lastError: string };
+	/** the learning profile for new nodes of the manager (step 15.5): its version, the sites it filled, its error */
+	profileVersion?: string;
+	profileAssets?: number;
+	profileError?: string;
+	/** the model of the agent taken from the manager (its SHA-256), its last error */
+	modelSha256?: string;
+	modelError?: string;
 }
 
 export const getNodes = (): Promise<ClusterNode[]> => api.get({ url: "/nginxions/nodes" });
+
+/** what a node applied of this manager, or what failed (step 15.6) */
+export interface NodeRollout {
+	id: number;
+	nodeId: number;
+	nodeName: string;
+	kind: "package" | "model" | "profile" | "command";
+	version: string;
+	result: "applied" | "failed";
+	error: string;
+	createdOn: string;
+}
+/** the learning of the cluster on a manager: per site, the data of windows of each node and of this server */
+export interface ClusterLearningSite {
+	asset: string;
+	local: { windows: number; lastOn: string | null };
+	nodes: { uid: string; name: string; windows: number; lastOn: string | null }[];
+	mergedOn: string | null;
+}
+export const getClusterLearningSites = (): Promise<{
+	available: boolean;
+	assets: ClusterLearningSite[];
+	error?: string;
+}> => api.get({ url: "/nginxions/nodes/cluster-learning" });
+
+export const getNodeRollout = (nodeId?: number): Promise<NodeRollout[]> =>
+	api.get({ url: "/nginxions/nodes/rollout", params: nodeId ? { nodeId: nodeId } : {} });
 export const addNode = (data: { name: string; labels?: string[] }): Promise<NodeCode> =>
 	api.post({ url: "/nginxions/nodes", data });
 export const newNodeCode = (id: number): Promise<NodeCode> => api.post({ url: `/nginxions/nodes/${id}/code` });
 export const revokeNode = (id: number): Promise<ClusterNode> => api.post({ url: `/nginxions/nodes/${id}/revoke` });
+export const drainNode = (id: number, drained: boolean): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/drain`, data: { drained } });
+export interface NodeLogs {
+	collectedOn: string;
+	logs: Record<string, { stream: "stdout" | "stderr"; line: string }[]>;
+}
+/** the last logs the node sent (null before any); nodeCommand(id, "collect_logs") asks for new ones */
+export const getNodeLogs = (id: number): Promise<NodeLogs | null> => api.get({ url: `/nginxions/nodes/${id}/logs` });
+export const nodeCommand = (id: number, action: "restart_agent" | "collect_logs"): Promise<ClusterNode> =>
+	api.post({ url: `/nginxions/nodes/${id}/command`, data: { action } });
 export const deleteNode = (id: number): Promise<boolean> => api.del({ url: `/nginxions/nodes/${id}` });
 export const getClusterMember = (): Promise<ClusterMember> => api.get({ url: "/nginxions/cluster/member" });
-export const joinCluster = (data: { manager_url: string; code: string }): Promise<ClusterMember> =>
-	api.put({ url: "/nginxions/cluster/member", data });
+export const joinCluster = (data: {
+	managerUrl: string;
+	code: string;
+	managerFingerprint: string;
+}): Promise<ClusterMember> => api.put({ url: "/nginxions/cluster/member", data });
 export const leaveCluster = (): Promise<ClusterMember> => api.del({ url: "/nginxions/cluster/member" });
+
+/** thresholds of the learning of the nodes put together by smartsync on a manager */
+export interface ClusterLearning {
+	minSources: number;
+	minSourcesTypes: number;
+	minIntervals: number;
+	ratioThreshold: number;
+}
+export const getClusterLearning = (): Promise<ClusterLearning> => api.get({ url: "/nginxions/cluster/learning" });
+export const setClusterLearning = (data: ClusterLearning): Promise<ClusterLearning> =>
+	api.put({ url: "/nginxions/cluster/learning", data });
 export const setNodeHosts = (id: number, hostIds: number[]): Promise<number[]> =>
 	api.put({ url: `/nginxions/nodes/${id}/hosts`, data: { host_ids: hostIds } });
+/** the proxy hosts every node with a label serves */
+export const getLabelHosts = (): Promise<{ label: string; hostIds: number[] }[]> =>
+	api.get({ url: "/nginxions/nodes/label-hosts" });
+export const setLabelHosts = (label: string, hostIds: number[]): Promise<number[]> =>
+	api.put({ url: `/nginxions/nodes/label-hosts/${encodeURIComponent(label)}`, data: { host_ids: hostIds } });
+/** a staged rollout: a change reaches the canaries first, the other nodes with "Roll out to all nodes" */
+export const getStaged = (): Promise<{ staged: boolean }> => api.get({ url: "/nginxions/nodes/staged" });
+export const setStaged = (staged: boolean): Promise<{ staged: boolean }> =>
+	api.put({ url: "/nginxions/nodes/staged", data: { staged } });
+export const promoteRollout = (): Promise<{ promoted: number }> => api.post({ url: "/nginxions/nodes/staged/promote" });
+export const setNodeCanary = (id: number, canary: boolean): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/canary`, data: { canary } });
+export const getNodePackages = (id: number): Promise<NodePackage[]> =>
+	api.get({ url: `/nginxions/nodes/${id}/packages` });
+/** held on a package given before (a rollback); null: it follows the configuration again */
+export const holdNodePackage = (id: number, version: string | null): Promise<ClusterNode> =>
+	api.put({ url: `/nginxions/nodes/${id}/packages`, data: { version } });

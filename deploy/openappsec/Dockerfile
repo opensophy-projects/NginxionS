@@ -3,10 +3,12 @@
 # the sources of NginxionS in openappsec/ (build context "openappsec"; upstream commits they started from: sources.env):
 #   - the agent (openappsec/agent), the changes of NginxionS marked "NginxionS:" in its code;
 #   - its shared storage (openappsec/smartsync-shared-files) and tuning (openappsec/smartsync-tuning) services, Go;
+#   - smartsync (openappsec/smartsync), Go: the learning of several servers put together, run on a manager only
+#     (docs/adr/0012-nodes.md, 5c);
 #   - nginxions-control (nginxions/backend/nginxions/control, build context "control"): the Docker API for the GUI,
 #     run from this image as a container of its own (service "control" of deploy/compose.yaml), never in this one.
 # nginxions-openappsec.sh starts and keeps them running. The container owns the network namespace nginxions joins, so
-# the services listen on 127.0.0.1 ports there (port 80 is nginx's): shared storage 7811, tuning 7813.
+# the services listen on 127.0.0.1 ports there (port 80 is nginx's): shared storage 7811, tuning 7813, smartsync 7815.
 #
 #   docker build --build-context openappsec=openappsec --build-context control=nginxions/backend/nginxions/control \
 #     -t nginxions-openappsec deploy/openappsec
@@ -26,7 +28,12 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 RUN apk add --no-cache build-base cmake git python3 bash linux-headers \
         boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis \
         libmaxminddb-dev yq brotli-dev zlib-dev pax-utils
-
+# changes of NginxionS in the agent (grep "NginxionS:"): no cloud at all (no registration, no Fog, no message or
+# download to a host of open-appsec, no token for the local services); rate limits for hosts of the local policy (no
+# scheme) and its rules (no "action" and "match"); host:port of services; the feature dump for training. Its model
+# (components/security_apps/waap/resources/waap.data) has the request headers of browsers
+# (Sec-Fetch-*, Priority, client hints) among the clean headers of its signatures; a model uploaded in WAF -> Agent
+# replaces it at the start of the agent.
 COPY --from=openappsec agent/ /src/
 WORKDIR /src
 # the unit tests of the agent (C++, gtest) run here, one after another (in parallel two of them compete for the
@@ -83,12 +90,20 @@ WORKDIR /app
 RUN go build -ldflags="-w -s" -a -installsuffix cgo -o /out/app ./cmd/server/ && cp -r configs /out/configs && \
     { [ ! -d api ] || cp -r api /out/api; }
 
+FROM go-build AS smartsync
+# standalone: REST /api/sync and a file lock, no Kafka, Redis or tenant of a cloud (NginxionS: the local tenant is the
+# root of the storage, in its code)
+COPY --from=openappsec smartsync/ /app/
+WORKDIR /app
+RUN go build -ldflags="-w -s" -a -installsuffix cgo -o /out/app ./cmd/server/ && cp -r configs /out/configs
+
 # ---------------------------------------------------------------- the image
 FROM ${AGENT_RUNTIME}
 # Node.js for nginxions-control (its own container, deploy/compose.yaml) and the Snort converter of the agent
 RUN apk add --no-cache nodejs
 COPY --from=shared-storage /out/ /opt/appsec-shared-storage/
 COPY --from=tuning /out/ /opt/appsec-tuning/
+COPY --from=smartsync /out/ /opt/appsec-smartsync/
 COPY --from=control server.js watchdog.js learning.js tar.js /opt/nginxions-control/
 RUN printf '{"type": "module"}\n' > /opt/nginxions-control/package.json && mkdir -p /db
 # the settings of WAF -> Agent (fail-open), applied at every start of the agent; then the services

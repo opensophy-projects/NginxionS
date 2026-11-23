@@ -3,13 +3,13 @@
 // like "eval(" that scanners take for code (DAST: ZAP 10110). vite.config.ts points the imports of the package here.
 import Editor, { type TextareaCodeEditorProps } from "@uiw/react-textarea-code-editor/nohighlight";
 import { forwardRef } from "react";
-import rehypePrismGenerator from "rehype-prism-plus/generator";
-import { refractor } from "refractor/lib/core.js";
 import bash from "refractor/lang/bash.js";
 import json from "refractor/lang/json.js";
 import nginx from "refractor/lang/nginx.js";
 import php from "refractor/lang/php.js";
 import yaml from "refractor/lang/yaml.js";
+import { refractor } from "refractor/lib/core.js";
+import rehypePrismGenerator from "rehype-prism-plus/generator";
 
 for (const lang of [bash, json, nginx, php, yaml]) refractor.register(lang);
 const rehypePrism = rehypePrismGenerator(refractor);

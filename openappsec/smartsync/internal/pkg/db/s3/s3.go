@@ -1,5 +1,3 @@
- 
-
 package s3repository
 
 import (
@@ -16,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"openappsec.io/smartsync-service/models"
+	"strings"
 	"time"
 
 	"openappsec.io/ctxutils"
@@ -81,12 +80,33 @@ func (a *Adapter) initialize(c Configuration) error {
 	return nil
 }
 
-// GetFileRaw - download file, return raw data and true if data was decompressed
-func (a *Adapter) GetFileRaw(ctx context.Context, tenantID string, path string) ([]byte, bool, error) {
-	if path[:1] != "/" {
+// localTenant is the tenant of an agent without a cloud (NginxionS: the agent of NginxionS never registers, sends
+// X-Tenant-Id "local" and keeps its files at the root of the storage, /<asset>/..., not /local/<asset>/...)
+const localTenant = "local"
+
+// storagePath is the path of a file in the storage (NginxionS: the handlers build /<tenant>/<asset>/...; for the local
+// tenant that is /<asset>/..., where the agent reads and writes)
+func storagePath(tenantID string, path string) string {
+	if path == "" || path[:1] != "/" {
 		path = "/" + path
 	}
-	path = a.baseURL + path
+	if tenantID == localTenant && strings.HasPrefix(path, "/"+localTenant+"/") {
+		return path[len(localTenant)+1:]
+	}
+	return path
+}
+
+// listPrefix is the prefix of a listing (NginxionS: without the local tenant, as storagePath)
+func listPrefix(id models.SyncID, rest string) string {
+	if id.TenantID == localTenant {
+		return fmt.Sprintf("/%v/%v", id.AssetID, rest)
+	}
+	return fmt.Sprintf("%v/%v/%v", id.TenantID, id.AssetID, rest)
+}
+
+// GetFileRaw - download file, return raw data and true if data was decompressed
+func (a *Adapter) GetFileRaw(ctx context.Context, tenantID string, path string) ([]byte, bool, error) {
+	path = a.baseURL + storagePath(tenantID, path) // NginxionS: the local tenant is the root of the storage
 	resp, err := a.getFile(ctx, tenantID, path)
 	if err != nil {
 		return []byte{}, false, errors.Wrapf(err, "failed to get file %v", path)
@@ -170,7 +190,7 @@ func (a *Adapter) getFile(ctx context.Context, tenantID string, path string) ([]
 
 // PostFile - marshal data and put file
 func (a *Adapter) PostFile(ctx context.Context, tenantID string, path string, compress bool, data interface{}) error {
-	path = a.baseURL + path
+	path = a.baseURL + storagePath(tenantID, path) // NginxionS: the local tenant is the root of the storage
 
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
@@ -247,14 +267,15 @@ func (a *Adapter) putFileWithRetry(ctx context.Context, body []byte, path string
 // GetFilesList return a list of files with common prefix
 func (a *Adapter) GetFilesList(ctx context.Context, id models.SyncID) ([]string, error) {
 	var path string
+	// NginxionS: the prefix through listPrefix (the local tenant is the root of the storage)
 	if len(id.Type) > 0 {
 		if len(id.WindowID) > 0 {
-			path = fmt.Sprintf("%v/?list-type=2&prefix=%v/%v/%v/%v/", a.baseURL, id.TenantID, id.AssetID, id.Type, id.WindowID)
+			path = fmt.Sprintf("%v/?list-type=2&prefix=%v", a.baseURL, listPrefix(id, string(id.Type)+"/"+id.WindowID+"/"))
 		} else {
-			path = fmt.Sprintf("%v/?list-type=2&prefix=%v/%v/%v/", a.baseURL, id.TenantID, id.AssetID, id.Type)
+			path = fmt.Sprintf("%v/?list-type=2&prefix=%v", a.baseURL, listPrefix(id, string(id.Type)+"/"))
 		}
 	} else {
-		path = fmt.Sprintf("%v/?list-type=2&prefix=%v/%v/", a.baseURL, id.TenantID, id.AssetID)
+		path = fmt.Sprintf("%v/?list-type=2&prefix=%v", a.baseURL, listPrefix(id, ""))
 	}
 	u, err := url.Parse(path)
 	if err != nil {

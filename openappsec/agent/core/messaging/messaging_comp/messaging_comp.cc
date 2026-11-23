@@ -89,7 +89,7 @@ isMessageToFog(const MessageMetadata message_metadata)
 }
 
 // NginxionS: the agent of NginxionS has no cloud. A message to the Fog, or to any host of the cloud of open-appsec
-// (opensophy), is refused here, before a connection: nothing of the agent reaches out, whatever its configuration
+// is refused here, before a connection: nothing of the agent reaches out, whatever its configuration
 // says (a Fog address, a token, a log or a metric "to the cloud").
 static bool
 endsWith(const string &value, const string &suffix)

@@ -44,6 +44,7 @@ const TEXT: { key: Key; placeholder: string }[] = [
 	{ key: "originStatus", placeholder: "502, 5xx" },
 	{ key: "port", placeholder: "443" },
 	{ key: "tls", placeholder: "TLSv1.3" },
+	{ key: "node", placeholder: "local, n-0123456789abcdef" },
 ];
 
 /** one value added to a comma-separated filter on Enter or leaving the field */

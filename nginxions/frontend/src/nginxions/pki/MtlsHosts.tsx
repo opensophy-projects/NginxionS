@@ -8,6 +8,9 @@ import { useProxyHosts, useStreams } from "src/hooks";
 import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../modals/ConfirmModal";
+import hostStyles from "../pages/Hosts/Hosts.module.css";
+import { useCan } from "../rbac/hooks";
+import { Dropdown, type DropdownItem } from "../ui/Dropdown";
 import { showAccessModal } from "./AccessModal";
 import {
 	enableMtlsHost,
@@ -24,9 +27,6 @@ import {
 import { certStatus } from "./CertModal";
 import { showHostCertsModal } from "./HostCertsModal";
 import { showMtlsModal } from "./MtlsModal";
-import { useCan } from "../rbac/hooks";
-import { Dropdown, type DropdownItem } from "../ui/Dropdown";
-import hostStyles from "../pages/Hosts/Hosts.module.css";
 import styles from "./Pki.module.css";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
