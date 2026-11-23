@@ -40,7 +40,7 @@ for i in $(seq 1 20); do
   curl -sS --max-time 10 -o /dev/null -H 'Host: test.local' "$HTTP/smoke-count-$run_id?n=$i" || true
 done
 for i in $(seq 1 3); do
-  curl -sS --max-time 10 -o /dev/null -H 'Host: test.local' "$HTTP/smoke-attack-$run_id$SQLI&n=$i" || true
+  expect "$(status "/smoke-attack-$run_id$SQLI&n=$i")" 403 "the WAF blocks the request for event $i"
 done
 for i in $(seq 1 30); do
   counted=$($CURL "$ADMIN/api/nginxions/analytics/requests?path=/smoke-count-$run_id&limit=1" \

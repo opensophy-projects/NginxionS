@@ -298,6 +298,9 @@ echo "nano service timeouts during 2000 requests: $timeouts"
 echo "==> nginx reloads under traffic: the old workers exit (open-appsec attachment, issue of stuck workers)"
 # NginxionS reloads nginx at every change made in the GUI; a worker of the attachment that never left "shutting down"
 # would pile up with every reload
+if smoke_has events; then
+  attachment_metadata_inode=$("${compose[@]}" exec -T nginxions stat -c '%i' /dev/shm/attachment-metadata)
+fi
 "${compose[@]}" exec -T nginxions sh -c '
   (for i in $(seq 1 300); do curl -s -o /dev/null --max-time 2 http://127.0.0.1/ || true; done) &
   for i in 1 2 3; do nginx -s reload; sleep 3; done
@@ -309,6 +312,13 @@ for i in $(seq 1 20); do
   sleep 3
 done
 [ "$stuck" = 0 ] || { echo "FAIL: $stuck nginx workers are still shutting down a minute after the reloads"; exit 1; }
+if smoke_has events; then
+  current_metadata_inode=$("${compose[@]}" exec -T nginxions stat -c '%i' /dev/shm/attachment-metadata || true)
+  [ "$current_metadata_inode" = "$attachment_metadata_inode" ] || {
+    echo "FAIL: nginx reload removed or replaced the shared attachment metadata"
+    exit 1
+  }
+fi
 
 echo "==> nginx reloads while the agent does not answer: the old workers exit all the same (issue 105)"
 # the worst case of issue 105: requests waiting for an agent that is stopped (SIGSTOP) when the workers are told to quit
