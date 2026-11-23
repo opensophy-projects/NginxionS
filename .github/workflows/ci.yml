@@ -142,6 +142,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: lts/*
+          package-manager-cache: false
           cache: pnpm
           cache-dependency-path: nginxions/backend/pnpm-lock.yaml
       - name: backend
@@ -178,6 +179,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: lts/*
+          package-manager-cache: false
           cache: pnpm
           cache-dependency-path: nginxions/frontend/pnpm-lock.yaml
       - name: frontend
