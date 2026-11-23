@@ -658,7 +658,12 @@ export const start = () => {
 	import("./cluster-settings.js")
 		.then(({ bootstrap }) => bootstrap())
 		.catch((err) => logger.warn(`Cluster: the settings of smartsync: ${err.message}`));
-	const tick = () => beat().catch((err) => logger.warn(`Cluster heartbeat: ${err.message}`));
+	const tick = () => {
+		// Reconcile even after this node was disabled: its heartbeat stops, but a failed agent restart
+		// must not leave the old manager learning role active indefinitely.
+		applyLearningRole().catch((err) => logger.warn(`Cluster learning role: ${err.message}`));
+		beat().catch((err) => logger.warn(`Cluster heartbeat: ${err.message}`));
+	};
 	timer = setInterval(tick, HEARTBEAT_MS);
 	timer.unref?.();
 	// at the start too, without waiting: a node that restarted shows up again at once (it never blocks the start)
