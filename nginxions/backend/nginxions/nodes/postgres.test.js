@@ -24,12 +24,15 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let knex;
 	let nodes;
 	let member;
+	let agentSettings;
 	let server;
 	let managerUrl;
 	let managerFingerprint;
 	let registrationRequests = 0;
 	let modelAgent;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
+	const agentEnv = path.join(dir, "appsec", "nginxions-agent.env");
+	const agentApplied = path.join(dir, "appsec", "nginxions-agent.applied");
 	// the shared storage and smartsync of the manager (step 15.4): what reaches them
 	const learned = [];
 	const storageFiles = new Map();
@@ -125,6 +128,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		await import("../routes.js");
 		({ default: nodes } = await import("./index.js"));
 		member = await import("./member.js");
+		agentSettings = await import("../waf/agent-settings.js");
 		// a manager: the two routes without login, in front of the functions of nodes, over HTTPS
 		execFileSync("openssl", [
 			"req",
@@ -245,6 +249,50 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		for (const service of fakeServices) service.close();
 		await (await import("./relay.js")).stopRelay();
 		await knex?.destroy();
+	});
+
+	test("standalone agent startup and unapplied fail-open settings leave the agent running", async (t) => {
+		t.after(() => rmSync(agentApplied, { force: true }));
+		await agentSettings.bootstrap();
+		assert.equal(await agentSettings.applyLearningRole(), false, "the agent started with its standalone defaults");
+
+		const configured = readFileSync(agentEnv, "utf8");
+		writeFileSync(
+			agentApplied,
+			configured.replace(/NGINXIONS_FAIL_OPEN_TIMEOUT_MS=\d+/, "NGINXIONS_FAIL_OPEN_TIMEOUT_MS=500"),
+		);
+		assert.equal(await agentSettings.applyLearningRole(), false, "fail-open settings are applied separately");
+		assert.equal((await agentSettings.default.get(ADMIN)).restartRequired, true);
+	});
+
+	test("reconciliation retries an unapplied return to standalone learning", { timeout: 10_000 }, async (t) => {
+		t.after(() => rmSync(agentApplied, { force: true }));
+		await agentSettings.bootstrap();
+		const configured = readFileSync(agentEnv, "utf8");
+		writeFileSync(agentApplied, `${configured}NGINXIONS_SMARTSYNC=true\nNGINXIONS_LEARNING_VIA=manager\n`);
+		const { default: control } = await import("../control/client.js");
+		t.mock.timers.enable({ apis: ["setTimeout"] });
+		let restart = Promise.withResolvers();
+		let attempts = 0;
+		t.mock.method(control, "restartService", async (...args) => {
+			attempts++;
+			restart.resolve(args);
+			if (attempts === 1) throw new Error("restart failed");
+			return { restarting: true };
+		});
+
+		assert.equal(await agentSettings.applyLearningRole(), true);
+		t.mock.timers.tick(3000);
+		assert.deepEqual(await restart.promise, ["openappsec", 1]);
+		assert.equal(readFileSync(agentEnv, "utf8"), configured);
+
+		restart = Promise.withResolvers();
+		assert.equal(await agentSettings.applyLearningRole(), true);
+		t.mock.timers.tick(3000);
+		assert.deepEqual(await restart.promise, ["openappsec", 1]);
+		writeFileSync(agentApplied, configured);
+		assert.equal(await agentSettings.applyLearningRole(), false);
+		assert.equal(attempts, 2);
 	});
 
 	test("the thresholds of the learning of the nodes: saved in the GUI, written for smartsync", async () => {
