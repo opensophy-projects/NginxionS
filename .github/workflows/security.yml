@@ -2,7 +2,7 @@
 # image pinned in .github/security/tools.env, and the results stay in GitHub: Security → Code scanning (SARIF), the
 # artifacts of the run (security-*) and the summary of the run.
 #
-#   called by CI (ci.yml) on every push and pull request: SAST, secrets, SCA and SBOM of the sources, IaC, the
+#   called by CI (ci.yml) on PRs and standalone pushes (branch pushes with an open PR are superseded by the PR run): SAST, secrets, SCA and SBOM of the sources, IaC, the
 #     workflows, code quality. ci.yml checks the images (vulnerabilities, SBOM, CIS), attacks the running stack
 #     (DAST) and writes the summary report (job "report").
 #   the extended run of CI (level "extended": branches security/**, the weekly security/<date> of
@@ -183,7 +183,7 @@ jobs:
           if-no-files-found: ignore
 
   secrets:
-    name: Secrets (Gitleaks, whole history)
+    name: Gitleaks (commit history)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -193,20 +193,18 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: scan
+      - name: Gitleaks — scan commit history
         env:
           LEVEL: ${{ inputs.level }}
         run: |
           . .github/security/tools.env
           mkdir -p out
-          # the files of the checkout and every commit of the history; the extended run: of every branch and tag
+          # the commit history of this ref; the extended run scans every branch and tag
           all=()
           [ "$LEVEL" = extended ] && all=(--log-opts=--all)
           docker run --rm -v "$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
             -e GIT_CONFIG_VALUE_0='*' "$GITLEAKS_IMAGE" git "${all[@]}" --config .github/security/gitleaks.toml --redact \
             --report-format sarif --report-path out/gitleaks.sarif --exit-code 0 --log-level warn .
-          docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" dir --config .github/security/gitleaks.toml \
-            --redact --report-format sarif --report-path out/gitleaks-files.sarif --exit-code 0 --log-level warn .
       - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always() && hashFiles('out/gitleaks.sarif') != ''
         with:
