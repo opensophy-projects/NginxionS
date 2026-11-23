@@ -161,6 +161,15 @@ const restartAgent = (access) => control.restartService(AGENT_SERVICE, access.to
 const ROLE_RESTART_DELAY_MS = 3000;
 let roleRestart = null;
 
+const hasLearningRole = (env, { smartsync, viaManager }) => {
+	// The entrypoint defaults to standalone learning when there is no settings file.
+	const lines = env?.split("\n") ?? [];
+	return (
+		lines.includes("NGINXIONS_SMARTSYNC=true") === smartsync &&
+		lines.includes("NGINXIONS_LEARNING_VIA=manager") === viaManager
+	);
+};
+
 /**
  * The role of this server changed (a node joined or left, the first node of a manager registered, the last one went):
  * the settings file of the agent gets it and the agent restarts to learn with it. Never throws: joining or disabling
@@ -174,21 +183,25 @@ export const applyLearningRole = async (userId = 1) => {
 		const role = await learningRole();
 		const desired = renderEnv(settings, role);
 		const [configured, applied] = await Promise.all([readText(ENV_FILE), readText(APPLIED_FILE)]);
-		// A failed or interrupted restart leaves the desired file in place but the agent still runs the old role.
-		// Compare the applied file too, so a later reconciliation can retry without rewriting the configuration.
-		if (configured === desired && applied === desired) return false;
 		if (configured !== desired) await writeEnv(settings, role);
-		logger.info(
-			`Cluster: learning ${role.viaManager ? "through the manager" : "here"}, smartsync ${role.smartsync ? "on" : "off"}: the agent restarts`,
-		);
-		// one restart for changes that come together (a server joining itself: registered here, then joined)
+		// Reconcile the role even if a previous restart failed. Other agent settings have their own apply action.
 		clearTimeout(roleRestart);
-		roleRestart = setTimeout(() => {
-			control
-				.restartService(AGENT_SERVICE, userId)
-				.catch((err) =>
-					logger.warn(`Cluster: the agent did not restart for its learning role: ${err.message}`),
+		roleRestart = null;
+		if (hasLearningRole(applied, role)) return false;
+
+		// One restart for changes that come together (a server joining itself: registered here, then joined).
+		roleRestart = setTimeout(async () => {
+			roleRestart = null;
+			try {
+				const [current, running] = await Promise.all([readText(ENV_FILE), readText(APPLIED_FILE)]);
+				if (!hasLearningRole(current, role) || hasLearningRole(running, role)) return;
+				logger.info(
+					`Cluster: learning ${role.viaManager ? "through the manager" : "here"}, smartsync ${role.smartsync ? "on" : "off"}: the agent restarts`,
 				);
+				await control.restartService(AGENT_SERVICE, userId);
+			} catch (err) {
+				logger.warn(`Cluster: the agent did not restart for its learning role: ${err.message}`);
+			}
 		}, ROLE_RESTART_DELAY_MS);
 		roleRestart.unref?.();
 		return true;
