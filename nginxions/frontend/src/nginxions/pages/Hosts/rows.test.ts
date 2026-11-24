@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	exportCsv,
 	exportData,
 	type FilterRule,
 	filtersFromParams,
@@ -221,6 +222,22 @@ describe("hosts rows", () => {
 		expect("locations" in proxy).toBe(false);
 		proxy.forwardPort = null;
 		expect(parseImport(JSON.stringify(file)).items[0].data.forwardPort).toBeNull();
+	});
+
+	it("exports CSV with text cells escaped and expired certificate days kept numeric", () => {
+		const csv = exportCsv([
+			{
+				...byId("proxy-1"),
+				names: ["=literal"],
+				target: 'host,"display"\rnext',
+				expiresInDays: -2,
+				group: " \t@office",
+			},
+		]);
+		expect(csv).toBe(
+			"name,type,target,tls,expires_in_days,waf,mtls,access,group,status\n" +
+				`'=literal,proxy,"host,""display""\rnext",letsencrypt,-2,prevent,required,public,' \t@office,online`,
+		);
 	});
 
 	it("restores nullable upstream ports omitted by early version 1 exports", () => {
