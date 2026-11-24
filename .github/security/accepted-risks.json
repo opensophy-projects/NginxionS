@@ -988,6 +988,73 @@
 			"where": "nginxions/backend/nginxions/nodes/member.js",
 			"reason": "the check of the certificate of the manager is the pin, not the CAs of the system (panels of NginxionS have a certificate of their own, often self-signed): the TLS socket is opened without the CA check, its SHA-256 fingerprint is compared with the one pinned at the join on secureConnect and the socket is closed before anything (join code, token) is written when it differs (docs/adr/0012-nodes.md, point 4; test: another certificate on the address of the manager, the node sends nothing)",
 			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "github.security.nginxions-tls-verification-off",
+			"where": "nginxions/backend/nginxions/nodes/member.js:77",
+			"reason": "managerExchange checks the administrator-verified SHA-256 pin on secureConnect before constructing the HTTP request. Tests verify a missing or mismatched pin sends no HTTP request (docs/adr/0012-nodes.md, point 4)",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/nodes/member.js:193",
+			"reason": "the pinned manager response contributes fields to the member state that is serialized as JSON, with the token and key encrypted. The state writer uses a fixed administrator-configured destination in the data directory and a private temporary file. No response field selects either path",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "CVE-2025-47273",
+			"where": "nginxions-develop · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"layer": [
+					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
+					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
+				],
+				"analyzedBy": "sbom",
+				"path": ""
+			},
+			"reason": "verified the layers from run 45400876961 and its successor: pip 26.3 lists setuptools 70.3.0 in its vendoring SBOM for pkg_resources. The affected setuptools/package_index.py is absent from the vendored files. The image installs setuptools 84.2.1",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "CVE-2026-59890",
+			"where": "nginxions-develop · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"layer": [
+					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
+					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
+				],
+				"analyzedBy": "sbom",
+				"path": ""
+			},
+			"reason": "verified that pip vendors pkg_resources without the affected setuptools file-list module used to build source distributions. The installed distribution is setuptools 84.2.1",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "GHSA-xmj3-9gf7-h52w",
+			"where": "nginxions-develop · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"layer": [
+					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
+					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
+				],
+				"analyzedBy": "sbom",
+				"path": ""
+			},
+			"reason": "verified that pip vendors pkg_resources without the affected setuptools/wheel.py module for legacy wheel installation on Windows. The installed distribution is setuptools 84.2.1",
+			"until": "2027-02-01"
 		}
 	]
 }
