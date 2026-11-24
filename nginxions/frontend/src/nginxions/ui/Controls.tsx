@@ -3,7 +3,7 @@ import { IconLock, IconLogout, IconMoon, IconSelector, IconShieldLock, IconSun, 
 import cn from "classnames";
 import { useAuthState, useLocaleState } from "src/context";
 import { useTheme, useUser } from "src/hooks";
-import { changeLocale, intl, localeOptions, T } from "src/locale";
+import { intl, localeOptions, T } from "src/locale";
 import { showChangePasswordModal, showTwoFactorModal, showUserModal } from "src/modals";
 import { useRbacMe } from "../rbac/hooks";
 import { roleName } from "../rbac/labels";
@@ -62,10 +62,7 @@ export function LocaleSwitch() {
 						key: code,
 						label: <T id={`locale-${option[1]}`} />,
 						active: code === current,
-						onSelect: () => {
-							changeLocale(code);
-							setLocale(code);
-						},
+						onSelect: () => setLocale(code),
 					};
 				})}
 			/>

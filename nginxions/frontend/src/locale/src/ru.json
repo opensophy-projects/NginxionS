@@ -2774,6 +2774,9 @@
 	"nginxions.hosts.done.mtls": {
 		"defaultMessage": "mTLS сохранён"
 	},
+	"nginxions.hosts.done.partial": {
+		"defaultMessage": "Выполнено: {done}. С ошибкой: {failed}."
+	},
 	"nginxions.hosts.done.waf": {
 		"defaultMessage": "режим WAF сохранён"
 	},
@@ -2879,23 +2882,44 @@
 	"nginxions.hosts.import": {
 		"defaultMessage": "Импорт хостов (JSON)"
 	},
+	"nginxions.hosts.import.choose": {
+		"defaultMessage": "Выберите объект на этом сервере"
+	},
 	"nginxions.hosts.import.confirm": {
 		"defaultMessage": "Импортировать"
 	},
 	"nginxions.hosts.import.done": {
 		"defaultMessage": "Импортировано хостов: {count}"
 	},
-	"nginxions.hosts.import.dropped": {
-		"defaultMessage": "Ссылок на сертификаты и списки доступа, которых здесь нет, будет убрано: {count}."
-	},
 	"nginxions.hosts.import.empty": {
 		"defaultMessage": "В файле нет хостов, которые вы можете создать"
+	},
+	"nginxions.hosts.import.incomplete": {
+		"defaultMessage": "Перед импортом сопоставьте все ссылки."
 	},
 	"nginxions.hosts.import.invalid": {
 		"defaultMessage": "Это не файл экспорта хостов NginxionS"
 	},
+	"nginxions.hosts.import.mapping": {
+		"defaultMessage": "Сопоставьте ссылки из файла с объектами на этом сервере. Проверьте каждый выбор, потому что исходные ID действуют только на своём сервере."
+	},
+	"nginxions.hosts.import.permissions": {
+		"defaultMessage": "Нужны права на создание хостов всех типов из файла."
+	},
+	"nginxions.hosts.import.reference.access": {
+		"defaultMessage": "Исходный список доступа №{id}"
+	},
+	"nginxions.hosts.import.reference.mtls": {
+		"defaultMessage": "Исходный CA mTLS №{id}"
+	},
+	"nginxions.hosts.import.reference.tls": {
+		"defaultMessage": "Исходный сертификат TLS №{id}"
+	},
 	"nginxions.hosts.import.text": {
 		"defaultMessage": "Из файла будет создано хостов: {count}."
+	},
+	"nginxions.hosts.import.unavailable": {
+		"defaultMessage": "На этом сервере нет доступного объекта такого типа"
 	},
 	"nginxions.hosts.info.access": {
 		"defaultMessage": "Кого пускают: список доступа (адреса и пароль) и страны блокировки по GeoIP."
@@ -5291,6 +5315,9 @@
 	"nginxions.overview.hosts.stream": {
 		"defaultMessage": "{count, plural, one {поток} few {потока} other {потоков}}"
 	},
+	"nginxions.overview.hosts.unavailable": {
+		"defaultMessage": "Не удалось загрузить хосты"
+	},
 	"nginxions.overview.notice.agent-down": {
 		"defaultMessage": "Агент WAF не отвечает"
 	},
@@ -7300,6 +7327,9 @@
 	},
 	"nginxions.settings.events-retention": {
 		"defaultMessage": "Срок хранения событий безопасности"
+	},
+	"nginxions.setup.failed": {
+		"defaultMessage": "Не удалось создать администратора."
 	},
 	"nginxions.setup.submit": {
 		"defaultMessage": "Зарегистрироваться"

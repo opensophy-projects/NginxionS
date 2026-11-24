@@ -1,4 +1,4 @@
-import { createIntl, createIntlCache } from "react-intl";
+import { createIntl, createIntlCache, useIntl } from "react-intl";
 import langEn from "./lang/en.json";
 import langBg from "./lang/bg.json";
 import langCs from "./lang/cs.json";
@@ -113,16 +113,17 @@ const T = ({
 	data?: Record<string, string | number | undefined>;
 	tData?: Record<string, string>;
 }) => {
+	const currentIntl = useIntl();
 	const translatedData: Record<string, string> = {};
 	if (tData) {
 		// iterate over tData and translate each value
 		Object.entries(tData).forEach(([key, value]) => {
-			translatedData[key] = intl.formatMessage({ id: value });
+			translatedData[key] = currentIntl.formatMessage({ id: value });
 		});
 	}
 	return (
 		<span data-translation-id={id}>
-			{intl.formatMessage(
+			{currentIntl.formatMessage(
 				{ id },
 				{
 					...data,

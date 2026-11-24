@@ -4,14 +4,15 @@
 // Other languages are left to the community and are not checked here.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../nginxions/frontend/src/", import.meta.url).pathname;
+const root = process.argv[2] ? join(process.argv[2], "/") : fileURLToPath(new URL("../nginxions/frontend/src/", import.meta.url));
 const en = JSON.parse(readFileSync(join(root, "locale/src/en.json"), "utf8"));
 const ru = JSON.parse(readFileSync(join(root, "locale/src/ru.json"), "utf8"));
 const errors = [];
 
 for (const key of Object.keys(en)) {
-	if (!(key in ru)) errors.push(`ru.json: no translation for "${key}" (${en[key].defaultMessage})`);
+	if (typeof ru[key]?.defaultMessage !== "string" || !ru[key].defaultMessage.trim()) errors.push(`ru.json: no translation for "${key}" (${en[key].defaultMessage})`);
 }
 
 // text that is not words for people: protocols, header values, product names, file names
@@ -21,6 +22,9 @@ const patterns = [
 	/(?<!=)>\s*([A-Za-z][A-Za-z'’ ,.!?…-]*[a-z][A-Za-z'’ ,.!?…-]*)\s*</g,
 	// placeholder="Text", title="Text", aria-label="Text"
 	/\b(?:placeholder|title|aria-label|alt)="([A-Za-z][^"]*[a-z][^"]*)"/g,
+	// JSX string expressions, for example title={"Text"} or >{'Text'}<
+	/\b(?:placeholder|title|aria-label|alt)\s*=\s*\{\s*["']([A-Za-z][^"'{}]*[a-z][^"'{}]*)["']\s*\}/g,
+	/>\s*\{\s*["']([A-Za-z][A-Za-z'’ ,.!?…-]*[a-z][A-Za-z'’ ,.!?…-]*)["']\s*\}\s*</g,
 	// || "Text" fallbacks
 	/\|\|\s*"([A-Z][a-z]+ [^"]+)"/g,
 ];

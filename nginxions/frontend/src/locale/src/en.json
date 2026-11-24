@@ -2774,6 +2774,9 @@
 	"nginxions.hosts.done.mtls": {
 		"defaultMessage": "mTLS saved"
 	},
+	"nginxions.hosts.done.partial": {
+		"defaultMessage": "Succeeded: {done}. Failed: {failed}."
+	},
 	"nginxions.hosts.done.waf": {
 		"defaultMessage": "WAF mode saved"
 	},
@@ -2879,23 +2882,44 @@
 	"nginxions.hosts.import": {
 		"defaultMessage": "Import hosts (JSON)"
 	},
+	"nginxions.hosts.import.choose": {
+		"defaultMessage": "Select a target"
+	},
 	"nginxions.hosts.import.confirm": {
 		"defaultMessage": "Import"
 	},
 	"nginxions.hosts.import.done": {
 		"defaultMessage": "Hosts imported: {count}"
 	},
-	"nginxions.hosts.import.dropped": {
-		"defaultMessage": "{count, plural, one {# reference} other {# references}} to certificates or access lists that do not exist here will be removed."
-	},
 	"nginxions.hosts.import.empty": {
 		"defaultMessage": "The file has no hosts you may create"
+	},
+	"nginxions.hosts.import.incomplete": {
+		"defaultMessage": "Select a target for every reference before importing."
 	},
 	"nginxions.hosts.import.invalid": {
 		"defaultMessage": "This is not an NginxionS hosts export"
 	},
+	"nginxions.hosts.import.mapping": {
+		"defaultMessage": "Match the references in the file to resources on this server. Review every choice since source IDs are local to their server."
+	},
+	"nginxions.hosts.import.permissions": {
+		"defaultMessage": "You need permission to create every host type in the file."
+	},
+	"nginxions.hosts.import.reference.access": {
+		"defaultMessage": "Source access list #{id}"
+	},
+	"nginxions.hosts.import.reference.mtls": {
+		"defaultMessage": "Source mTLS CA #{id}"
+	},
+	"nginxions.hosts.import.reference.tls": {
+		"defaultMessage": "Source TLS certificate #{id}"
+	},
 	"nginxions.hosts.import.text": {
 		"defaultMessage": "{count, plural, one {# host} other {# hosts}} will be created from the file."
+	},
+	"nginxions.hosts.import.unavailable": {
+		"defaultMessage": "No matching type is available on this server"
 	},
 	"nginxions.hosts.info.access": {
 		"defaultMessage": "Who is let in: an access list (addresses and password) and the countries of geo-blocking."
@@ -5291,6 +5315,9 @@
 	"nginxions.overview.hosts.stream": {
 		"defaultMessage": "{count, plural, one {stream} other {streams}}"
 	},
+	"nginxions.overview.hosts.unavailable": {
+		"defaultMessage": "Could not load hosts"
+	},
 	"nginxions.overview.notice.agent-down": {
 		"defaultMessage": "The WAF agent does not answer"
 	},
@@ -7300,6 +7327,9 @@
 	},
 	"nginxions.settings.events-retention": {
 		"defaultMessage": "Retention of security events"
+	},
+	"nginxions.setup.failed": {
+		"defaultMessage": "Could not create the administrator."
 	},
 	"nginxions.setup.submit": {
 		"defaultMessage": "Register"

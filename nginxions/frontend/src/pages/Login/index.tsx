@@ -8,6 +8,7 @@ import { intl, T } from "src/locale";
 import { validateEmail, validateString } from "src/modules/Validations";
 // NginxionS: centred panel with brand, theme and language of the opensophy shell (phase 2)
 import { AuthLayout } from "src/nginxions/ui/AuthLayout";
+import authStyles from "src/nginxions/ui/Auth.module.css";
 
 function TwoFactorForm() {
 	const codeRef = useRef<HTMLInputElement>(null);
@@ -27,8 +28,8 @@ function TwoFactorForm() {
 	};
 
 	useEffect(() => {
-		codeRef.current?.focus();
-	});
+		codeRef.current?.focus({ preventScroll: true });
+	}, []);
 
 	return (
 		<>
@@ -77,15 +78,15 @@ function TwoFactorForm() {
 	);
 }
 
+const redirectToOIDC = () => {
+	window.location.href = "/api/oidc";
+};
+
 function LoginForm() {
 	const emailRef = useRef<HTMLInputElement>(null);
 	const [formErr, setFormErr] = useState("");
 	const { login } = useAuthState();
 	const health = useHealth();
-
-	const redirectToOIDC = () => {
-		window.location.href = "/api/oidc";
-	};
 
 	const onSubmit = async (values: any, { setSubmitting }: any) => {
 		setFormErr("");
@@ -100,6 +101,7 @@ function LoginForm() {
 	};
 
 	useEffect(() => {
+		if (health.data?.password === undefined) return;
 		if (health.data?.password === false) {
 			const getCookie = (name: string): string | undefined => {
 				const value = `; ${document.cookie}`;
@@ -112,10 +114,10 @@ function LoginForm() {
 				redirectToOIDC();
 			}
 		} else {
-			emailRef.current?.focus();
+			emailRef.current?.focus({ preventScroll: true });
 		}
 		window.cookieStore.delete("__Host-npmplus_oidc_no_redirect");
-	});
+	}, [health.data?.password]);
 
 	return (
 		<>
@@ -149,7 +151,9 @@ function LoginForm() {
 												className={`form-control ${form.errors.email && form.touched.email ? " is-invalid" : ""}`}
 												placeholder={intl.formatMessage({ id: "email-address" })}
 											/>
-											<div className="invalid-feedback">{form.errors.email}</div>
+											<div className={`invalid-feedback ${authStyles.feedback}`}>
+												{form.errors.email}
+											</div>
 										</label>
 									)}
 								</Field>
@@ -169,7 +173,9 @@ function LoginForm() {
 													className={`form-control ${form.errors.password && form.touched.password ? " is-invalid" : ""}`}
 													placeholder={intl.formatMessage({ id: "password" })}
 												/>
-												<div className="invalid-feedback">{form.errors.password}</div>
+												<div className={`invalid-feedback ${authStyles.feedback}`}>
+													{form.errors.password}
+												</div>
 											</label>
 										</>
 									)}
