@@ -939,9 +939,9 @@ const scenarios = [
 			const domain = "gui-mtls.local";
 			const p12Password = "gui-p12-password";
 			const modal = () => page.locator(".modal.show").last();
-			// Certificates → PKI → Create a root CA
+			// The section's Add CA action is available on both fresh and populated stacks.
 			await go("/pki?tab=cas");
-			await page.getByRole("button", { name: "Create a root CA" }).click();
+			await page.locator("#certs-cas").getByRole("button", { name: "Add CA", exact: true }).click();
 			await modal().locator("#pki-ca-name").fill("GUI Root");
 			await modal().locator("#pki-ca-cn").fill("GUI Root");
 			await modal().getByRole("button", { name: "Create", exact: true }).click();

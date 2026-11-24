@@ -218,7 +218,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
       *) fail "a normal request after the agent's restart got \"$normal\" (status, bytes; fail-open $1)" ;;
     esac
   }
-  # called at the end of the group (fail-open, then fail-close, which test-airgap.sh uses after smoke)
+  # called at the end of the group for both modes; leave fail-open for the remaining smoke groups and browser tests
 
   step "WAF -> Agent: the metrics of the agent (its prometheus service) are read"
   metrics=""
@@ -630,9 +630,8 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   event Detect
 
   # the first requests after a restart of the agent (issue 149), at the end of the group: the host blocks again. The
-  # group ends in fail-open, the default: in test-airgap.sh the next groups run on this stack, and in fail-close a
-  # request that met the agent busy with a new policy (each new host) got the 403 page. deploy/test/smoke.sh switches
-  # fail-close on after all the groups, for the check of scripts/test-airgap.sh
+  # group ends in fail-open, the default shared by the subsequent smoke groups and the browser tests. The separate
+  # agent fault test enables fail-close immediately before stopping the agent.
   step "WAF: the host blocks again (prevent-learn)"
   $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/hosts/1" \
     -d '{"enabled": true, "mode": "prevent-learn", "minimum_confidence": "high"}' > /dev/null
