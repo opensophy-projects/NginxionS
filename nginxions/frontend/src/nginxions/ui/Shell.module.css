@@ -367,15 +367,10 @@
 	color: var(--foreground);
 	font-size: 0.75rem;
 	font-weight: 600;
-	transition:
-		border-color 150ms ease-out,
-		transform 150ms ease-out;
+	transition: border-color 150ms ease-out;
 }
 .toggle:hover {
 	border-color: color-mix(in oklab, var(--accent) 60%, transparent);
-}
-.toggle:active {
-	transform: scale(0.95);
 }
 .icon {
 	position: absolute;
@@ -564,36 +559,26 @@
 .iconButton:active {
 	transform: scale(0.95);
 }
-.overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	background: color-mix(in oklab, var(--background-inset) 80%, transparent);
-	backdrop-filter: blur(4px);
-	opacity: 0;
-	pointer-events: none;
-	transition: opacity 200ms ease-out;
+:global(body):has(.drawer[open]) {
+	overflow: hidden;
 }
 .drawer {
 	position: fixed;
-	top: 0;
-	left: 0;
-	bottom: 0;
-	z-index: 50;
+	inset: 0 auto 0 0;
 	width: 75%;
 	max-width: 24rem;
+	max-height: none;
+	margin: 0;
+	padding: 0;
 	overflow: hidden;
+	border: 0;
 	border-right: 1px solid var(--border);
 	background: var(--background-inset);
-	transform: translateX(-100%);
-	transition: transform 200ms ease-out;
+	color: var(--foreground);
 }
-.drawerOpen .overlay {
-	opacity: 1;
-	pointer-events: auto;
-}
-.drawerOpen .drawer {
-	transform: none;
+.drawer::backdrop {
+	background: color-mix(in oklab, var(--background-inset) 80%, transparent);
+	backdrop-filter: blur(4px);
 }
 .drawerClose {
 	position: absolute;
@@ -608,7 +593,6 @@
 
 @media (min-width: 1024px) {
 	.mobileBar,
-	.overlay,
 	.drawer {
 		display: none;
 	}

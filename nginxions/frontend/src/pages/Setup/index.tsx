@@ -50,7 +50,7 @@ export default function Setup() {
 					setErrorMsg(err.message);
 				}
 			} else {
-				setErrorMsg("cannot_create_user");
+				setErrorMsg(intl.formatMessage({ id: "nginxions.setup.failed" }));
 			}
 		} catch (err: any) {
 			setErrorMsg(err.message);
@@ -87,7 +87,13 @@ export default function Setup() {
 					<h2 className="h2 text-center mb-4">
 						<T id="nginxions.setup.title" />
 					</h2>
-					<Alert variant="danger" show={!!errorMsg} onClose={() => setErrorMsg(null)} dismissible>
+					<Alert
+						variant="danger"
+						show={!!errorMsg}
+						onClose={() => setErrorMsg(null)}
+						closeLabel={intl.formatMessage({ id: "nginxions.common.close" })}
+						dismissible
+					>
 						{errorMsg}
 					</Alert>
 					<Formik initialValues={{ name: "", email: "", password: "" } as any} onSubmit={onSubmit}>

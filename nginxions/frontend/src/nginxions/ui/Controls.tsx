@@ -3,7 +3,7 @@ import { IconLock, IconLogout, IconMoon, IconSelector, IconShieldLock, IconSun, 
 import cn from "classnames";
 import { useAuthState, useLocaleState } from "src/context";
 import { useTheme, useUser } from "src/hooks";
-import { changeLocale, intl, localeOptions, T } from "src/locale";
+import { intl, localeOptions, T } from "src/locale";
 import { showChangePasswordModal, showTwoFactorModal, showUserModal } from "src/modals";
 import { useRbacMe } from "../rbac/hooks";
 import { roleName } from "../rbac/labels";
@@ -62,10 +62,7 @@ export function LocaleSwitch() {
 						key: code,
 						label: <T id={`locale-${option[1]}`} />,
 						active: code === current,
-						onSelect: () => {
-							changeLocale(code);
-							setLocale(code);
-						},
+						onSelect: () => setLocale(code),
 					};
 				})}
 			/>
@@ -73,12 +70,16 @@ export function LocaleSwitch() {
 	);
 }
 
-export function UserMenu() {
+export function UserMenu({ onAction }: { onAction?: () => void }) {
 	const { data: me } = useUser("me");
 	const { logout } = useAuthState();
 	const { data: rbac } = useRbacMe();
 	// the first role of the user (Administrator first), "no role" without any
 	const role = rbac?.roles[0];
+	const select = (action: () => void) => () => {
+		onAction?.();
+		action();
+	};
 	return (
 		<Dropdown
 			ariaLabel={intl.formatMessage({ id: "nginxions.nav.user-menu" })}
@@ -97,26 +98,26 @@ export function UserMenu() {
 					key: "profile",
 					icon: <IconUser size={16} />,
 					label: <T id="user.edit-profile" />,
-					onSelect: () => showUserModal("me"),
+					onSelect: select(() => showUserModal("me")),
 				},
 				{
 					key: "password",
 					icon: <IconLock size={16} />,
 					label: <T id="user.change-password" />,
-					onSelect: () => showChangePasswordModal("me"),
+					onSelect: select(() => showChangePasswordModal("me")),
 				},
 				{
 					key: "2fa",
 					icon: <IconShieldLock size={16} />,
 					label: <T id="user.two-factor" />,
-					onSelect: () => showTwoFactorModal("me"),
+					onSelect: select(() => showTwoFactorModal("me")),
 				},
 				{
 					key: "logout",
 					divider: true,
 					icon: <IconLogout size={16} />,
 					label: <T id="user.logout" />,
-					onSelect: logout,
+					onSelect: select(logout),
 				},
 			]}
 		/>

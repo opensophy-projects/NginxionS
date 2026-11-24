@@ -95,6 +95,8 @@ import {
 	matches,
 	OBJECT_TYPE,
 	parseImport,
+	referenceKey,
+	resolveImport,
 	recommendations,
 	type Sort,
 	type SortKey,
@@ -355,8 +357,13 @@ function HostsPage() {
 			}
 		}
 		refresh(targets.map((r) => r.type));
-		if (errors.length) showError(errors.join("\n"));
-		else if (success) {
+		if (errors.length) {
+			const summary =
+				targets.length > 1
+					? t("nginxions.hosts.done.partial", { done: targets.length - errors.length, failed: errors.length })
+					: "";
+			showError([summary, ...errors].filter(Boolean).join("\n"));
+		} else if (success) {
 			// say which host changed: "app.example.com — WAF mode saved"
 			showSuccess(
 				targets.length === 1
@@ -618,19 +625,27 @@ function HostsPage() {
 	const onImportFile = async (file: File) => {
 		let parsed: ReturnType<typeof parseImport>;
 		try {
-			parsed = parseImport(await file.text(), {
-				certificateIds: (certificates.data ?? []).map((c) => c.id),
-				accessListIds: (accessLists.data ?? []).map((l) => l.id as number),
-			});
+			parsed = parseImport(await file.text());
 		} catch {
 			showError(t("nginxions.hosts.import.invalid"));
 			return;
 		}
-		const items = parsed.items.filter((item) => manageTypes.includes(item.type));
+		const { items, references } = parsed;
 		if (!items.length) {
 			showError(t("nginxions.hosts.import.empty"));
 			return;
 		}
+		if (items.some(({ type }) => !manageTypes.includes(type))) {
+			showError(t("nginxions.hosts.import.permissions"));
+			return;
+		}
+		const choices = new Map<string, number>();
+		const options = (kind: (typeof references)[number]["kind"]) =>
+			kind === "access"
+				? (accessLists.data ?? []).flatMap((list) => (list.id ? [{ id: list.id, label: list.name }] : []))
+				: (certificates.data ?? [])
+						.filter((cert) => (cert.provider === "mtls") === (kind === "mtls"))
+						.map((cert) => ({ id: cert.id, label: cert.niceName || cert.domainNames.join(", ") }));
 		showConfirmModal({
 			tTitle: "nginxions.hosts.import",
 			tConfirm: "nginxions.hosts.import.confirm",
@@ -639,27 +654,72 @@ function HostsPage() {
 					<p>
 						<T id="nginxions.hosts.import.text" data={{ count: items.length }} />
 					</p>
-					{parsed.dropped > 0 && (
-						<p className="text-warning mb-0">
-							<T id="nginxions.hosts.import.dropped" data={{ count: parsed.dropped }} />
+					{references.length > 0 && (
+						<p>
+							<T id="nginxions.hosts.import.mapping" />
 						</p>
 					)}
+					{references.map((reference) => {
+						const key = referenceKey(reference);
+						const candidates = options(reference.kind);
+						return (
+							<label key={key} className="form-label mt-2">
+								<T
+									id={`nginxions.hosts.import.reference.${reference.kind}`}
+									data={{ id: reference.id }}
+								/>
+								<select
+									className="form-select"
+									defaultValue=""
+									disabled={!candidates.length}
+									onChange={(e) => {
+										const id = Number(e.target.value);
+										if (id) choices.set(key, id);
+										else choices.delete(key);
+									}}
+								>
+									<option value="">
+										{t(
+											candidates.length
+												? "nginxions.hosts.import.choose"
+												: "nginxions.hosts.import.unavailable",
+										)}
+									</option>
+									{candidates.map(({ id, label }) => (
+										<option key={id} value={id}>
+											{label} (#{id})
+										</option>
+									))}
+								</select>
+							</label>
+						);
+					})}
 				</>
 			),
 			onConfirm: async () => {
+				// Resolve every dependency before the first write, even when the source and target IDs match.
+				if (choices.size !== references.length) throw new Error(t("nginxions.hosts.import.incomplete"));
+				const resolved = resolveImport(items, choices);
 				const errors: string[] = [];
-				for (const item of items) {
+				for (const item of resolved) {
 					try {
 						await createHost(item.type, item.data);
-					} catch (err: any) {
-						errors.push(
-							`${(item.data.domainNames ?? [item.data.incomingPort]).join(", ")}: ${err?.message || err}`,
-						);
+					} catch (err) {
+						errors.push(`${item.name}: ${err instanceof Error ? err.message : String(err)}`);
 					}
 				}
-				refresh(items.map((i) => i.type));
-				if (errors.length) showError(errors.join("\n"));
-				else showSuccess(t("nginxions.hosts.import.done", { count: items.length }));
+				refresh(resolved.map((item) => item.type));
+				if (errors.length) {
+					showError(
+						[
+							t("nginxions.hosts.done.partial", {
+								done: resolved.length - errors.length,
+								failed: errors.length,
+							}),
+							...errors,
+						].join("\n"),
+					);
+				} else showSuccess(t("nginxions.hosts.import.done", { count: resolved.length }));
 			},
 		});
 	};

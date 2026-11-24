@@ -6,6 +6,7 @@ import {
 	filtersToParams,
 	matches,
 	parseImport,
+	resolveImport,
 	recommendations,
 	sortRows,
 	toRows,
@@ -209,7 +210,7 @@ describe("hosts rows", () => {
 		});
 	});
 
-	it("exports without state and imports with unknown references dropped", () => {
+	it("exports without state and preserves upstream fields, including nullable ports", () => {
 		const file = exportData(rows);
 		const proxy = file.hosts[0].data;
 		expect(proxy.id).toBeUndefined();
@@ -218,16 +219,103 @@ describe("hosts rows", () => {
 		expect(proxy.meta.directory).toBe("prod");
 		expect(proxy.accessListId).toBeUndefined();
 		expect("locations" in proxy).toBe(false);
-		proxy.certificateId = 10;
+		proxy.forwardPort = null;
+		expect(parseImport(JSON.stringify(file)).items[0].data.forwardPort).toBeNull();
+	});
+
+	it("restores nullable upstream ports omitted by early version 1 exports", () => {
+		const file = exportData(rows);
+		for (const { data } of file.hosts) {
+			delete data.forwardPort;
+			delete data.forwardingPort;
+		}
+		const { items } = parseImport(JSON.stringify(file));
+		expect(items.find((item) => item.type === "proxy")?.data.forwardPort).toBeNull();
+		expect(items.find((item) => item.type === "stream")?.data.forwardingPort).toBeNull();
+	});
+
+	it("requires explicit references even when the same IDs exist on the destination", () => {
+		const file = exportData(rows);
+		file.hosts[0].data.certificateId = 10;
 		file.hosts[1].data.certificateId = 11;
-		const { items, dropped } = parseImport(JSON.stringify(file), { certificateIds: [10], accessListIds: [] });
+		file.hosts[1].data.locations = [
+			{
+				path: "/admin",
+				forwardHost: "",
+				forwardScheme: "http",
+				forwardPort: null,
+				npmplusAccessListType: "custom",
+				npmplusAccessListIds: [70],
+				accessLists: [{ id: 70 }],
+			},
+		];
+		const { items, references } = parseImport(JSON.stringify(file));
 		expect(items).toHaveLength(5);
+		expect(references).toEqual(
+			expect.arrayContaining([
+				{ kind: "tls", id: 10 },
+				{ kind: "tls", id: 11 },
+				{ kind: "mtls", id: 20 },
+				{ kind: "access", id: 7 },
+				{ kind: "access", id: 70 },
+			]),
+		);
+		expect(references).toHaveLength(5);
+		expect(() => resolveImport(items, new Map([["tls:10", 10]]))).toThrow("unmatched reference");
+		const mapped = resolveImport(
+			items,
+			new Map([
+				["tls:10", 21],
+				["tls:11", 22],
+				["mtls:20", 41],
+				["access:7", 14],
+				["access:70", 15],
+			]),
+		);
+		expect(mapped[0].data.certificateId).toBe(21);
+		expect(mapped[0].data.meta.npmplusMtlsCertificateId).toBe(41);
+		expect(mapped[1].data.npmplusAccessListIds).toEqual([14]);
+		expect(mapped[1].data.locations[0].npmplusAccessListIds).toEqual([15]);
+		expect(mapped[1].data.locations[0].accessLists).toBeUndefined();
 		expect(items[0].data.certificateId).toBe(10);
-		expect(items[1].data.certificateId).toBe(0);
-		expect(items[1].data.npmplusAccessListIds).toEqual([]);
-		// mTLS CA 20 twice, certificate 11, access list 7
-		expect(dropped).toBe(4);
-		expect(() => parseImport("{}", { certificateIds: [], accessListIds: [] })).toThrow();
+	});
+
+	it("rejects the whole file before creating anything when a host or its ACL is malformed", () => {
+		const file = exportData(rows);
+		const proxy = file.hosts[1].data;
+		expect(() => parseImport("{}")).toThrow("format");
+		expect(() => parseImport(JSON.stringify({ ...file, version: 2 }))).toThrow("format");
+		proxy.npmplusAccessListIds = [];
+		expect(() => parseImport(JSON.stringify(file))).toThrow("access");
+		proxy.npmplusAccessListIds = [7];
+		proxy.domainNames = "bad.example.com";
+		expect(() => parseImport(JSON.stringify(file))).toThrow("domainNames");
+	});
+
+	it("rejects API key aliases that could overwrite explicit selections when serialized", () => {
+		const changes = [
+			{ certificateId: 10, certificate_id: 11 },
+			{ npmplus_access_list_type: "custom", npmplus_access_list_ids: [7] },
+			{ meta: { npmplus_mtls_certificate_id: 20 } },
+			{ Meta: { npmplusMtlsCertificateId: 20 } },
+			{ enabled: false, Enabled: true },
+			{
+				locations: [
+					{
+						path: "/admin",
+						forwardHost: "",
+						forwardScheme: "http",
+						forwardPort: null,
+						npmplus_access_list_ids: [7],
+					},
+				],
+			},
+		];
+		for (const change of changes) {
+			const file = exportData(rows);
+			Object.assign(file.hosts[0].data, change);
+			expect(() => parseImport(JSON.stringify(file))).toThrow("noncanonical import key");
+		}
 	});
 
 	it("joins upstream checks and audit changes to the rows", () => {
