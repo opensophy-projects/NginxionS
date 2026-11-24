@@ -5,10 +5,8 @@ import { act, render } from "@testing-library/react";
 import EasyModal from "ez-modal-react";
 import { Formik } from "formik";
 import type { ReactNode } from "react";
-import { RawIntlProvider } from "react-intl";
 import { MemoryRouter } from "react-router-dom";
 import { AuthProvider, LocaleProvider, ThemeProvider } from "src/context";
-import { intl } from "src/locale";
 import { vi } from "vitest";
 import * as f from "./fixtures";
 
@@ -119,23 +117,21 @@ export const mockApi = () => {
 export const Providers = ({ children, form = {} }: { children: ReactNode; form?: Record<string, unknown> }) => {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return (
-		<RawIntlProvider value={intl}>
-			<LocaleProvider>
-				<ThemeProvider>
-					<QueryClientProvider client={client}>
-						<AuthProvider>
-							<EasyModal.Provider>
-								<MemoryRouter>
-									<Formik initialValues={form} onSubmit={() => {}}>
-										{() => children}
-									</Formik>
-								</MemoryRouter>
-							</EasyModal.Provider>
-						</AuthProvider>
-					</QueryClientProvider>
-				</ThemeProvider>
-			</LocaleProvider>
-		</RawIntlProvider>
+		<LocaleProvider>
+			<ThemeProvider>
+				<QueryClientProvider client={client}>
+					<AuthProvider>
+						<EasyModal.Provider>
+							<MemoryRouter>
+								<Formik initialValues={form} onSubmit={() => {}}>
+									{() => children}
+								</Formik>
+							</MemoryRouter>
+						</EasyModal.Provider>
+					</AuthProvider>
+				</QueryClientProvider>
+			</ThemeProvider>
+		</LocaleProvider>
 	);
 };
 

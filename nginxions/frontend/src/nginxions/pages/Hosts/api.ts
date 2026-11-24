@@ -34,12 +34,5 @@ export const toggleHost = (type: HostType, id: number, enabled: boolean) =>
 
 export const deleteHost = (type: HostType, id: number) => api.del({ url: `${PATH[type]}/${id}` });
 
-/** creates a host from exported settings; only proxy hosts accept `enabled` on create */
-export async function createHost(type: HostType, data: Record<string, any>) {
-	const { enabled, ...rest } = data;
-	const host = await api.post({ url: PATH[type], data: type === "proxy" ? data : rest });
-	if (type !== "proxy" && enabled === false) {
-		await toggleHost(type, host.id, false);
-	}
-	return host;
-}
+/** A disabled host is created disabled so its configuration never goes live during import. */
+export const createHost = (type: HostType, data: Record<string, unknown>) => api.post({ url: PATH[type], data });

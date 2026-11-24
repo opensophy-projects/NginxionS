@@ -23,11 +23,11 @@ interface Indicator {
 const hidden: Indicator = { top: 0, height: 0, left: 0, visible: false };
 
 interface Props {
-	/** called after navigation (closes the mobile drawer) */
-	onNavigate?: () => void;
+	/** closes the mobile drawer when opening a page or an account dialog */
+	onLeave?: () => void;
 }
 
-export function Sidebar({ onNavigate }: Props) {
+export function Sidebar({ onLeave }: Props) {
 	const { pathname } = useLocation();
 	const navigate = useNavigate();
 	const { data: me } = useUser("me");
@@ -115,7 +115,7 @@ export function Sidebar({ onNavigate }: Props) {
 
 	const go = (to: string) => {
 		navigate(to);
-		onNavigate?.();
+		onLeave?.();
 	};
 
 	const isOpen = (item: NavItem) => expanded[item.id] ?? containsActive(item, pathname);
@@ -184,7 +184,7 @@ export function Sidebar({ onNavigate }: Props) {
 			</a>
 
 			<div className={styles.controls}>
-				<UserMenu />
+				<UserMenu onAction={onLeave} />
 			</div>
 
 			<div className={styles.navScroll}>

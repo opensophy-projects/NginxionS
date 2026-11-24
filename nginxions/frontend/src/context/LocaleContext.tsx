@@ -1,10 +1,11 @@
-import { createContext, Fragment, type ReactNode, useContext, useState } from "react";
-import { getLocale } from "src/locale";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { RawIntlProvider } from "react-intl";
+import { changeLocale, getLocale, intl } from "src/locale";
 
 // Context
 export interface LocaleContextType {
 	setLocale: (locale: string) => void;
-	locale?: string;
+	locale: string;
 }
 
 const initalValue = null;
@@ -15,18 +16,24 @@ interface Props {
 	children?: ReactNode;
 }
 function LocaleProvider({ children }: Props) {
-	const [locale, setLocaleValue] = useState(getLocale());
+	const [locale, setLocaleValue] = useState(() => getLocale());
 
-	const setLocale = async (locale: string) => {
-		setLocaleValue(locale);
+	useEffect(() => {
+		document.documentElement.lang = locale;
+	}, [locale]);
+
+	const setLocale = (next: string) => {
+		if (next === locale) return;
+		changeLocale(next);
+		setLocaleValue(next);
 	};
 
 	const value = { locale, setLocale };
 
-	// NginxionS: the tree is rendered again with the new messages, the language changes without a reload
+	// NginxionS: update the message context while keeping the existing forms, dialogs and authentication state.
 	return (
 		<LocaleContext.Provider value={value}>
-			<Fragment key={locale}>{children}</Fragment>
+			<RawIntlProvider value={intl}>{children}</RawIntlProvider>
 		</LocaleContext.Provider>
 	);
 }
