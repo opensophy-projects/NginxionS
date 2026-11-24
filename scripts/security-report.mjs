@@ -161,8 +161,15 @@ const trivy = (doc, { image } = {}) => {
 	const out = [];
 	for (const result of doc?.Results ?? []) {
 		const packages = new Map((result.Packages ?? []).filter((p) => p.Identifier?.UID).map((p) => [p.Identifier.UID, p]));
+		const installedPython = new Map();
+		for (const p of packages.values()) {
+			if (p.AnalyzedBy === "python-pkg" && p.FilePath && p.Layer?.Digest) {
+				installedPython.set(`${p.Layer.Digest}/${p.Name}`, p.Identifier.PURL);
+			}
+		}
 		for (const v of result.Vulnerabilities ?? []) {
 			const pkg = packages.get(v.PkgIdentifier?.UID);
+			const layer = v.Layer?.Digest;
 			out.push({
 				rule: v.VulnerabilityID,
 				title: `${v.PkgName} ${v.InstalledVersion}: ${firstLine(v.Title) || v.VulnerabilityID}`,
@@ -170,9 +177,11 @@ const trivy = (doc, { image } = {}) => {
 				location: `${image} · ${result.Target}`,
 				trivyPackage: {
 					purl: v.PkgIdentifier?.PURL,
-					layer: v.Layer?.Digest,
+					layer,
 					path: v.PkgPath || pkg?.FilePath || "",
 					analyzedBy: pkg?.AnalyzedBy,
+					pip: installedPython.get(`${layer}/pip`),
+					setuptools: installedPython.get(`${layer}/setuptools`),
 				},
 				fix: v.FixedVersion ?? "",
 				url: v.PrimaryURL ?? "",

@@ -38,10 +38,13 @@ export const accepted = (result) => {
 	const path = repoPath(loc?.artifactLocation?.uri);
 	const location = path ? `${path}${loc?.region?.startLine ? `:${loc.region.startLine}` : ""}` : "";
 	const message = String(result.message?.text ?? "");
-	// "unfixed" entries (images, no fixed version yet) need the report's view of the fix: never left out here
+	// These predicates depend on package metadata available in the JSON scanner report, not in SARIF.
 	return risks.find(
 		(r) =>
-			!r.unfixed && (r.id === id || r.id === "*") && (!r.where || location.includes(r.where) || message.includes(r.where)),
+			!r.unfixed &&
+			!r.trivyPackage &&
+			(r.id === id || r.id === "*") &&
+			(!r.where || location.includes(r.where) || message.includes(r.where)),
 	);
 };
 
