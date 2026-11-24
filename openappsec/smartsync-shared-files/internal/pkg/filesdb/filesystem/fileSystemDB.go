@@ -114,7 +114,7 @@ func (a *Adapter) GetFilesList(ctx context.Context, pathPrefix string) ([]models
 	var files []models.FileMetadata
 	for _, match := range matches {
 		log.WithContext(ctx).Debugf("walk dir: %v", match)
-		err = filepath.WalkDir(
+		err := filepath.WalkDir(
 			match,
 			func(path string, d fs.DirEntry, err error) error {
 				// NginxionS: the error first: a file removed between Glob and the walk (a temporary file whose ttl
@@ -129,6 +129,9 @@ func (a *Adapter) GetFilesList(ctx context.Context, pathPrefix string) ([]models
 					return nil
 				}
 				fileInfo, err := d.Info()
+				if os.IsNotExist(err) {
+					return nil
+				}
 				if err != nil {
 					return err
 				}
@@ -139,6 +142,10 @@ func (a *Adapter) GetFilesList(ctx context.Context, pathPrefix string) ([]models
 				return nil
 			},
 		)
+		// NginxionS: an incomplete list can look like deleted files to a peer. Propagate traversal errors.
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to list shared files")
+		}
 	}
 	return files, nil
 }
