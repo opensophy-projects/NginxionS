@@ -16,7 +16,7 @@ interface RbacModel {
 	builtin: { key: BuiltinRole; name: string; scope: Scope; permissions: string[] }[];
 }
 
-interface RbacMe {
+export interface RbacMe {
 	admin: boolean;
 	scope: Scope;
 	/** "resource:action" */

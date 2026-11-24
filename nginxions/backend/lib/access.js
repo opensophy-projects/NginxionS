@@ -12,11 +12,11 @@ import { fileURLToPath } from "node:url";
 import Ajv from "ajv/dist/2020.js";
 import _ from "lodash";
 import { access as logger } from "../logger.js";
-import proxyHostModel from "../models/proxy_host.js";
 import TokenModel from "../models/token.js";
 import userModel from "../models/user.js";
 // NginxionS: permissions come from roles (nginxions/rbac)
 import { check as rbacCheck, resolve as rbacResolve } from "../nginxions/rbac/index.js";
+import { assertHostAccess } from "../nginxions/rbac/scope.js";
 import permsSchema from "./access/permissions.json" with { type: "json" };
 import roleSchema from "./access/roles.json" with { type: "json" };
 import errs from "./error.js";
@@ -119,27 +119,6 @@ export default function (tokenString) {
 					case "users":
 						objects = tokenUserId ? [tokenUserId] : [];
 						break;
-
-					// Proxy Hosts
-					case "proxy_hosts": {
-						const query = proxyHostModel.query().select("id").andWhere("is_deleted", 0);
-
-						if (permissions.visibility === "user") {
-							query.andWhere("owner_user_id", tokenUserId);
-						}
-
-						const rows = await query;
-						objects = [];
-						_.forEach(rows, (ruleRow) => {
-							objects.push(ruleRow.id);
-						});
-
-						// enum should not have less than 1 item
-						if (!objects.length) {
-							objects.push(0);
-						}
-						break;
-					}
 				}
 				objectCache[objectType] = objects;
 			}
@@ -278,8 +257,11 @@ export default function (tokenString) {
 				});
 
 				const valid = await ajv.validate("permissions", dataSchema);
+				// NginxionS: the upstream schemas check section rights; item access also needs host scope.
+				if (valid) await assertHostAccess(permission, data, dataSchema[permission], Token.getUserId(1));
 				return valid && dataSchema[permission];
 			} catch (err) {
+				if (err instanceof errs.ItemNotFoundError) throw err;
 				err.permission = permission;
 				err.permission_data = data;
 				logger.error(permission, data, err.message);

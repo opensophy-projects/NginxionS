@@ -9,8 +9,8 @@
 //   MANAGER_FINGERPRINT   SHA-256 of the panel certificate for the nodes scenario
 //
 // A failed scenario does not stop the others; the test fails at its end. Every scenario cleans up what it made.
-import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
@@ -292,6 +292,8 @@ async function setHostEnabled(domain, on) {
 let crowdsecBefore;
 let blockPageBefore;
 let expertBefore;
+let viewerRoleBefore;
+let oidcMappingBefore;
 const scenarios = [
 	{
 		name: "phase-2-navigation",
@@ -1233,8 +1235,40 @@ const scenarios = [
 		},
 	},
 	{
+		name: "roles-oidc-groups",
+		title: "Roles: the groups of the built-in Viewer and the global OIDC mapping save",
+		async run() {
+			viewerRoleBefore = (await api("GET", "/nginxions/rbac/roles")).find(({ builtin }) => builtin === "viewer");
+			assert.ok(viewerRoleBefore);
+			oidcMappingBefore = await api("GET", "/nginxions/rbac/oidc");
+			await go("/roles");
+			await page.getByRole("button", { name: "Viewer", exact: true }).click();
+			const modal = page.locator(".modal.show");
+			const group = "gui-rbac-viewers";
+			await modal.getByRole("textbox", { name: /OIDC groups/i }).fill(group);
+			await modal.getByRole("button", { name: "Save", exact: true }).click();
+			await saved("the groups of Viewer");
+			const role = await api("GET", `/nginxions/rbac/roles/${viewerRoleBefore.id}`);
+			assert.deepEqual(role.oidc_groups, [group]);
+			assert.deepEqual(role.permissions, viewerRoleBefore.permissions);
+			const claim = page.getByRole("textbox", { name: "Claim with the groups" });
+			await claim.fill("gui_groups");
+			await page.getByRole("button", { name: "Save", exact: true }).click();
+			await until("the OIDC mapping was saved", async () =>
+				(await api("GET", "/nginxions/rbac/oidc")).claim === "gui_groups",
+			);
+
+		},
+		async cleanup() {
+			if (oidcMappingBefore) await api("PUT", "/nginxions/rbac/oidc", oidcMappingBefore);
+			if (!viewerRoleBefore) return;
+			const { id, name, description, scope, permissions, hosts, oidc_groups } = viewerRoleBefore;
+			await api("PUT", `/nginxions/rbac/roles/${id}`, { name, description, scope, permissions, hosts, oidc_groups });
+		},
+	},
+	{
 		name: "users-role",
-		title: "Users → a user with the role Viewer: reads the hosts, may not create one (403)",
+		title: "Users → Viewer: can read hosts and edit their profile, and cannot create a host",
 		async run() {
 			const email = "gui-viewer@nginxions.test";
 			const password = "gui-viewer-password-1";
@@ -1262,6 +1296,28 @@ const scenarios = [
 					data: { domain_names: ["gui-viewer.local"], forward_scheme: "http", forward_host: UPSTREAM, forward_port: 80 },
 				});
 				if (create.status() !== 403) throw new Error(`the viewer created a host: ${create.status()}`);
+				const viewContext = await browser.newContext({ ignoreHTTPSErrors: true, storageState: await viewer.storageState() });
+				try {
+					const view = await viewContext.newPage();
+					const restricted = [];
+					view.on("request", (req) => {
+						if (new URL(req.url()).pathname === "/api/nginxions/rbac/users") restricted.push(req.url());
+					});
+					await view.goto(ADMIN + "/hosts", { waitUntil: "networkidle" });
+					await view.getByRole("button", { name: "User menu", exact: true }).click();
+					await view.getByRole("menuitem", { name: "Edit Profile", exact: true }).click();
+					const profile = view.getByRole("dialog");
+					await profile.locator("#nickname").fill("Viewer profile");
+					await profile.getByRole("button", { name: "Save", exact: true }).click();
+					await profile.waitFor({ state: "hidden" });
+					const me = await (await viewer.get("/api/users/me")).json();
+					assert.equal(me.nickname, "Viewer profile");
+					assert.deepEqual(restricted, []);
+					assert.equal(new URL(view.url()).pathname, "/hosts");
+				} finally {
+					await viewContext.close();
+				}
+
 			} finally {
 				await viewer.dispose();
 			}
