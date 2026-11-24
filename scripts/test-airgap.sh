@@ -148,11 +148,19 @@ echo "==> restart nginxions"
 wait_healthy
 "${compose[@]}" run --pull never --rm -T tester after-restart
 
+read_fail_open() {
+  "${compose[@]}" exec -T openappsec sh -c 'cat /etc/cp/conf/settings.json' \
+    | sed -n 's/.*"agent.failOpenState.nginxModule", *"value": *"\([a-z]*\)".*/\1/p'
+}
+
 # the interface in a real browser with the session of smoke: every page renders, no error of JavaScript, no 5xx of the
 # API, screenshots in reports/ui (deploy/test/ui-e2e.mjs, UI_E2E=1); the interface driven like a user, each action
 # checked by its effect on the sites (deploy/test/gui-e2e.mjs, GUI_E2E=1, reports/gui). The container installs the
 # package of Playwright on the default network, then is moved into the closed network of the stack.
 if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
+  if smoke_has waf && [ "$smoke_status" = 0 ]; then
+    [ "$(read_fail_open)" = true ] || { echo "FAIL: smoke must leave the agent in fail-open for browser tests"; exit 1; }
+  fi
   pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
   pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
   pw="${COMPOSE_PROJECT_NAME}-ui"
@@ -343,23 +351,11 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-if smoke_has waf; then
+if smoke_has waf && [ "$smoke_status" = 0 ]; then
   echo "==> fail-close: a request the agent does not answer gets the 403 page, not a closed connection (issue 149)"
-  # smoke leaves the host blocking and fail-close on. The response filters of the attachment returned an error on the 403
-  # page of the request they had refused themselves: nginx logged 403 and closed the connection with nothing sent
-  # ("Empty reply from server"). The agent is stopped (SIGSTOP) longer than the timeouts of the attachment.
-  # smoke switches fail-close on in its last step; a smoke failure before it leaves fail-open, where a request the agent
-  # does not answer passes by design: that is the failure of smoke (reported below), not a second one here
-  fail_open=$("${compose[@]}" exec -T openappsec sh -c 'cat /etc/cp/conf/settings.json' \
-    | grep -o '"agent.failOpenState.nginxModule", *"value": *"[a-z]*"' | grep -o '[a-z]*"$' | tr -d '"')
-  if [ "$fail_open" != false ]; then
-    if [ "$smoke_status" != 0 ]; then
-      echo "    skipped: smoke failed before it switched fail-close on (fail-open: ${fail_open:-unknown})"
-    else
-      echo "FAIL: smoke passed but left fail-open ${fail_open:-unknown}, not fail-close"
-      exit 1
-    fi
-  else
+  # Use the blocking host created by smoke and enable fail-close only for this fault test.
+  "${compose[@]}" run --pull never --rm -T tester fail-close
+  [ "$(read_fail_open)" = false ] || { echo "FAIL: the agent did not apply fail-close"; exit 1; }
   xss='http://127.0.0.1/fail-close?q=%3Cscript%3Ealert(document.cookie)%3C/script%3E'
   waf_get() { "${compose[@]}" exec -T nginxions curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 10 -H 'Host: test.local' "$1" || true; }
   for i in $(seq 1 30); do
@@ -378,7 +374,8 @@ if smoke_has waf; then
     "403 "*) ;;
     *) echo "FAIL: fail-close let a request through while the agent did not answer: \"$normal\""; exit 1 ;;
   esac
-  fi
+elif smoke_has waf; then
+  echo "==> fail-close skipped because smoke failed"
 fi
 
 echo "==> no nginx worker crashed (signal, failed allocation)"
