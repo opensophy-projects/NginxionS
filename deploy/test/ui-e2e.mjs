@@ -1,7 +1,7 @@
 // The interface in a real browser (Playwright, Chromium), run by scripts/test-airgap.sh after smoke in the closed
 // network with the session of smoke (its cookie jar on the volume test-state). Every page is opened: it must render
-// (not a blank page), throw no error of JavaScript and get no 5xx from the API. Errors of the console (CSP included)
-// are reported. A screenshot of each page goes to /out (reports/ui), the results to /out/ui-e2e.json and .md.
+// (not a blank page), throw no error of JavaScript and get no 5xx from the API. Console errors (CSP included)
+// fail the page. A screenshot of each page goes to /out (reports/ui), the results to /out/ui-e2e.json and .md.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 
@@ -70,8 +70,8 @@ for (const [name, path] of PAGES) {
 	try {
 		await page.goto(ADMIN + path, { waitUntil: "networkidle", timeout: 45000 });
 		await page.waitForTimeout(800);
-		const text = await page.evaluate(() => document.getElementById("root")?.innerText ?? "");
-		r.blank = text.trim().length < 20 || (await page.locator("#nginxions-content").count()) !== 1;
+		const content = page.locator("#nginxions-main > :not(nav):not(.page-center)");
+		r.blank = !(await content.allInnerTexts()).some((part) => part.trim());
 		r.login = (await page.locator('[data-translation-id="login.title"]').count()) > 0;
 		await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 	} catch (err) {
