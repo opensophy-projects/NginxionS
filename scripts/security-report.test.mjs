@@ -43,7 +43,7 @@ function trivy(...packages) {
 	};
 }
 
-function runReport(t, scans, now = "2026-11-24") {
+function runReport(t, scans, { now = "2026-11-24", scope = "published" } = {}) {
 	const input = mkdtempSync(join(tmpdir(), "nginxions-scans-"));
 	const output = mkdtempSync(join(tmpdir(), "nginxions-security-"));
 	t.after(() => {
@@ -66,9 +66,9 @@ function runReport(t, scans, now = "2026-11-24") {
 			"--out",
 			output,
 			"--expect",
-			"published",
+			scope === "published" ? "published" : "",
 			"--scope",
-			"published",
+			scope,
 		],
 		{ encoding: "utf8" },
 	);
@@ -113,7 +113,7 @@ test("the same advisory from an installed distribution or an unreviewed layer st
 });
 
 test("the SBOM exception expires and missing or empty published scanner reports fail", (t) => {
-	const expired = runReport(t, scans(trivy(vendored)), "2027-02-02");
+	const expired = runReport(t, scans(trivy(vendored)), { now: "2027-02-02" });
 	assert.equal(expired.status, 1, expired.stdout);
 	assert.equal(expired.findings[0]?.verdict, "blocking");
 	const missing = runReport(t, { ...scans(trivy()), "trivy-published-nginxions-latest.json": trivy() });
@@ -122,4 +122,29 @@ test("the SBOM exception expires and missing or empty published scanner reports 
 	const invalid = runReport(t, { ...scans(trivy()), "grype-published-nginxions-develop.json": null });
 	assert.equal(invalid.status, 1, invalid.stdout);
 	assert.match(invalid.stdout, /invalid Grype scan/);
+});
+
+test("a newly built image needs evidence from the pinned distributions in the same layer", (t) => {
+	const builtLayer = { Digest: `sha256:${"2".repeat(64)}` };
+	const image = trivy({ ...vendored, layer: builtLayer });
+	const run = () => runReport(t, { "trivy-nginxions.json": image }, { scope: "images" });
+	const packages = image.Results[0].Packages;
+	const python = (name, version, layer) => ({
+		Name: name,
+		Identifier: { PURL: `pkg:pypi/${name}@${version}`, UID: name },
+		AnalyzedBy: "python-pkg",
+		FilePath: `usr/local/lib/python3.14/site-packages/${name}-${version}.dist-info/METADATA`,
+		Layer: layer,
+	});
+	assert.equal(run().findings[0]?.verdict, "blocking");
+	packages.push(python("pip", "26.3", builtLayer), python("setuptools", "84.2.1", layer));
+	assert.equal(run().findings[0]?.verdict, "blocking");
+	packages[2].Layer = builtLayer;
+	assert.equal(run().findings[0]?.verdict, "false-positive");
+	const existingInstall = trivy(installed).Results[0];
+	packages.push(...existingInstall.Packages);
+	image.Results[0].Vulnerabilities.push(...existingInstall.Vulnerabilities);
+	const report = run();
+	assert.equal(report.status, 1, report.stdout);
+	assert.deepEqual(report.findings.map(({ verdict }) => verdict), ["blocking", "false-positive"]);
 });

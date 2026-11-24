@@ -200,8 +200,15 @@
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "CVE-2025-47273",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (PackageIndex)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel is pinned by hash in certbot-requirements.txt. Its SBOM uses setuptools 70.3.0 for the pkg_resources subset, which has no setuptools/package_index.py. This record applies to SBOM-only entries from the same layer as the pinned packages",
 			"until": "2027-05-01"
 		},
 		{
@@ -480,16 +487,30 @@
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "CVE-2026-59890",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (sdist and MANIFEST.in)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel vendors pkg_resources without the affected file-list module used to build source distributions. The matching record describes an SBOM-only package in the same layer as the pinned distributions",
 			"until": "2027-05-01"
 		},
 		{
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "GHSA-xmj3-9gf7-h52w",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (install of legacy wheels on Windows)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel vendors pkg_resources without the affected setuptools/wheel.py module for legacy wheel installation on Windows. The matching record describes an SBOM-only package in the same layer as the pinned distributions",
 			"until": "2027-05-01"
 		},
 		{
