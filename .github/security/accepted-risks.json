@@ -1030,15 +1030,13 @@
 			"kind": "false-positive",
 			"tool": "published",
 			"id": "CVE-2025-47273",
-			"where": "nginxions-develop · Python",
+			"where": " · Python",
 			"trivyPackage": {
 				"purl": "pkg:pypi/setuptools@70.3.0",
-				"layer": [
-					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
-					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
-				],
 				"analyzedBy": "sbom",
-				"path": ""
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
 			},
 			"reason": "verified the layers from run 45400876961 and its successor: pip 26.3 lists setuptools 70.3.0 in its vendoring SBOM for pkg_resources. The affected setuptools/package_index.py is absent from the vendored files. The image installs setuptools 84.2.1",
 			"until": "2027-02-01"
@@ -1047,15 +1045,13 @@
 			"kind": "false-positive",
 			"tool": "published",
 			"id": "CVE-2026-59890",
-			"where": "nginxions-develop · Python",
+			"where": " · Python",
 			"trivyPackage": {
 				"purl": "pkg:pypi/setuptools@70.3.0",
-				"layer": [
-					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
-					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
-				],
 				"analyzedBy": "sbom",
-				"path": ""
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
 			},
 			"reason": "verified that pip vendors pkg_resources without the affected setuptools file-list module used to build source distributions. The installed distribution is setuptools 84.2.1",
 			"until": "2027-02-01"
@@ -1064,15 +1060,13 @@
 			"kind": "false-positive",
 			"tool": "published",
 			"id": "GHSA-xmj3-9gf7-h52w",
-			"where": "nginxions-develop · Python",
+			"where": " · Python",
 			"trivyPackage": {
 				"purl": "pkg:pypi/setuptools@70.3.0",
-				"layer": [
-					"sha256:39ba784e3d180083233da124577029087c20132e1a967746371bc34124e17c12",
-					"sha256:33d39bc8272749230dfb2d5461b9134aa8dcacd9c514c013d3967c7867119272"
-				],
 				"analyzedBy": "sbom",
-				"path": ""
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
 			},
 			"reason": "verified that pip vendors pkg_resources without the affected setuptools/wheel.py module for legacy wheel installation on Windows. The installed distribution is setuptools 84.2.1",
 			"until": "2027-02-01"
