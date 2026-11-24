@@ -380,6 +380,35 @@ const scenarios = [
 		},
 	},
 	{
+		name: "phase-2-setup-error",
+		title: "Phase 2: the Russian setup form localizes the control that dismisses an error",
+		run: async () => {
+			const setupContext = await browser.newContext({ ignoreHTTPSErrors: true });
+			try {
+				await setupContext.addInitScript(() => localStorage.setItem("locale", "ru"));
+				const setup = await setupContext.newPage();
+				await setup.route(/\/api\/?(?:\?|$)/, async (route) => {
+					const response = await route.fetch();
+					await route.fulfill({ response, json: { ...(await response.json()), setup: false } });
+				});
+				const rejection = "Пробный отказ регистрации";
+				await setup.route(/\/api\/users(?:\?|$)/, (route) => route.fulfill({
+					status: 400, json: { error: { message: rejection } },
+				}));
+				await setup.goto(ADMIN);
+				await setup.locator('input[name="name"]').fill("Phase 2 Test");
+				await setup.locator('input[name="email"]').fill("phase2-setup@example.test");
+				await setup.locator('input[name="password"]').fill(`draft-only-${Date.now()}`);
+				await setup.locator('button[type="submit"]').click();
+				const alert = setup.locator(".alert").filter({ hasText: rejection });
+				await alert.getByRole("button", { name: "Закрыть", exact: true }).click();
+				await alert.waitFor({ state: "hidden" });
+			} finally {
+				await setupContext.close();
+			}
+		},
+	},
+	{
 		name: "phase-2-overview-error",
 		title: "Phase 2: Overview identifies an unavailable hosts API and preserves other host cards",
 		run: async () => {
@@ -432,7 +461,7 @@ const scenarios = [
 				})),
 			});
 			await importFile(domain);
-			await page.locator(".Toastify__toast--error").last().waitFor();
+			await page.locator(".Toastify__toast").getByText("This is not an NginxionS hosts export").waitFor();
 			assert.equal(await proxyHostId(domain), undefined);
 			await importFile([domain]);
 			const modal = page.getByRole("dialog").last();
@@ -484,8 +513,8 @@ const scenarios = [
 					await page.getByRole("checkbox", { name: domain, exact: true }).check();
 				}
 				await page.getByRole("button", { name: "Disable", exact: true }).click();
-				const error = page.locator(".Toastify__toast--error").last();
-				await error.getByText("Succeeded: 1. Failed: 1.", { exact: false }).waitFor();
+				const error = page.locator(".Toastify__toast").filter({ hasText: "Succeeded: 1. Failed: 1." });
+				await error.waitFor();
 				assert.match(await error.innerText(), /phase2-bulk-second.local/);
 				const hosts = await api("GET", "/nginx/proxy-hosts");
 				assert.equal(hosts.find((h) => h.domain_names.includes(first)).enabled, false);
