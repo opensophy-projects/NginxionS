@@ -559,6 +559,9 @@
 .iconButton:active {
 	transform: scale(0.95);
 }
+:global(body):has(.drawer[open]) {
+	overflow: hidden;
+}
 .drawer {
 	position: fixed;
 	inset: 0 auto 0 0;

@@ -295,7 +295,7 @@ let expertBefore;
 const scenarios = [
 	{
 		name: "phase-2-navigation",
-		title: "Phase 2: Hosts renders in RU/EN, both themes and both viewports; the mobile drawer keeps focus",
+		title: "Phase 2: Hosts renders in RU/EN, both themes and both viewports; the mobile drawer manages focus",
 		run: async () => {
 			for (const locale of ["en", "ru"]) {
 				for (const theme of ["light", "dark"]) {
@@ -321,9 +321,12 @@ const scenarios = [
 							assert.equal(await view.locator("h1").innerText(), locale === "ru" ? "Хосты" : "Hosts");
 							if (width === 375) {
 								const toggle = view.locator('button[aria-controls="nginxions-mobile-drawer"]');
+								const body = view.locator("body");
+								const overflow = await body.evaluate((node) => getComputedStyle(node).overflow);
 								await toggle.click();
 								const drawer = view.locator("dialog[open]");
 								await drawer.waitFor();
+								assert.equal(await body.evaluate((node) => getComputedStyle(node).overflow), "hidden");
 								await view.keyboard.press("Shift+Tab");
 								assert.equal(await drawer.evaluate((d) => d.contains(document.activeElement)), true);
 								await view.keyboard.press("Escape");
@@ -331,7 +334,18 @@ const scenarios = [
 								assert.equal(await toggle.evaluate((b) => b === document.activeElement), true);
 								await toggle.click();
 								await view.setViewportSize({ width: 1440, height: 850 });
-								await view.waitForFunction(() => !document.body.style.overflow && !document.querySelector("dialog[open]"));
+								await drawer.waitFor({ state: "detached" });
+								assert.equal(await body.evaluate((node) => getComputedStyle(node).overflow), overflow);
+								await view.setViewportSize({ width, height: 850 });
+								await toggle.click();
+								await drawer.getByRole("button", { name: locale === "ru" ? "Меню пользователя" : "User menu", exact: true }).click();
+								await drawer.getByRole("menuitem").filter({
+									has: view.locator('[data-translation-id="user.edit-profile"]'),
+								}).click();
+								await drawer.waitFor({ state: "detached" });
+								const profile = view.getByRole("dialog");
+								await profile.locator("#name").click();
+								assert.equal(await profile.locator("#name").evaluate((node) => node === document.activeElement), true);
 							}
 							assert.deepEqual(errors, []);
 						} finally {

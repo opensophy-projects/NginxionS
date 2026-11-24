@@ -28,17 +28,12 @@ function MobileDrawer() {
 
 	useEffect(() => {
 		if (!open) return;
-		const previousOverflow = document.body.style.overflow;
-		document.body.style.overflow = "hidden";
 		const desktop = window.matchMedia("(min-width: 1024px)");
 		const onResize = (event: MediaQueryListEvent) => {
 			if (event.matches) close();
 		};
 		desktop.addEventListener("change", onResize);
-		return () => {
-			document.body.style.overflow = previousOverflow;
-			desktop.removeEventListener("change", onResize);
-		};
+		return () => desktop.removeEventListener("change", onResize);
 	}, [open, close]);
 
 	const show = () => {
@@ -109,7 +104,7 @@ function MobileDrawer() {
 				>
 					<IconX size={24} />
 				</button>
-				<Sidebar onNavigate={close} />
+				<Sidebar onLeave={close} />
 			</dialog>
 		</>
 	);
