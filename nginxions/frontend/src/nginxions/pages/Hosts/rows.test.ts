@@ -292,6 +292,32 @@ describe("hosts rows", () => {
 		expect(() => parseImport(JSON.stringify(file))).toThrow("domainNames");
 	});
 
+	it("rejects API key aliases that could overwrite explicit selections when serialized", () => {
+		const changes = [
+			{ certificateId: 10, certificate_id: 11 },
+			{ npmplus_access_list_type: "custom", npmplus_access_list_ids: [7] },
+			{ meta: { npmplus_mtls_certificate_id: 20 } },
+			{ Meta: { npmplusMtlsCertificateId: 20 } },
+			{ enabled: false, Enabled: true },
+			{
+				locations: [
+					{
+						path: "/admin",
+						forwardHost: "",
+						forwardScheme: "http",
+						forwardPort: null,
+						npmplus_access_list_ids: [7],
+					},
+				],
+			},
+		];
+		for (const change of changes) {
+			const file = exportData(rows);
+			Object.assign(file.hosts[0].data, change);
+			expect(() => parseImport(JSON.stringify(file))).toThrow("noncanonical import key");
+		}
+	});
+
 	it("joins upstream checks and audit changes to the rows", () => {
 		const joined = toRows(
 			{
