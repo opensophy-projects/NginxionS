@@ -49,8 +49,11 @@ async function processResponse(response: Response, reload = true) {
 	}
 	const payload = await response.json();
 	if (!response.ok) {
-		if (response.status === 401 || response.status === 403) {
-			// Force logout user and reload the page if Unauthorized
+		// NginxionS: a role-based refusal is an operation error, not an expired session.
+		if (
+			response.status === 401 ||
+			(response.status === 403 && payload.error?.message === "Invalid or expired token")
+		) {
 			AuthStore.clear();
 			queryClient.clear();
 			if (reload) {

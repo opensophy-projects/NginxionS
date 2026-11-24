@@ -22,6 +22,7 @@ import proxyHostModel from "../../models/proxy_host.js";
 import redirectionHostModel from "../../models/redirection_host.js";
 import { EVENT_TABLE } from "../events/store.js";
 import { encrypt } from "../secrets.js";
+import { assertHostAccess, scopeHosts } from "../rbac/scope.js";
 import { getSetting, setSetting } from "../settings.js";
 import { alertsStatus, OWN_SCENARIO, startAlerts } from "./alerts.js";
 import { apply, pending } from "./apply.js";
@@ -820,13 +821,32 @@ const internalCrowdsec = {
 
 	/** @param {Access} access */
 	hosts: async (access) => {
-		await access.can("crowdsec:view");
-		const rows = await db()("nginxions_crowdsec_host");
+		const accessData = await access.can("crowdsec:view");
+		const all = accessData.permission_visibility === "all";
+		const userId = access.token.getUserId(1);
+		const domains = new Set();
+		const hosts = [];
+		for (const table of HOST_TYPES) {
+			const query = db()(table)
+				.where(`${table}.is_deleted`, 0)
+				.select(`${table}.domain_names`, "bouncer.host_id", "bouncer.bouncer")
+				.leftJoin({ bouncer: "nginxions_crowdsec_host" }, (join) =>
+					join.on("bouncer.host_id", "=", `${table}.id`).onVal("bouncer.host_type", "=", table),
+				);
+			for (const row of await scopeHosts(query, accessData, table, userId)) {
+				if (row.host_id) hosts.push({ host_type: table, host_id: row.host_id, bouncer: !!row.bouncer });
+				const names = typeof row.domain_names === "string" ? JSON.parse(row.domain_names) : row.domain_names;
+				for (const name of names ?? []) domains.add(name.toLowerCase());
+			}
+		}
+		const bans = await bansByHost().catch(() => ({}));
 		return {
 			bouncer_enabled: (await settings()).bouncer.enabled,
 			per_host: perHostSupported(),
-			bans: await bansByHost().catch(() => ({})),
-			hosts: rows.map((r) => ({ host_type: r.host_type, host_id: r.host_id, bouncer: !!r.bouncer })),
+			bans: all
+				? bans
+				: Object.fromEntries(Object.entries(bans).filter(([host]) => domains.has(host.toLowerCase()))),
+			hosts,
 		};
 	},
 
@@ -835,10 +855,11 @@ const internalCrowdsec = {
 	 * @param {Access} access
 	 */
 	setHost: async (access, hostType, hostId, bouncer) => {
-		await access.can("crowdsec:manage");
+		const accessData = await access.can("crowdsec:manage");
 		if (!HOST_TYPES.includes(hostType)) throw new errs.ValidationError("Unknown host type");
 		if (typeof bouncer !== "boolean") throw new errs.ValidationError("bouncer must be a boolean");
 		const id = Number(hostId);
+		await assertHostAccess(`${hostType}s:update`, id, accessData, access.token.getUserId(1));
 		const host = await db()(hostType).where({ id, is_deleted: 0 }).first();
 		if (!host) throw new errs.ItemNotFoundError(hostId);
 		const table = db()("nginxions_crowdsec_host");

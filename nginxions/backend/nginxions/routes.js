@@ -89,6 +89,14 @@ const handle =
 const MAX_ID = 2147483647;
 const validId = (id) => /^[1-9][0-9]{0,9}$/.test(id) && Number(id) <= MAX_ID;
 
+for (const param of ["role_id", "user_id"]) {
+	router.param(param, (req, _res, next, id) => {
+		if (!validId(id)) return next(new errs.ValidationError("Invalid ID"));
+		req.params[param] = Number(id);
+		next();
+	});
+}
+
 router.param("host_id", (req, res, next, id) => {
 	if (!validId(id)) {
 		return res.status(400).send({ error: { code: 400, message: "Invalid host id" } });
@@ -306,7 +314,7 @@ router
 	);
 
 /**
- * GET/PUT /api/nginxions/rbac/oidc — {claim, requestScope}: OIDC groups → roles
+ * GET/PUT /api/nginxions/rbac/oidc — {claim, request_scope}: OIDC groups → roles
  */
 router
 	.route("/rbac/oidc")
@@ -319,15 +327,20 @@ router
 				{
 					type: "object",
 					additionalProperties: false,
-					required: ["claim", "requestScope"],
+					required: ["claim"],
+					oneOf: [{ required: ["request_scope"] }, { required: ["requestScope"] }],
 					properties: {
 						claim: { type: "string", minLength: 1, maxLength: 100 },
+						request_scope: { type: "boolean" },
 						requestScope: { type: "boolean" },
 					},
 				},
 				req.body,
 			);
-			return internalRbac.setOidc(res.locals.access, data);
+			return internalRbac.setOidc(res.locals.access, {
+				claim: data.claim,
+				requestScope: data.request_scope ?? data.requestScope,
+			});
 		}),
 	);
 

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { getOidcMapping, getRbacMe, getRbacModel, getRoleAssignments, getRoles } from "./api";
+import { getOidcMapping, getRbacMe, getRbacModel, getRoleAssignments, getRoles, type RbacMe, type Role } from "./api";
 
 export const useRbacModel = () =>
 	useQuery({ queryKey: ["nginxions-rbac-model"], queryFn: getRbacModel, staleTime: Number.POSITIVE_INFINITY });
@@ -27,6 +27,13 @@ export function useCan() {
 		[data],
 	);
 }
+
+export const canDelegateRole = (actor: RbacMe | undefined, role: Pick<Role, "builtin" | "scope" | "permissions">) =>
+	!!actor &&
+	(actor.admin ||
+		(role.builtin !== "administrator" &&
+			(role.scope === "own" || actor.scope === "all") &&
+			role.permissions.every((permission) => actor.permissions.includes(permission))));
 
 /** after roles or assignments change: the lists and the current user's permissions */
 export function useRbacRefresh() {

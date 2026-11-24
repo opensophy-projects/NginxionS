@@ -74,7 +74,8 @@ const internalAuditLog = {
 	 * @param   {Object}   [data.meta]
 	 * @returns {Promise}
 	 */
-	add: async (access, data) => {
+	// NginxionS: a role change and its audit entry can share a transaction.
+	add: async (access, data, trx) => {
 		if (typeof data.user_id === "undefined" || !data.user_id) {
 			data.user_id = access.token.getUserId(1);
 		}
@@ -84,7 +85,7 @@ const internalAuditLog = {
 		}
 
 		// Make sure at least 1 of the IDs are set and action
-		return await auditLogModel.query().insert({
+		return await auditLogModel.query(trx).insert({
 			user_id: data.user_id,
 			action: data.action,
 			object_type: data.object_type || "",

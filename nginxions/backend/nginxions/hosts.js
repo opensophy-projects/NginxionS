@@ -194,7 +194,7 @@ const internalHosts = {
 			throw new errs.ValidationError(`Unknown host type: ${type}`);
 		}
 		await access.can(`${object.permission}:get`, id);
-		const host = await db()(object.table).select("created_on").where({ id }).first();
+		const host = await db()(object.table).select("created_on").where({ id, is_deleted: 0 }).first();
 		if (!host) {
 			throw new errs.ItemNotFoundError(id);
 		}

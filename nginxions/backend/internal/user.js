@@ -7,6 +7,9 @@ import { gravatar as logger } from "../logger.js";
 import authModel from "../models/auth.js";
 import userModel from "../models/user.js";
 import userPermissionModel from "../models/user_permission.js";
+// NginxionS: disabling, deleting and changing administrator flags use the same lock as role changes.
+import { assertUserMutation, resolve as resolveRoles } from "../nginxions/rbac/index.js";
+import { assertActiveAdministrator, withRbacWrite } from "../nginxions/rbac/write.js";
 import internalAuditLog from "./audit-log.js";
 import internalToken from "./token.js";
 import pjson from "../package.json" with { type: "json" };
@@ -14,6 +17,16 @@ import pjson from "../package.json" with { type: "json" };
 const omissions = () => {
 	return ["is_deleted", "permissions.id", "permissions.user_id", "permissions.created_on", "permissions.modified_on"];
 };
+
+// NginxionS: read the latest user under the lock and preserve at least one active administrator.
+const withAccountChange = (access, id, changes, change) =>
+	withRbacWrite(async (trx) => {
+		const user = await userModel.query(trx).where({ id, is_deleted: 0 }).withGraphFetched("permissions").first();
+		if (!user) throw new errs.ItemNotFoundError(id);
+		await assertUserMutation(access, user, trx, changes);
+		await assertActiveAdministrator(trx, user, changes);
+		return change(trx, user);
+	});
 
 const internalUser = {
 	/**
@@ -90,36 +103,26 @@ const internalUser = {
 			}
 		}
 
-		let user = await userModel.query().insertAndFetch(data).then(utils.omitRow(omissions()));
-		if (auth) {
-			user = await authModel.query().insert({
-				user_id: user.id,
-				type: auth.type,
-				secret: auth.secret,
-				meta: {},
-			});
-		}
-
-		// Create permissions row as well
-		const isAdmin = data.roles.indexOf("admin") !== -1;
-
-		await userPermissionModel.query().insert({
-			user_id: user.id,
-			visibility: isAdmin ? "all" : "user",
-			proxy_hosts: "manage",
-			redirection_hosts: "manage",
-			dead_hosts: "manage",
-			streams: "manage",
-			access_lists: "manage",
-			certificates: "manage",
+		// NginxionS: creation and the projection of the initial roles use the new user ID.
+		const id = await withRbacWrite(async (trx) => {
+			const created = await userModel.query(trx).insertAndFetch(data);
+			if (auth) {
+				await authModel.query(trx).insert({
+					user_id: created.id,
+					type: auth.type,
+					secret: auth.secret,
+					meta: {},
+				});
+			}
+			await resolveRoles(created, trx);
+			return created.id;
 		});
-
-		user = await internalUser.get(access, { id: user.id, expand: ["permissions"] });
+		const user = await internalUser.get(access, { id, expand: ["permissions"] });
 
 		await internalAuditLog.add(access, {
 			action: "created",
 			object_type: "user",
-			object_id: user.id,
+			object_id: id,
 			meta: user,
 		});
 
@@ -226,24 +229,23 @@ const internalUser = {
 					}
 				}
 
-				return userModel.query().patchAndFetchById(user.id, data).then(utils.omitRow(omissions()));
+				// NginxionS: guard the final write after profile validation and avatar loading.
+				return withAccountChange(access, user.id, data, async (trx, current) => {
+					await userModel.query(trx).patch(data).where("id", current.id);
+					if (data.roles !== undefined) await resolveRoles({ ...current, roles: data.roles }, trx);
+					await internalAuditLog.add(
+						access,
+						{
+							action: "updated",
+							object_type: "user",
+							object_id: current.id,
+							meta: { ...data, id: current.id, name: data.name ?? current.name },
+						},
+						trx,
+					);
+				});
 			})
-			.then(() => {
-				return internalUser.get(access, { id: data.id });
-			})
-			.then((user) => {
-				// Add to audit log
-				return internalAuditLog
-					.add(access, {
-						action: "updated",
-						object_type: "user",
-						object_id: user.id,
-						meta: { ...data, id: user.id, name: user.name },
-					})
-					.then(() => {
-						return user;
-					});
-			});
+			.then(() => internalUser.get(access, { id: data.id }));
 	},
 
 	/**
@@ -336,21 +338,20 @@ const internalUser = {
 					throw new errs.PermissionError("You cannot delete yourself.");
 				}
 
-				return userModel
-					.query()
-					.where("id", user.id)
-					.patch({
-						is_deleted: 1,
-					})
-					.then(() => {
-						// Add to audit log
-						return internalAuditLog.add(access, {
+				// NginxionS: deleting an account must preserve the active administrator.
+				return withAccountChange(access, user.id, { is_deleted: 1 }, async (trx, current) => {
+					await userModel.query(trx).where("id", current.id).patch({ is_deleted: 1 });
+					await internalAuditLog.add(
+						access,
+						{
 							action: "deleted",
 							object_type: "user",
-							object_id: user.id,
-							meta: _.omit(user, omissions()),
-						});
-					});
+							object_id: current.id,
+							meta: _.omit(current, omissions()),
+						},
+						trx,
+					);
+				});
 			})
 			.then(() => {
 				return true;
@@ -444,77 +445,71 @@ const internalUser = {
 	 * @return {Promise}
 	 */
 	setPassword: (access, data) => {
-		return access
-			.can("users:password", data.id)
-			.then(() => {
-				return internalUser.get(access, { id: data.id });
-			})
-			.then((user) => {
-				if (user.id !== data.id) {
-					// Sanity check that something crazy hasn't happened
-					throw new errs.InternalValidationError(
-						`User could not be updated, IDs do not match: ${user.id} !== ${data.id}`,
-					);
-				}
-
-				if (user.id === access.token.getUserId(0)) {
-					// they're setting their own password. Make sure their current password is correct
-					if (typeof data.current === "undefined" || !data.current) {
-						throw new errs.ValidationError("Current password was not supplied");
+		return (
+			access
+				.can("users:password", data.id)
+				.then(() => {
+					return internalUser.get(access, { id: data.id });
+				})
+				.then((user) => {
+					if (user.id !== data.id) {
+						// Sanity check that something crazy hasn't happened
+						throw new errs.InternalValidationError(
+							`User could not be updated, IDs do not match: ${user.id} !== ${data.id}`,
+						);
 					}
 
-					return internalToken
-						.getTokenFromEmail({
-							identity: user.email.toLowerCase().trim(),
-							secret: data.current,
-						})
-						.then(() => {
-							return user;
-						});
-				}
-
-				return user;
-			})
-			.then((user) => {
-				// Get auth, patch if it exists
-				return authModel
-					.query()
-					.where("user_id", user.id)
-					.andWhere("type", data.type)
-					.first()
-					.then((existing_auth) => {
-						if (existing_auth) {
-							// patch
-							return authModel.query().where("user_id", user.id).andWhere("type", data.type).patch({
-								type: data.type, // This is required for the model to encrypt on save
-								secret: data.secret,
-							});
+					if (user.id === access.token.getUserId(0)) {
+						// they're setting their own password. Make sure their current password is correct
+						if (typeof data.current === "undefined" || !data.current) {
+							throw new errs.ValidationError("Current password was not supplied");
 						}
-						// insert
-						return authModel.query().insert({
-							user_id: user.id,
-							type: data.type,
-							secret: data.secret,
-							meta: {},
-						});
-					})
-					.then(() => {
-						// Add to Audit Log
-						return internalAuditLog.add(access, {
-							action: "updated",
-							object_type: "user",
-							object_id: user.id,
-							meta: {
-								name: user.name,
-								password_changed: true,
-								auth_type: data.type,
+
+						return internalToken
+							.getTokenFromEmail({
+								identity: user.email.toLowerCase().trim(),
+								secret: data.current,
+							})
+							.then(() => {
+								return user;
+							});
+					}
+
+					return user;
+				})
+				// NginxionS: delegated account changes must respect role changes made during password verification.
+				.then((user) =>
+					withAccountChange(access, user.id, {}, async (trx, current) => {
+						const existing = await authModel
+							.query(trx)
+							.where({ user_id: current.id, type: data.type })
+							.first();
+						if (existing) {
+							await authModel
+								.query(trx)
+								.where("id", existing.id)
+								.patch({ type: data.type, secret: data.secret });
+						} else {
+							await authModel
+								.query(trx)
+								.insert({ user_id: current.id, type: data.type, secret: data.secret, meta: {} });
+						}
+						await internalAuditLog.add(
+							access,
+							{
+								action: "updated",
+								object_type: "user",
+								object_id: current.id,
+								meta: { name: current.name, password_changed: true, auth_type: data.type },
 							},
-						});
-					});
-			})
-			.then(() => {
-				return true;
-			});
+							trx,
+						);
+					}),
+				)
+				.then(() => {
+					return true;
+				})
+		);
 	},
 
 	/**

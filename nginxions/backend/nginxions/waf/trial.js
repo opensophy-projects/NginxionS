@@ -48,7 +48,8 @@ const reportOf = async (row, now = new Date()) => {
 const canSwitch = async (access, hostId) => {
 	try {
 		await access.can("proxy_hosts:update", hostId);
-	} catch {
+	} catch (err) {
+		if (!(err instanceof errs.PermissionError)) throw err;
 		await access.can("waf_policy:manage");
 		await access.can("proxy_hosts:get", hostId);
 	}

@@ -10,44 +10,56 @@ import userPermissionModel from "../../models/user_permission.js";
 import { getSetting, setSetting } from "../settings.js";
 import * as model from "./model.js";
 import { HOST_TABLES } from "./scope.js";
+import { assertActiveAdministrator, hasOtherActiveAdministrator, isAdminRoles, withRbacWrite } from "./write.js";
 
 const parse = (value) => (typeof value === "string" ? JSON.parse(value) : value);
-const roleTable = () => db()("nginxions_role");
+const roleTable = (connection = db()) => connection("nginxions_role");
 
-const isAdminRoles = (roles) => (parse(roles) ?? []).includes("admin");
+/** hosts of roles (scope "hosts") */
+const hostsOf = (roleIds, connection) =>
+	connection("nginxions_role_host").whereIn("role_id", roleIds).select("role_id", "host_type", "host_id");
 
-/** hosts of roles (scope "hosts"); none before the migration */
-const hostsOf = (roleIds) =>
-	db()("nginxions_role_host")
-		.whereIn("role_id", roleIds)
-		.select("role_id", "host_type", "host_id")
-		.catch(() => []);
-
-/** roles of a user with their permissions (without the admin flag) */
-async function rolesOf(userId) {
-	const rows = await db()("nginxions_user_role")
-		.join("nginxions_role", "nginxions_role.id", "nginxions_user_role.role_id")
-		.where("nginxions_user_role.user_id", userId)
-		.select("nginxions_role.id", "nginxions_role.builtin", "nginxions_role.scope");
-	const custom = rows.filter((r) => !r.builtin).map((r) => r.id);
-	const permissionRows = custom.length
-		? await db()("nginxions_role_permission").whereIn("role_id", custom).select("role_id", "resource", "action")
-		: [];
-	const hostRows = custom.length ? await hostsOf(custom) : [];
-	return rows.map((row) => ({
-		id: row.id,
-		scope: row.builtin ? model.BUILTIN[row.builtin]?.scope : row.scope,
-		hosts: hostRows.filter((h) => h.role_id === row.id),
-		permissions: row.builtin
-			? (model.BUILTIN[row.builtin]?.permissions ?? [])
-			: permissionRows.filter((p) => p.role_id === row.id).map((p) => `${p.resource}:${p.action}`),
-	}));
+/** Role scope, grants and host bindings come from a single database snapshot. */
+async function rolesOf(userId, connection) {
+	const membership = connection("nginxions_user_role as membership")
+		.join("nginxions_role as role", "role.id", "membership.role_id")
+		.where("membership.user_id", userId)
+		.select("role.id", "role.builtin", "role.scope");
+	const permissions = membership
+		.clone()
+		.leftJoin("nginxions_role_permission as permission", "permission.role_id", "role.id")
+		.select(
+			"permission.resource",
+			"permission.action",
+			connection.raw("NULL as host_type"),
+			connection.raw("NULL as host_id"),
+		);
+	const bindings = membership
+		.clone()
+		.join("nginxions_role_host as host", "host.role_id", "role.id")
+		.select(connection.raw("NULL as resource"), connection.raw("NULL as action"), "host.host_type", "host.host_id");
+	const roles = new Map();
+	for (const row of await permissions.unionAll(bindings)) {
+		const builtin = row.builtin ? model.BUILTIN[row.builtin] : undefined;
+		if (!roles.has(row.id)) {
+			roles.set(row.id, {
+				id: row.id,
+				scope: builtin?.scope ?? row.scope,
+				permissions: [...(builtin?.permissions ?? [])],
+				hosts: [],
+			});
+		}
+		const role = roles.get(row.id);
+		if (!builtin && row.resource) role.permissions.push(`${row.resource}:${row.action}`);
+		if (!builtin && row.host_type) role.hosts.push({ host_type: row.host_type, host_id: row.host_id });
+	}
+	return [...roles.values()];
 }
 
 /** effective permissions of a user loaded with its upstream "roles" column */
-const effectiveOf = async (user) => {
+const effectiveOf = async (user, connection = db()) => {
 	const admin = isAdminRoles(user.roles);
-	return model.effective(admin, admin ? [] : await rolesOf(user.id));
+	return model.effective(admin, admin ? [] : await rolesOf(user.id, connection));
 };
 
 /**
@@ -57,14 +69,20 @@ const effectiveOf = async (user) => {
  * @param {object} user  with roles and permissions (upstream graph)
  * @returns {Promise<object>} upstream permissions object, plus `nginxions` (effective permissions)
  */
-export async function resolve(user) {
-	const eff = await effectiveOf(user);
+export async function resolve(user, connection = db()) {
+	const eff = await effectiveOf(user, connection);
 	const row = model.projection(eff);
 	const current = user.permissions ?? {};
 	const stale = Object.keys(row).some((key) => current[key] !== row[key]);
 	if (stale) {
-		const updated = await userPermissionModel.query().where("user_id", user.id).patch(row);
-		if (!updated) await userPermissionModel.query().insert({ user_id: user.id, ...row });
+		const updated = await userPermissionModel.query(connection).where("user_id", user.id).patch(row);
+		if (!updated) {
+			await userPermissionModel
+				.query(connection)
+				.insert({ user_id: user.id, ...row })
+				.onConflict("user_id")
+				.ignore();
+		}
 		debug(logger, `user ${user.id}: user_permission follows the roles`);
 	}
 	return { ...current, ...row, nginxions: eff };
@@ -102,10 +120,31 @@ export async function check(permissions, label, data) {
 // ---- API ----
 
 /** permissions of the actor (the checks below need them, access.js does not expose them) */
-const actorOf = async (access) => {
-	const user = await userModel.query().select("id", "roles").where("id", access.token.getUserId(1)).first();
-	if (!user) throw new errs.AuthError("User not found");
-	return effectiveOf(user);
+const actorOf = async (access, connection) => {
+	const user = await userModel
+		.query(connection)
+		.select("id", "roles")
+		.where({ id: access.token.getUserId(0), is_deleted: 0, is_disabled: 0 })
+		.first();
+	if (!user) throw new errs.PermissionError();
+	return effectiveOf(user, connection);
+};
+
+/** Recheck the account and the actor under the role write lock. */
+export const assertUserMutation = async (access, user, connection, changes = {}) => {
+	const actor = await actorOf(access, connection);
+	if (actor.admin) return;
+	if (changes.roles !== undefined) throw new errs.PermissionError();
+	if (access.token.getUserId(0) === user.id) return;
+	if (isAdminRoles(user.roles) || !actor.permissions.has("users:manage")) throw new errs.PermissionError();
+	const target = await effectiveOf(user, connection);
+	forbid(model.missing(actor, [...target.permissions], target.scope));
+};
+
+const roleManager = async (access, connection) => {
+	const actor = await actorOf(access, connection);
+	if (!actor.permissions.has("roles:manage")) throw new errs.PermissionError();
+	return actor;
 };
 
 const forbid = (lacking) => {
@@ -114,21 +153,21 @@ const forbid = (lacking) => {
 	}
 };
 
-const roleRows = async (where) => {
-	const roles = await roleTable()
+const roleRows = async (where, connection = db()) => {
+	const roles = await roleTable(connection)
 		.where(where ?? {})
 		.select();
 	const ids = roles.map((r) => r.id);
-	const permissions = ids.length ? await db()("nginxions_role_permission").whereIn("role_id", ids) : [];
-	const hosts = ids.length ? await hostsOf(ids) : [];
+	const permissions = ids.length ? await connection("nginxions_role_permission").whereIn("role_id", ids) : [];
+	const hosts = ids.length ? await hostsOf(ids, connection) : [];
 	const members = ids.length
-		? await db()("nginxions_user_role")
+		? await connection("nginxions_user_role")
 				.join("user", "user.id", "nginxions_user_role.user_id")
 				.where("user.is_deleted", 0)
 				.whereIn("role_id", ids)
 				.select("role_id", "user.id", "user.name", "user.email")
 		: [];
-	const admins = await userModel.query().select("id", "name", "email", "roles").where("is_deleted", 0);
+	const admins = await userModel.query(connection).select("id", "name", "email", "roles").where("is_deleted", 0);
 	const order = Object.keys(model.BUILTIN);
 	return roles
 		.map((role) => {
@@ -167,21 +206,21 @@ const roleRows = async (where) => {
 		});
 };
 
-const getRole = async (id) => {
-	const [role] = await roleRows({ id });
+const getRole = async (id, connection) => {
+	const [role] = await roleRows({ id }, connection);
 	if (!role) throw new errs.ItemNotFoundError(id);
 	return role;
 };
 
 const cleanGroups = (groups) => [...new Set((groups ?? []).map((g) => String(g).trim()).filter(Boolean))];
 
-const validateRole = async (data, id) => {
+const validateRole = async (data, id, connection) => {
 	const name = String(data.name ?? "").trim();
 	if (!name || name.length > 100) throw new errs.ValidationError("A role needs a name (up to 100 characters)");
 	if (!model.SCOPES.includes(data.scope)) throw new errs.ValidationError("scope must be all, own or hosts");
-	const hosts = data.scope === "hosts" ? await validHosts(data.hosts ?? []) : [];
+	const hosts = data.scope === "hosts" ? await validHosts(data.hosts ?? [], connection) : [];
 	if (data.scope === "hosts" && !hosts.length) throw new errs.ValidationError("Choose the hosts of the role");
-	const same = await roleTable()
+	const same = await roleTable(connection)
 		.whereRaw("lower(name) = ?", [name.toLowerCase()])
 		.whereNot("id", id ?? 0)
 		.first();
@@ -191,18 +230,26 @@ const validateRole = async (data, id) => {
 		description: String(data.description ?? "").slice(0, 500),
 		scope: data.scope,
 		oidc_groups: cleanGroups(data.oidc_groups),
-		permissions: model.normalize(data.permissions ?? []),
+		permissions: validatePermissions(data.permissions ?? []),
 		hosts,
 	};
 };
 
+const validatePermissions = (permissions) => {
+	const normalized = model.normalize(permissions);
+	if (permissions.some((permission) => !normalized.includes(permission))) {
+		throw new errs.ValidationError("Unknown permission");
+	}
+	return normalized;
+};
+
 /** existing hosts only, each once */
-const validHosts = async (list) => {
+const validHosts = async (list, connection) => {
 	const result = [];
 	for (const table of HOST_TABLES) {
 		const wanted = [...new Set(list.filter((h) => h.host_type === table).map((h) => Number(h.host_id)))];
 		if (!wanted.length) continue;
-		const found = await db()(table).whereIn("id", wanted).where("is_deleted", 0).select("id");
+		const found = await connection(table).whereIn("id", wanted).where("is_deleted", 0).select("id");
 		if (found.length !== wanted.length) throw new errs.ValidationError(`Unknown ${table} in the role`);
 		for (const { id } of found) result.push({ host_type: table, host_id: id });
 	}
@@ -227,24 +274,39 @@ const writePermissions = async (trx, roleId, permissions) => {
 	}
 };
 
-/** user_permission of the members follows a changed role at once (the UI lists it) */
-const resyncMembers = async (roleId) => {
-	const ids = (await db()("nginxions_user_role").where("role_id", roleId).select("user_id")).map((r) => r.user_id);
-	await resyncUsers(ids);
-};
-
-const resyncUsers = async (ids) => {
+/** user_permission of members follows the role within the same transaction. */
+const resyncUsers = async (connection, ids) => {
 	if (!ids.length) return;
 	const users = await userModel
-		.query()
+		.query(connection)
 		.whereIn("id", ids)
 		.allowGraph("[permissions]")
 		.withGraphFetched("[permissions]");
-	for (const user of users) await resolve(user);
+	for (const user of users) await resolve(user, connection);
 };
 
-const audit = (access, action, objectType, objectId, meta) =>
-	internalAuditLog.add(access, { action, object_type: objectType, object_id: objectId, meta });
+const audit = (access, action, objectType, objectId, meta, connection) =>
+	internalAuditLog.add(access, { action, object_type: objectType, object_id: objectId, meta }, connection);
+
+const findUser = (connection, userId) => userModel.query(connection).where({ id: userId, is_deleted: 0 }).first();
+
+const writeMemberships = async (connection, user, chosen, administrator) => {
+	const wasAdmin = isAdminRoles(user.roles);
+	const flags = (parse(user.roles) ?? []).filter((role) => role !== "admin");
+	const roles = administrator ? [...flags, "admin"] : flags;
+	await assertActiveAdministrator(connection, user, { roles });
+	await connection("nginxions_user_role").where("user_id", user.id).delete();
+	const memberships = chosen.filter((role) => role.builtin !== "administrator");
+	if (memberships.length) {
+		await connection("nginxions_user_role").insert(
+			memberships.map((role) => ({ user_id: user.id, role_id: role.id })),
+		);
+	}
+	if (wasAdmin !== administrator) {
+		await userModel.query(connection).patch({ roles }).where("id", user.id);
+	}
+	await resyncUsers(connection, [user.id]);
+};
 
 const internalRbac = {
 	/**
@@ -264,9 +326,13 @@ const internalRbac = {
 
 	/** permissions of the current user, for the UI */
 	me: async (access) => {
-		const userId = access.token.getUserId(1);
-		const user = await userModel.query().select("id", "roles").where("id", userId).first();
-		if (!user) throw new errs.AuthError("User not found");
+		const userId = access.token.getUserId(0);
+		const user = await userModel
+			.query()
+			.select("id", "roles")
+			.where({ id: userId, is_deleted: 0, is_disabled: 0 })
+			.first();
+		if (!user) throw new errs.PermissionError();
 		const eff = await effectiveOf(user);
 		const roles = await db()("nginxions_user_role")
 			.join("nginxions_role", "nginxions_role.id", "nginxions_user_role.role_id")
@@ -291,10 +357,11 @@ const internalRbac = {
 
 	create: async (access, data) => {
 		await access.can("roles:manage");
-		const role = await validateRole(data);
-		forbid(model.missing(await actorOf(access), role.permissions, role.scope));
-		const id = await db().transaction(async (trx) => {
-			const [inserted] = await trx("nginxions_role")
+		return withRbacWrite(async (trx) => {
+			const actor = await roleManager(access, trx);
+			const role = await validateRole(data, undefined, trx);
+			forbid(model.missing(actor, role.permissions, role.scope));
+			const [inserted] = await roleTable(trx)
 				.insert({
 					name: role.name,
 					description: role.description,
@@ -305,70 +372,69 @@ const internalRbac = {
 					modified_on: new Date(),
 				})
 				.returning("id");
-			const roleId = typeof inserted === "object" ? inserted.id : inserted;
-			await writePermissions(trx, roleId, role.permissions);
-			await writeHosts(trx, roleId, role.hosts);
-			return roleId;
+			const id = typeof inserted === "object" ? inserted.id : inserted;
+			await writePermissions(trx, id, role.permissions);
+			await writeHosts(trx, id, role.hosts);
+			await audit(access, "created", "role", id, role, trx);
+			return getRole(id, trx);
 		});
-		await audit(access, "created", "role", id, { name: role.name, permissions: role.permissions });
-		return getRole(id);
 	},
 
 	update: async (access, id, data) => {
 		await access.can("roles:manage");
-		const current = await getRole(id);
-		const actor = await actorOf(access);
-		if (current.builtin) {
-			// built-in roles: only who gets them through OIDC
+		return withRbacWrite(async (trx) => {
+			const actor = await roleManager(access, trx);
+			const current = await getRole(id, trx);
 			if (current.builtin === "administrator" && !actor.admin) forbid(["roles:administrator"]);
-			await roleTable()
-				.where({ id })
-				.update({ oidc_groups: JSON.stringify(cleanGroups(data.oidc_groups)), modified_on: new Date() });
-			await audit(access, "updated", "role", id, {
-				name: current.name,
-				oidc_groups: cleanGroups(data.oidc_groups),
-			});
-			return getRole(id);
-		}
-		const role = await validateRole(data, id);
-		// nobody edits a role stronger than themselves
-		forbid([
-			...model.missing(actor, current.permissions, current.scope),
-			...model.missing(actor, role.permissions, role.scope),
-		]);
-		await db().transaction(async (trx) => {
-			await trx("nginxions_role")
-				.where({ id })
-				.update({
-					name: role.name,
-					description: role.description,
-					scope: role.scope,
-					oidc_groups: JSON.stringify(role.oidc_groups),
-					modified_on: new Date(),
-				});
-			await writePermissions(trx, id, role.permissions);
-			await writeHosts(trx, id, role.hosts);
+			forbid(model.missing(actor, current.permissions, current.scope));
+			if (current.builtin) {
+				const oidc_groups = cleanGroups(data.oidc_groups);
+				await roleTable(trx)
+					.where({ id })
+					.update({ oidc_groups: JSON.stringify(oidc_groups), modified_on: new Date() });
+				await audit(access, "updated", "role", id, { name: current.name, oidc_groups }, trx);
+			} else {
+				const role = await validateRole(data, id, trx);
+				forbid(model.missing(actor, role.permissions, role.scope));
+				await roleTable(trx)
+					.where({ id })
+					.update({
+						name: role.name,
+						description: role.description,
+						scope: role.scope,
+						oidc_groups: JSON.stringify(role.oidc_groups),
+						modified_on: new Date(),
+					});
+				await writePermissions(trx, id, role.permissions);
+				await writeHosts(trx, id, role.hosts);
+				await resyncUsers(
+					trx,
+					current.users.map(({ id }) => id),
+				);
+				await audit(access, "updated", "role", id, role, trx);
+			}
+			return getRole(id, trx);
 		});
-		await resyncMembers(id);
-		await audit(access, "updated", "role", id, { name: role.name, permissions: role.permissions });
-		return getRole(id);
 	},
 
 	delete: async (access, id) => {
 		await access.can("roles:manage");
-		const current = await getRole(id);
-		if (current.builtin) throw new errs.ValidationError("Built-in roles cannot be deleted");
-		forbid(model.missing(await actorOf(access), current.permissions, current.scope));
-		const members = current.users.map((u) => u.id);
-		await db().transaction(async (trx) => {
+		return withRbacWrite(async (trx) => {
+			const actor = await roleManager(access, trx);
+			const current = await getRole(id, trx);
+			if (current.builtin) throw new errs.ValidationError("Built-in roles cannot be deleted");
+			forbid(model.missing(actor, current.permissions, current.scope));
 			await trx("nginxions_user_role").where("role_id", id).delete();
 			await trx("nginxions_role_permission").where("role_id", id).delete();
 			await trx("nginxions_role_host").where("role_id", id).delete();
-			await trx("nginxions_role").where({ id }).delete();
+			await roleTable(trx).where({ id }).delete();
+			await resyncUsers(
+				trx,
+				current.users.map(({ id }) => id),
+			);
+			await audit(access, "deleted", "role", id, { name: current.name }, trx);
+			return true;
 		});
-		await resyncUsers(members);
-		await audit(access, "deleted", "role", id, { name: current.name });
-		return true;
 	},
 
 	/** {user id: [{id, name, builtin}]} of all users, the Administrator role for admins */
@@ -397,52 +463,30 @@ const internalRbac = {
 	 */
 	setUserRoles: async (access, userId, roleIds) => {
 		await access.can("roles:manage");
-		const user = await userModel
-			.query()
-			.where({ id: userId, is_deleted: 0 })
-			.allowGraph("[permissions]")
-			.withGraphFetched("[permissions]")
-			.first();
-		if (!user) throw new errs.ItemNotFoundError(userId);
-		const roles = await roleRows();
-		const chosen = roles.filter((r) => roleIds.includes(r.id));
-		if (chosen.length !== new Set(roleIds).size) throw new errs.ValidationError("Unknown role");
-		const actor = await actorOf(access);
-		const makeAdmin = chosen.some((r) => r.builtin === "administrator");
-		const wasAdmin = isAdminRoles(user.roles);
-		if (!actor.admin && (wasAdmin || makeAdmin)) forbid(["roles:administrator"]);
-		for (const role of chosen) forbid(model.missing(actor, role.permissions, role.scope));
-		// the roles taken away must be within the actor's too
-		const before = roles.filter((r) => r.users.some((u) => u.id === userId));
-		for (const role of before) forbid(model.missing(actor, role.permissions, role.scope));
-		if (wasAdmin && !makeAdmin) {
-			const admins = (await userModel.query().select("roles").where({ is_deleted: 0, is_disabled: 0 })).filter(
-				(u) => isAdminRoles(u.roles),
+		const id = Number(userId);
+		if (!Number.isSafeInteger(id) || id < 1) throw new errs.ValidationError("Invalid user ID");
+		return withRbacWrite(async (trx) => {
+			const actor = await roleManager(access, trx);
+			const user = await findUser(trx, id);
+			if (!user) throw new errs.ItemNotFoundError(id);
+			const roles = await roleRows(undefined, trx);
+			const chosen = roles.filter((role) => roleIds.includes(role.id));
+			if (chosen.length !== new Set(roleIds).size) throw new errs.ValidationError("Unknown role");
+			const administrator = chosen.some((role) => role.builtin === "administrator");
+			if (!actor.admin && (isAdminRoles(user.roles) || administrator)) forbid(["roles:administrator"]);
+			const before = roles.filter((role) => role.users.some((member) => member.id === user.id));
+			for (const role of [...before, ...chosen]) forbid(model.missing(actor, role.permissions, role.scope));
+			await writeMemberships(trx, user, chosen, administrator);
+			await audit(
+				access,
+				"updated",
+				"user",
+				user.id,
+				{ name: user.name, roles: chosen.map((role) => role.name) },
+				trx,
 			);
-			if (admins.length <= 1) throw new errs.ValidationError("The last administrator cannot lose the role");
-		}
-		await db().transaction(async (trx) => {
-			await trx("nginxions_user_role").where("user_id", userId).delete();
-			const rows = chosen.filter((r) => !r.builtin || r.builtin !== "administrator");
-			if (rows.length)
-				await trx("nginxions_user_role").insert(rows.map((r) => ({ user_id: userId, role_id: r.id })));
+			return chosen.map((role) => role.id);
 		});
-		if (wasAdmin !== makeAdmin) {
-			const flags = (parse(user.roles) ?? []).filter((r) => r !== "admin");
-			await userModel
-				.query()
-				.patch({ roles: makeAdmin ? [...flags, "admin"] : flags })
-				.where("id", userId);
-		}
-		const updated = await userModel
-			.query()
-			.where({ id: userId })
-			.allowGraph("[permissions]")
-			.withGraphFetched("[permissions]")
-			.first();
-		await resolve(updated);
-		await audit(access, "updated", "user", userId, { name: user.name, roles: chosen.map((r) => r.name) });
-		return chosen.map((r) => r.id);
 	},
 
 	getOidc: async (access) => {
@@ -452,56 +496,47 @@ const internalRbac = {
 
 	setOidc: async (access, value) => {
 		await access.can("roles:manage");
-		const saved = await setSetting("rbac.oidc", value);
-		await audit(access, "updated", "role", 0, { name: "OIDC", ...saved });
-		return saved;
+		return withRbacWrite(async (trx) => {
+			const actor = await roleManager(access, trx);
+			if (!actor.admin) forbid(["roles:administrator"]);
+			const saved = await setSetting("rbac.oidc", value, trx);
+			await audit(access, "updated", "role", 0, { name: "OIDC", ...saved }, trx);
+			return saved;
+		});
 	},
 };
 
-/**
- * OIDC login (routes/oidc.js): the roles of the user follow the IdP groups when at least one
- * role names OIDC groups. A user in none of them keeps no role; the last administrator stays one.
- * @param {string} email
- * @param {object} claims  id token claims (and userinfo)
- */
+const groupNames = (value) => {
+	if (typeof value === "string") return value.split(/[,\s]+/).filter(Boolean);
+	return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+};
+
+/** Refresh privileges before issuing a session: a missing claim gives no mapped roles. */
 export async function syncOidcGroups(email, claims) {
-	const { claim } = await getSetting("rbac.oidc");
-	const roles = await roleRows();
-	const mapped = roles.filter((r) => r.oidc_groups.length);
-	const raw = claims?.[claim];
-	if (!mapped.length || raw === undefined) return;
-	const groups = new Set((Array.isArray(raw) ? raw : String(raw).split(/[,\s]+/)).map(String));
-	const user = await userModel.query().where({ email, is_deleted: 0 }).first();
-	if (!user) return;
-	const chosen = mapped.filter((r) => r.oidc_groups.some((g) => groups.has(g)));
-	const makeAdmin = chosen.some((r) => r.builtin === "administrator");
-	const wasAdmin = isAdminRoles(user.roles);
-	let keepAdmin = makeAdmin;
-	if (wasAdmin && !makeAdmin) {
-		const admins = (await userModel.query().select("roles").where({ is_deleted: 0, is_disabled: 0 })).filter((u) =>
-			isAdminRoles(u.roles),
+	return withRbacWrite(async (trx) => {
+		const { claim } = await getSetting("rbac.oidc", trx);
+		const mapped = (await roleRows(undefined, trx)).filter((role) => role.oidc_groups.length);
+		if (!mapped.length) return;
+		const user = await userModel.query(trx).where({ email, is_deleted: 0, is_disabled: 0 }).first();
+		if (!user) throw new errs.AuthError("User not found");
+		const groups = new Set(groupNames(claims && Object.hasOwn(claims, claim) ? claims[claim] : undefined));
+		const chosen = mapped.filter((role) => role.oidc_groups.some((group) => groups.has(group)));
+		const matchedAdmin = chosen.some((role) => role.builtin === "administrator");
+		const keepAdmin = isAdminRoles(user.roles) && !(await hasOtherActiveAdministrator(trx, user.id));
+		await writeMemberships(trx, user, chosen, matchedAdmin || keepAdmin);
+		const names = chosen.map((role) => role.name);
+		if (keepAdmin && !matchedAdmin) names.push(model.BUILTIN.administrator.name);
+		await internalAuditLog.add(
+			null,
+			{
+				user_id: user.id,
+				action: "updated",
+				object_type: "user",
+				object_id: user.id,
+				meta: { name: user.name, roles: names, source: "oidc" },
+			},
+			trx,
 		);
-		keepAdmin = admins.length <= 1;
-	}
-	await db().transaction(async (trx) => {
-		await trx("nginxions_user_role").where("user_id", user.id).delete();
-		const rows = chosen.filter((r) => r.builtin !== "administrator");
-		if (rows.length)
-			await trx("nginxions_user_role").insert(rows.map((r) => ({ user_id: user.id, role_id: r.id })));
-	});
-	if (wasAdmin !== keepAdmin) {
-		const flags = (parse(user.roles) ?? []).filter((r) => r !== "admin");
-		await userModel
-			.query()
-			.patch({ roles: keepAdmin ? [...flags, "admin"] : flags })
-			.where("id", user.id);
-	}
-	await internalAuditLog.add(null, {
-		user_id: user.id,
-		action: "updated",
-		object_type: "user",
-		object_id: user.id,
-		meta: { name: user.name, roles: chosen.map((r) => r.name), source: "oidc" },
 	});
 }
 

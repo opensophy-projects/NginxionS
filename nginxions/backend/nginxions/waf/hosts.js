@@ -99,7 +99,8 @@ const internalWafHosts = {
 		// it sees without managing the hosts (Security Analyst)
 		try {
 			await access.can("proxy_hosts:update", id);
-		} catch {
+		} catch (err) {
+			if (!(err instanceof errs.PermissionError)) throw err;
 			await access.can("waf_policy:manage");
 			await access.can("proxy_hosts:get", id);
 		}
