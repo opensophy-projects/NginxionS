@@ -290,7 +290,7 @@ flowchart LR
   в расширенном прогоне ещё фаззинг API (Schemathesis) и проверка контейнеров
 - `check-runtime.sh` — проверка работающих контейнеров стека (расширенный прогон): привилегии, capabilities,
   пространства имён хоста, сокет Docker, root, запись в корень
-- `security-report.mjs` — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
+- `security-report.mjs` (+ `security-report.test.mjs`) — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
 - `coverage-report.mjs` (+ `coverage-report.test.mjs`) — покрытие кода тестами: unit-тесты и то, что backend выполнил в тестах стека (V8 coverage), вместе; «храповик» по `.github/coverage-baseline.json`
 - `seccomp-profile.mjs` — `deploy/seccomp/nginxions.json` из штатного профиля seccomp Docker: `socket()` IPv4/IPv6 без SCTP и seqpacket
 - `upstream-issues.mjs` — копии issue репозиториев агента (openappsec/openappsec, attachment, smartsync-shared-files, smartsync-tuning, smartsync) в issue этого репозитория с меткой `upstream`; копия закрывается и открывается вместе с исходной

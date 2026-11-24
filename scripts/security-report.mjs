@@ -157,19 +157,28 @@ const osv = (doc) => {
 	return out;
 };
 
-const trivy = (doc, { image }) => {
+const trivy = (doc, { image } = {}) => {
 	const out = [];
 	for (const result of doc?.Results ?? []) {
-		for (const v of result.Vulnerabilities ?? [])
+		const packages = new Map((result.Packages ?? []).filter((p) => p.Identifier?.UID).map((p) => [p.Identifier.UID, p]));
+		for (const v of result.Vulnerabilities ?? []) {
+			const pkg = packages.get(v.PkgIdentifier?.UID);
 			out.push({
 				rule: v.VulnerabilityID,
 				title: `${v.PkgName} ${v.InstalledVersion}: ${firstLine(v.Title) || v.VulnerabilityID}`,
 				severity: fromWord(v.Severity),
 				location: `${image} · ${result.Target}`,
+				trivyPackage: {
+					purl: v.PkgIdentifier?.PURL,
+					layer: v.Layer?.Digest,
+					path: v.PkgPath || pkg?.FilePath || "",
+					analyzedBy: pkg?.AnalyzedBy,
+				},
 				fix: v.FixedVersion ?? "",
 				url: v.PrimaryURL ?? "",
 				kind: "vuln",
 			});
+		}
 		for (const s of result.Secrets ?? [])
 			out.push({
 				rule: s.RuleID,
@@ -507,6 +516,17 @@ const CHECKS = [
 		dedupe: true,
 		blocks: (f) => severe(f.severity) && !!f.fix,
 	},
+	{
+		id: "grype-published",
+		group: "published",
+		category: "Опубликованные образы",
+		tool: "Grype · Docker Hub",
+		what: "второе мнение по SBOM опубликованных образов",
+		match: /^grype-published-.+\.json$/,
+		parse: (doc, file) => grype(doc, { image: imageOf(file, "grype-published-") }),
+		dedupe: true,
+		blocks: () => false,
+	},
 	...[
 		["zap-api", "интерфейс: API (:81, OpenAPI, с сессией)", "активная атака на API по схеме OpenAPI"],
 		["zap-ui", "интерфейс: страницы (:81)", "заголовки, cookies, утечки на страницах интерфейса"],
@@ -591,6 +611,11 @@ const acceptance = (check, f) =>
 			(r.id === f.rule || r.id === "*") &&
 			// "unfixed": only while the finding has no fixed version (a package of Alpine with no fix yet)
 			(!r.unfixed || !f.fix) &&
+			(!r.trivyPackage ||
+				(f.trivyPackage &&
+					Object.entries(r.trivyPackage).every(([key, value]) =>
+						Array.isArray(value) ? value.includes(f.trivyPackage[key]) : f.trivyPackage[key] === value,
+					))) &&
 			(!r.where || f.location.includes(r.where) || f.title.includes(r.where)),
 	);
 
@@ -605,10 +630,13 @@ for (const check of CHECKS) {
 		const seen = new Set();
 		for (const file of own) {
 			const doc = check.lines ? readJsonLines(file) : readJson(file);
+			if (check.id === "published" && doc?.SchemaVersion !== 2) throw new Error(`${basename(file)}: invalid Trivy scan`);
+			if (check.id === "grype-published" && !Array.isArray(doc?.matches))
+				throw new Error(`${basename(file)}: invalid Grype scan`);
 			for (let f of check.parse(doc, file)) {
 				if (check.normalize) f = check.normalize(f);
 				if (check.dedupe) {
-					const key = `${f.rule}\u0000${f.location}\u0000${f.title}`;
+					const key = `${f.rule}\u0000${f.location}\u0000${f.title}\u0000${JSON.stringify(f.trivyPackage)}`;
 					if (seen.has(key)) continue;
 					seen.add(key);
 				}
@@ -626,6 +654,13 @@ for (const check of CHECKS) {
 				}
 				result.findings.push(f);
 			}
+		}
+		if (check.id === "grype-published" && expect.has("published")) {
+			const available = new Set(own.map((file) => basename(file)));
+			const missing = files.map((file) => basename(file)).filter((name) =>
+				/^trivy-published-.+\.json$/.test(name) && !available.has(name.replace(/^trivy-/, "grype-")),
+			);
+			if (missing.length) throw new Error(`Grype results missing for ${missing.join(", ")}`);
 		}
 	} catch (err) {
 		result.error = `не удалось прочитать результат: ${err.message}`;
