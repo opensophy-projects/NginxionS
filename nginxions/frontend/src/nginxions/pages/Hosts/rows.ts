@@ -1,6 +1,7 @@
 // Hosts: proxy, redirection, stream and 404 hosts of NPMplus as rows of one table
 // (docs/ROADMAP.md, phase 2 "Hosts: one table"). Pure functions: rows, filters, sorting,
 // recommendations and export; the page and the cells live next to it.
+import { decamelize } from "humps";
 import type { Certificate, DeadHost, ProxyHost, RedirectionHost, Stream } from "src/api/backend";
 import type { CertTerm, HostLastChange, HostObjectType, UpstreamCheck, WafSettings } from "../../api";
 import type { MtlsBinding, MtlsList } from "../../pki/api";
@@ -591,6 +592,25 @@ const nonEmpty = (value: unknown): value is string => typeof value === "string" 
 const port = (value: unknown) =>
 	value === null || (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535);
 
+const IMPORT_CONTROLLED_FIELDS = [
+	"certificateId",
+	"npmplusMtlsCertificateId",
+	"npmplusAccessListIds",
+	"npmplusAccessListType",
+	"meta",
+	"locations",
+	"enabled",
+];
+const controlledFieldsByApiKey = new Map(IMPORT_CONTROLLED_FIELDS.map((key) => [decamelize(key), key]));
+
+function validateImportKeys(settings: Record<string, unknown>) {
+	for (const key of Object.keys(settings)) {
+		// Reject aliases that could mask validated settings when the API serializes the export to snake_case.
+		const canonical = controlledFieldsByApiKey.get(decamelize(key));
+		if (canonical && key !== canonical) throw new Error("noncanonical import key");
+	}
+}
+
 /** All references require explicit choices. A matching numeric ID can refer to something else on this server. */
 function mapReferences(data: ImportItem["data"], pick: (reference: ImportReference) => number) {
 	const reference = (kind: ReferenceKind, value: unknown) => {
@@ -599,6 +619,7 @@ function mapReferences(data: ImportItem["data"], pick: (reference: ImportReferen
 		return pick({ kind, id: value });
 	};
 	const lists = (scope: ImportItem["data"]) => {
+		validateImportKeys(scope);
 		const ids = scope.npmplusAccessListIds;
 		if (scope.npmplusAccessListType === "custom" && (!Array.isArray(ids) || !ids.length)) throw new Error("access");
 		if (ids === undefined) return scope;
@@ -606,6 +627,7 @@ function mapReferences(data: ImportItem["data"], pick: (reference: ImportReferen
 		return { ...scope, npmplusAccessListIds: [...new Set(ids.map((id) => pick({ kind: "access", id })))] };
 	};
 	const mapped = lists({ ...data, meta: { ...data.meta } });
+	validateImportKeys(mapped.meta);
 	if ("certificateId" in mapped) mapped.certificateId = reference("tls", mapped.certificateId);
 	if ("npmplusMtlsCertificateId" in mapped.meta) {
 		mapped.meta.npmplusMtlsCertificateId = reference("mtls", mapped.meta.npmplusMtlsCertificateId);
