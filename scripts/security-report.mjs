@@ -621,10 +621,7 @@ const acceptance = (check, f) =>
 			// "unfixed": only while the finding has no fixed version (a package of Alpine with no fix yet)
 			(!r.unfixed || !f.fix) &&
 			(!r.trivyPackage ||
-				(f.trivyPackage &&
-					Object.entries(r.trivyPackage).every(([key, value]) =>
-						Array.isArray(value) ? value.includes(f.trivyPackage[key]) : f.trivyPackage[key] === value,
-					))) &&
+				(f.trivyPackage && Object.entries(r.trivyPackage).every(([key, value]) => f.trivyPackage[key] === value))) &&
 			(!r.where || f.location.includes(r.where) || f.title.includes(r.where)),
 	);
 
