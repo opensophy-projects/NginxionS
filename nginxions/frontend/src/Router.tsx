@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ErrorNotFound, LoadingPage, Unhealthy } from "src/components";
-import { useAuthState } from "src/context";
+import { useAuthState, useLocaleState } from "src/context";
 import { useHealth } from "src/hooks";
 // NginxionS: the sidebar shell of opensophy.com/docs replaces the header, top menu, container and footer (phase 2)
 import { Shell } from "src/nginxions/ui/Shell";
@@ -57,6 +57,9 @@ function CertificatesRedirect({ section }: { section: string }) {
 }
 
 function Router() {
+	// NginxionS: upstream routes also format some labels directly through the shared intl object.
+	// Refresh their props on locale changes while keeping the existing route and form state.
+	useLocaleState();
 	const health = useHealth();
 	const { authenticated } = useAuthState();
 

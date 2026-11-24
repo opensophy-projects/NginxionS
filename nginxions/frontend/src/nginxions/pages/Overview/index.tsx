@@ -81,19 +81,25 @@ function Line({ label, value, tone }: { label: ReactNode; value: ReactNode; tone
 	);
 }
 
-function HostCard({ type, rows }: { type: HostType; rows: HostRow[] }) {
+function HostCard({ type, rows, unavailable }: { type: HostType; rows: HostRow[]; unavailable: boolean }) {
 	const enabled = rows.filter((r) => r.enabled).length;
 	const problems = rows.filter((r) => r.status === "error" || r.upstream === "down").length;
 	const link = `/hosts?${filtersToParams({ q: "", rules: [{ field: "type", op: "is", value: type }] })}`;
 	return (
 		<Link to={link} className={cn("card", styles.stat)}>
-			<span className={styles.statValue}>{rows.length}</span>
+			<span className={styles.statValue}>{unavailable ? "—" : rows.length}</span>
 			<span className={styles.statLabel}>
 				<T id={`nginxions.overview.hosts.${type}`} data={{ count: rows.length }} />
 			</span>
 			<span className={styles.statMeta}>
-				<T id="nginxions.overview.hosts.enabled" data={{ count: enabled }} />
-				{problems > 0 && (
+				{unavailable ? (
+					<span className={styles.alert}>
+						<T id="nginxions.overview.hosts.unavailable" />
+					</span>
+				) : (
+					<T id="nginxions.overview.hosts.enabled" data={{ count: enabled }} />
+				)}
+				{!unavailable && problems > 0 && (
 					<span className={styles.alert}>
 						{" · "}
 						<T id="nginxions.overview.hosts.problems" data={{ count: problems }} />
@@ -135,7 +141,10 @@ function OverviewPage() {
 	// the registry needs certificates or PKI: without either the panel is not shown and nothing is asked
 	const registry = useCertificateRegistry({ limit: 1 }, { enabled: rbac("certificates") || rbac("pki") });
 
-	if (!me || [proxy, redirect, stream, dead].some((q, i) => can(HOST_TYPES[i]) && q.isLoading)) {
+	const hostQueries = { proxy, redirect, stream, dead };
+	const unavailable = types.filter((type) => hostQueries[type].isError);
+
+	if (!me || types.some((type) => hostQueries[type].isLoading)) {
 		return <LoadingPage />;
 	}
 
@@ -168,39 +177,40 @@ function OverviewPage() {
 		? `${preventedEvents.data.total}${preventedEvents.data.totalCapped ? "+" : ""}`
 		: "—";
 
-	const noticeList = (
-		<section className={styles.notices}>
-			<h2 className={styles.sectionTitle}>
-				<T id="nginxions.overview.notices" />
-				{notices.length > 0 && <span className={styles.count}>{notices.length}</span>}
-			</h2>
-			{notices.length ? (
-				notices.map((notice) => (
-					<Admonition
-						key={notice.key}
-						compact
-						variant={VARIANT[notice.level]}
-						title={<T id={`nginxions.notice.${notice.level}`} />}
-						aside={
-							<Link to={notice.link} className={styles.more}>
-								<T id="nginxions.overview.fix" />
-								<IconArrowRight size={14} />
-							</Link>
-						}
-					>
-						<span className={styles.noticeTitle}>
-							<T id={notice.id} data={notice.data} />
-						</span>{" "}
-						<T id={`${notice.id}.hint`} data={notice.data} />
+	const noticeList =
+		unavailable.length && !notices.length ? null : (
+			<section className={styles.notices}>
+				<h2 className={styles.sectionTitle}>
+					<T id="nginxions.overview.notices" />
+					{notices.length > 0 && <span className={styles.count}>{notices.length}</span>}
+				</h2>
+				{notices.length ? (
+					notices.map((notice) => (
+						<Admonition
+							key={notice.key}
+							compact
+							variant={VARIANT[notice.level]}
+							title={<T id={`nginxions.notice.${notice.level}`} />}
+							aside={
+								<Link to={notice.link} className={styles.more}>
+									<T id="nginxions.overview.fix" />
+									<IconArrowRight size={14} />
+								</Link>
+							}
+						>
+							<span className={styles.noticeTitle}>
+								<T id={notice.id} data={notice.data} />
+							</span>{" "}
+							<T id={`${notice.id}.hint`} data={notice.data} />
+						</Admonition>
+					))
+				) : (
+					<Admonition compact variant="success" title={<T id="nginxions.overview.all-good" />}>
+						<T id="nginxions.overview.all-good.hint" />
 					</Admonition>
-				))
-			) : (
-				<Admonition compact variant="success" title={<T id="nginxions.overview.all-good" />}>
-					<T id="nginxions.overview.all-good.hint" />
-				</Admonition>
-			)}
-		</section>
-	);
+				)}
+			</section>
+		);
 
 	const cs = crowdsec.data;
 	const expiring = registry.data?.counts.status.expiring ?? 0;
@@ -222,7 +232,12 @@ function OverviewPage() {
 			{types.length > 0 && (
 				<div className={styles.stats}>
 					{types.map((type) => (
-						<HostCard key={type} type={type} rows={rows.filter((r) => r.type === type)} />
+						<HostCard
+							key={type}
+							type={type}
+							rows={rows.filter((r) => r.type === type)}
+							unavailable={unavailable.includes(type)}
+						/>
 					))}
 				</div>
 			)}
@@ -335,14 +350,18 @@ function OverviewPage() {
 								<Line
 									label={<T id="nginxions.overview.waf.modes" />}
 									value={
-										<T
-											id="nginxions.overview.waf.modes.value"
-											data={{
-												prevent: wafCount("prevent"),
-												detect: wafCount("detect"),
-												off: wafCount("off"),
-											}}
-										/>
+										proxy.isError || waf.isError ? (
+											"—"
+										) : (
+											<T
+												id="nginxions.overview.waf.modes.value"
+												data={{
+													prevent: wafCount("prevent"),
+													detect: wafCount("detect"),
+													off: wafCount("off"),
+												}}
+											/>
+										)
 									}
 								/>
 							</>

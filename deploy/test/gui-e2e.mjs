@@ -10,6 +10,7 @@
 //
 // A failed scenario does not stop the others; the test fails at its end. Every scenario cleans up what it made.
 import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
@@ -292,6 +293,212 @@ let crowdsecBefore;
 let blockPageBefore;
 let expertBefore;
 const scenarios = [
+	{
+		name: "phase-2-navigation",
+		title: "Phase 2: Hosts renders in RU/EN, both themes and both viewports; the mobile drawer keeps focus",
+		run: async () => {
+			for (const locale of ["en", "ru"]) {
+				for (const theme of ["light", "dark"]) {
+					for (const width of [375, 1440]) {
+						const layout = await browser.newContext({
+							ignoreHTTPSErrors: true,
+							viewport: { width, height: 850 },
+						});
+						try {
+							await layout.addCookies(cookiesOf(readFileSync(JAR, "utf8")));
+							await layout.addInitScript(({ locale, theme }) => {
+								localStorage.setItem("locale", locale);
+								localStorage.setItem("tabler-theme", theme);
+							}, { locale, theme });
+							const view = await layout.newPage();
+							const errors = [];
+							view.on("pageerror", (error) => errors.push(error.message));
+							view.on("console", (msg) => { if (msg.type() === "error") errors.push(msg.text()); });
+							await view.goto(ADMIN + "/hosts", { waitUntil: "networkidle" });
+							await view.locator('#nginxions-content h1 [data-translation-id="nginxions.hosts.title"]').waitFor();
+							assert.equal(await view.locator("html").getAttribute("lang"), locale);
+							assert.equal(await view.locator("html").getAttribute("data-bs-theme"), theme);
+							assert.equal(await view.locator("h1").innerText(), locale === "ru" ? "Хосты" : "Hosts");
+							if (width === 375) {
+								const toggle = view.locator('button[aria-controls="nginxions-mobile-drawer"]');
+								await toggle.click();
+								const drawer = view.locator("dialog[open]");
+								await drawer.waitFor();
+								await view.keyboard.press("Shift+Tab");
+								assert.equal(await drawer.evaluate((d) => d.contains(document.activeElement)), true);
+								await view.keyboard.press("Escape");
+								await drawer.waitFor({ state: "hidden" });
+								assert.equal(await toggle.evaluate((b) => b === document.activeElement), true);
+								await toggle.click();
+								await view.setViewportSize({ width: 1440, height: 850 });
+								await view.waitForFunction(() => !document.body.style.overflow && !document.querySelector("dialog[open]"));
+							}
+							assert.deepEqual(errors, []);
+						} finally {
+							await layout.close();
+						}
+					}
+				}
+			}
+		},
+	},
+	{
+		name: "phase-2-login-locale",
+		title: "Phase 2: changing language on a short login screen preserves the form and persists the document language",
+		run: async () => {
+			const loginContext = await browser.newContext({
+				ignoreHTTPSErrors: true,
+				viewport: { width: 640, height: 360 },
+			});
+			try {
+				const login = await loginContext.newPage();
+				await login.goto(ADMIN, { waitUntil: "networkidle" });
+				const email = login.locator('input[type="email"]');
+				const password = login.locator('input[autocomplete="current-password"]');
+				const language = login.getByRole("button", { name: "Language", exact: true });
+				await email.focus();
+				await language.click();
+				await login.getByRole("menu").waitFor();
+				await login.keyboard.press("Escape");
+				await email.fill("phase2-draft@example.test");
+				await password.fill(`draft-only-${Date.now()}`);
+				const draft = await password.inputValue();
+				await login.evaluate(() => { window.phase2Marker = true; });
+				await language.click();
+				await login.locator('[role="menuitem"]:has([data-translation-id="locale-ru-RU"])').click();
+				await login.waitForFunction(() => document.documentElement.lang === "ru");
+				assert.equal(await email.inputValue(), "phase2-draft@example.test");
+				assert.equal(await password.inputValue(), draft);
+				assert.equal(await login.evaluate(() => window.phase2Marker), true);
+				await login.reload({ waitUntil: "networkidle" });
+				await email.waitFor();
+				assert.equal(await login.locator("html").getAttribute("lang"), "ru");
+				assert.equal(await login.locator('[data-translation-id="login.title"]').innerText(), "Авторизация");
+			} finally {
+				await loginContext.close();
+			}
+		},
+	},
+	{
+		name: "phase-2-overview-error",
+		title: "Phase 2: Overview identifies an unavailable hosts API and preserves other host cards",
+		run: async () => {
+			const overview = await context.newPage();
+			try {
+				await overview.route(/\/api\/nginx\/proxy-hosts(?:\?|$)/, (route) => route.fulfill({
+					status: 503, json: { error: { message: "Simulated hosts API outage" } },
+				}));
+				await overview.goto(ADMIN, { waitUntil: "domcontentloaded" });
+				const error = overview.locator('[data-translation-id="nginxions.overview.hosts.unavailable"]');
+				await error.waitFor();
+				assert.match(await error.locator('xpath=ancestor::a[1]').innerText(), /^—/);
+				assert.equal(await overview.locator('[data-translation-id="nginxions.overview.all-good"]').count(), 0);
+				await overview.locator('[data-translation-id="nginxions.overview.hosts.stream"]').waitFor();
+			} finally {
+				await overview.close();
+			}
+		},
+	},
+	{
+		name: "phase-2-host-transfer",
+		title: "Phase 2: import validates host names, applies explicit ACL mapping, and creates disabled hosts disabled",
+		run: async () => {
+			const domain = "phase2-import.local";
+			const name = "Phase 2 import ACL";
+			await addAccessList(name, "phase2-user", `phase2-${Date.now()}`);
+			const acl = await accessListId(name);
+			assert.ok(acl);
+			await go("/hosts");
+			const importFile = async (domainNames) => page.locator('input[type="file"]').setInputFiles({
+				name: "nginxions-hosts.json",
+				mimeType: "application/json",
+				buffer: Buffer.from(JSON.stringify({
+					format: "nginxions-hosts",
+					version: 1,
+					hosts: [{ type: "proxy", data: {
+						domainNames,
+						forwardHost: UPSTREAM,
+						forwardScheme: "http",
+						forwardPort: 80,
+						npmplusAccessListType: "custom",
+						npmplusAccessListIds: [acl],
+					} }, { type: "stream", data: {
+						incomingPort: "28878",
+						forwardingHost: UPSTREAM,
+						forwardingPort: "80",
+						tcpForwarding: true,
+						enabled: false,
+					} }],
+				})),
+			});
+			await importFile(domain);
+			await page.locator(".Toastify__toast--error").last().waitFor();
+			assert.equal(await proxyHostId(domain), undefined);
+			await importFile([domain]);
+			const modal = page.getByRole("dialog").last();
+			await modal.waitFor();
+			await modal.getByRole("button", { name: "Import", exact: true }).click();
+			await modal.getByText("Select a target for every reference before importing.").waitFor();
+			assert.equal(await proxyHostId(domain), undefined);
+			await modal.getByRole("combobox").selectOption(String(acl));
+			const create = page.waitForRequest((request) =>
+				request.method() === "POST" && new URL(request.url()).pathname === "/api/nginx/streams"
+			);
+			await modal.getByRole("button", { name: "Import", exact: true }).click();
+			assert.equal((await create).postDataJSON().enabled, false);
+			await saved("host import");
+			const id = await proxyHostId(domain);
+			assert.ok(id);
+			const host = await api("GET", `/nginx/proxy-hosts/${id}`);
+			assert.deepEqual(host.npmplus_access_list_ids, [acl]);
+			const streams = await api("GET", "/nginx/streams");
+			assert.equal(streams.find((s) => String(s.incoming_port) === "28878")?.enabled, false);
+		},
+		cleanup: async () => {
+			await removeProxyHost("phase2-import.local");
+			const stream = (await api("GET", "/nginx/streams")).find((s) => String(s.incoming_port) === "28878");
+			if (stream) await api("DELETE", `/nginx/streams/${stream.id}`);
+			const id = await accessListId("Phase 2 import ACL");
+			if (id) await api("DELETE", `/nginx/access-lists/${id}`);
+		},
+	},
+	{
+		name: "phase-2-bulk-partial",
+		title: "Phase 2: a bulk change reports each outcome when one host is refused",
+		run: async () => {
+			const first = "phase2-bulk-first.local";
+			const second = "phase2-bulk-second.local";
+			for (const domain of [first, second]) {
+				await api("POST", "/nginx/proxy-hosts", {
+					domain_names: [domain], forward_host: UPSTREAM, forward_scheme: "http", forward_port: 80,
+				});
+			}
+			const refused = await proxyHostId(second);
+			const path = `**/api/nginx/proxy-hosts/${refused}/disable`;
+			await page.route(path, (route) => route.fulfill({
+				status: 409, json: { error: { message: "Simulated refusal of the second host" } },
+			}));
+			try {
+				await go("/hosts");
+				for (const domain of [first, second]) {
+					await page.getByRole("checkbox", { name: domain, exact: true }).check();
+				}
+				await page.getByRole("button", { name: "Disable", exact: true }).click();
+				const error = page.locator(".Toastify__toast--error").last();
+				await error.getByText("Succeeded: 1. Failed: 1.", { exact: false }).waitFor();
+				assert.match(await error.innerText(), /phase2-bulk-second.local/);
+				const hosts = await api("GET", "/nginx/proxy-hosts");
+				assert.equal(hosts.find((h) => h.domain_names.includes(first)).enabled, false);
+				assert.equal(hosts.find((h) => h.domain_names.includes(second)).enabled, true);
+			} finally {
+				await page.unroute(path);
+			}
+		},
+		cleanup: async () => {
+			await removeProxyHost("phase2-bulk-first.local");
+			await removeProxyHost("phase2-bulk-second.local");
+		},
+	},
 	{
 		name: "hosts-proxy",
 		title: "Hosts → Add → Proxy: the new host proxies its domain to the upstream; Delete in its menu stops it",

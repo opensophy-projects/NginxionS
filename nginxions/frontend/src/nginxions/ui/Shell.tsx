@@ -2,8 +2,7 @@
 // on the left, the page in an inset panel that scrolls on its own; on narrow screens a top bar
 // and the sidebar as a drawer from the left. Replaces the upstream header, top menu and footer.
 import { IconLayoutSidebarLeftExpand, IconX } from "@tabler/icons-react";
-import cn from "classnames";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { intl, T } from "src/locale";
 import { useCloseLabels } from "./closeLabels";
@@ -18,25 +17,36 @@ function MobileDrawer() {
 	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
 	const toggle = useRef<HTMLButtonElement>(null);
+	const drawer = useRef<HTMLDialogElement>(null);
 	const closeButton = useRef<HTMLButtonElement>(null);
+
+	const close = useCallback(() => {
+		drawer.current?.close();
+		setOpen(false);
+		toggle.current?.focus({ preventScroll: true });
+	}, []);
 
 	useEffect(() => {
 		if (!open) return;
+		const previousOverflow = document.body.style.overflow;
 		document.body.style.overflow = "hidden";
-		closeButton.current?.focus();
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setOpen(false);
+		const desktop = window.matchMedia("(min-width: 1024px)");
+		const onResize = (event: MediaQueryListEvent) => {
+			if (event.matches) close();
 		};
-		document.addEventListener("keydown", onKey);
+		desktop.addEventListener("change", onResize);
 		return () => {
-			document.body.style.overflow = "";
-			document.removeEventListener("keydown", onKey);
+			document.body.style.overflow = previousOverflow;
+			desktop.removeEventListener("change", onResize);
 		};
-	}, [open]);
+	}, [open, close]);
 
-	const close = () => {
-		setOpen(false);
-		toggle.current?.focus();
+	const show = () => {
+		const panel = drawer.current;
+		if (!panel || panel.open) return;
+		panel.showModal();
+		setOpen(true);
+		closeButton.current?.focus({ preventScroll: true });
 	};
 
 	return (
@@ -47,8 +57,9 @@ function MobileDrawer() {
 					type="button"
 					className={styles.iconButton}
 					aria-label={intl.formatMessage({ id: "nginxions.nav.open-menu" })}
+					aria-controls="nginxions-mobile-drawer"
 					aria-expanded={open}
-					onClick={() => setOpen(true)}
+					onClick={show}
 				>
 					<IconLayoutSidebarLeftExpand size={16} />
 				</button>
@@ -64,27 +75,42 @@ function MobileDrawer() {
 					NginxionS
 				</a>
 			</div>
-			<div className={cn(open && styles.drawerOpen)}>
-				<div className={styles.overlay} aria-hidden onClick={close} />
-				<div
-					className={styles.drawer}
-					role="dialog"
-					aria-modal="true"
-					aria-label={intl.formatMessage({ id: "nginxions.nav.menu" })}
-					inert={!open}
+			<dialog
+				ref={drawer}
+				id="nginxions-mobile-drawer"
+				className={styles.drawer}
+				aria-label={intl.formatMessage({ id: "nginxions.nav.menu" })}
+				onCancel={(event) => {
+					event.preventDefault();
+					close();
+				}}
+				onClick={(event) => {
+					const bounds = event.currentTarget.getBoundingClientRect();
+					if (event.target === event.currentTarget && event.clientX >= bounds.right) close();
+				}}
+				onKeyDown={(event) => {
+					if (event.key !== "Tab" || event.defaultPrevented) return;
+					const buttons = Array.from(
+						event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), a[href]"),
+					).filter((node) => !node.closest("[inert]") && node.getClientRects().length > 0);
+					const edge = event.shiftKey ? buttons[0] : buttons.at(-1);
+					if (document.activeElement === edge) {
+						event.preventDefault();
+						(event.shiftKey ? buttons.at(-1) : buttons[0])?.focus();
+					}
+				}}
+			>
+				<button
+					ref={closeButton}
+					type="button"
+					className={styles.drawerClose}
+					aria-label={intl.formatMessage({ id: "nginxions.nav.close-menu" })}
+					onClick={close}
 				>
-					<button
-						ref={closeButton}
-						type="button"
-						className={styles.drawerClose}
-						aria-label={intl.formatMessage({ id: "nginxions.nav.close-menu" })}
-						onClick={close}
-					>
-						<IconX size={24} />
-					</button>
-					<Sidebar onNavigate={() => setOpen(false)} />
-				</div>
-			</div>
+					<IconX size={24} />
+				</button>
+				<Sidebar onNavigate={close} />
+			</dialog>
 		</>
 	);
 }

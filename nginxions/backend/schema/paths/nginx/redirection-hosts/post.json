@@ -67,6 +67,9 @@
 						},
 						"meta": {
 							"$ref": "../../../components/redirection-host-object.json#/properties/meta"
+						},
+						"enabled": {
+							"$ref": "../../../components/redirection-host-object.json#/properties/enabled"
 						}
 					}
 				},

@@ -71,13 +71,13 @@ for (const [name, path] of PAGES) {
 		await page.goto(ADMIN + path, { waitUntil: "networkidle", timeout: 45000 });
 		await page.waitForTimeout(800);
 		const text = await page.evaluate(() => document.getElementById("root")?.innerText ?? "");
-		r.blank = text.trim().length < 20;
-		r.login = /\/login\b/.test(page.url());
+		r.blank = text.trim().length < 20 || (await page.locator("#nginxions-content").count()) !== 1;
+		r.login = (await page.locator('[data-translation-id="login.title"]').count()) > 0;
 		await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 	} catch (err) {
 		r.errors.push(`navigation: ${String(err.message || err).slice(0, 300)}`);
 	}
-	r.failed = r.errors.length > 0 || r.api5xx.length > 0 || r.blank || r.login;
+	r.failed = r.errors.length > 0 || r.console.length > 0 || r.api5xx.length > 0 || r.blank || r.login;
 	results.push(r);
 	await page.close();
 }

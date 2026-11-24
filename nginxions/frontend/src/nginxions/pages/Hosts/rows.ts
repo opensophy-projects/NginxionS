@@ -531,6 +531,11 @@ const settingsOf = (host: Record<string, any>) => {
 	const data: Record<string, any> = {};
 	for (const [key, value] of Object.entries(host)) {
 		if (!READONLY.includes(key) && value !== null && value !== undefined) data[key] = value;
+		if (value === null && (key === "forwardPort" || key === "forwardingPort")) data[key] = null;
+	}
+	// Expanded ACL records are read-only, including those in locations.
+	if (Array.isArray(data.locations)) {
+		data.locations = data.locations.map(({ accessLists: _lists, accessListId: _id, ...location }) => location);
 	}
 	data.meta = { ...(host.meta ?? {}) };
 	for (const key of META_STATE) delete data.meta[key];
@@ -571,41 +576,123 @@ export function exportCsv(rows: HostRow[]): string {
 
 interface ImportItem {
 	type: HostType;
+	name: string;
 	data: Record<string, any>;
 }
 
-/**
- * Validates an exported file and prepares the create payloads: references to certificates
- * and access lists that do not exist here are dropped (the host is created without them).
- */
-export function parseImport(
-	text: string,
-	known: { certificateIds: number[]; accessListIds: number[] },
-): { items: ImportItem[]; dropped: number } {
-	const file = JSON.parse(text);
-	if (file?.format !== EXPORT_FORMAT || !Array.isArray(file.hosts)) {
+type ReferenceKind = "tls" | "mtls" | "access";
+export type ImportReference = { kind: ReferenceKind; id: number };
+export const referenceKey = ({ kind, id }: ImportReference) => `${kind}:${id}`;
+
+const record = (value: unknown): value is Record<string, any> =>
+	!!value && typeof value === "object" && !Array.isArray(value);
+
+const nonEmpty = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const port = (value: unknown) =>
+	value === null || (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535);
+
+/** All references require explicit choices. A matching numeric ID can refer to something else on this server. */
+function mapReferences(data: ImportItem["data"], pick: (reference: ImportReference) => number) {
+	const reference = (kind: ReferenceKind, value: unknown) => {
+		if (value === undefined || value === null || value === 0) return value;
+		if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new Error("reference");
+		return pick({ kind, id: value });
+	};
+	const lists = (scope: ImportItem["data"]) => {
+		const ids = scope.npmplusAccessListIds;
+		if (scope.npmplusAccessListType === "custom" && (!Array.isArray(ids) || !ids.length)) throw new Error("access");
+		if (ids === undefined) return scope;
+		if (!Array.isArray(ids) || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw new Error("access");
+		return { ...scope, npmplusAccessListIds: [...new Set(ids.map((id) => pick({ kind: "access", id })))] };
+	};
+	const mapped = lists({ ...data, meta: { ...data.meta } });
+	if ("certificateId" in mapped) mapped.certificateId = reference("tls", mapped.certificateId);
+	if ("npmplusMtlsCertificateId" in mapped.meta) {
+		mapped.meta.npmplusMtlsCertificateId = reference("mtls", mapped.meta.npmplusMtlsCertificateId);
+	}
+	if (Array.isArray(mapped.locations)) mapped.locations = mapped.locations.map(lists);
+	return mapped;
+}
+
+/** Validate the envelope and required fields before allowing any create request. */
+export function parseImport(text: string): { items: ImportItem[]; references: ImportReference[] } {
+	const file: unknown = JSON.parse(text);
+	if (!record(file) || file.format !== EXPORT_FORMAT || file.version !== 1 || !Array.isArray(file.hosts)) {
 		throw new Error("format");
 	}
-	let dropped = 0;
-	const items = file.hosts
-		.filter((h: any) => (HOST_TYPES as readonly string[]).includes(h?.type) && h.data && typeof h.data === "object")
-		.map((h: any) => {
-			const data = settingsOf(h.data);
-			if (data.certificateId && !known.certificateIds.includes(data.certificateId)) {
-				data.certificateId = 0;
-				dropped++;
-			}
-			const mtls = Number(data.meta.npmplusMtlsCertificateId) || 0;
-			if (mtls && !known.certificateIds.includes(mtls)) {
-				data.meta.npmplusMtlsCertificateId = 0;
-				dropped++;
-			}
-			if (Array.isArray(data.npmplusAccessListIds)) {
-				const ids = data.npmplusAccessListIds.filter((id: number) => known.accessListIds.includes(id));
-				dropped += data.npmplusAccessListIds.length - ids.length;
-				data.npmplusAccessListIds = ids;
-			}
-			return { type: h.type as HostType, data };
-		});
-	return { items, dropped };
+	const references = new Map<string, ImportReference>();
+	const items: ImportItem[] = file.hosts.map((h: unknown) => {
+		if (!record(h) || !HOST_TYPES.includes(h.type) || !record(h.data)) throw new Error("host");
+		const d = h.data;
+		if (d.meta != null && !record(d.meta)) throw new Error("meta");
+		if (d.enabled !== undefined && typeof d.enabled !== "boolean") throw new Error("enabled");
+		if (
+			h.type !== "stream" &&
+			(!Array.isArray(d.domainNames) || !d.domainNames.length || !d.domainNames.every(nonEmpty))
+		) {
+			throw new Error("domainNames");
+		}
+		if (h.type === "proxy") {
+			if (!nonEmpty(d.forwardHost) || !nonEmpty(d.forwardScheme) || !port(d.forwardPort ?? null))
+				throw new Error("upstream");
+			if (
+				d.locations != null &&
+				(!Array.isArray(d.locations) ||
+					!d.locations.every(
+						(l) =>
+							record(l) &&
+							nonEmpty(l.path) &&
+							typeof l.forwardHost === "string" &&
+							nonEmpty(l.forwardScheme) &&
+							port(l.forwardPort),
+					))
+			)
+				throw new Error("locations");
+		}
+		if (
+			h.type === "redirect" &&
+			(!nonEmpty(d.forwardDomainName) ||
+				!nonEmpty(d.forwardScheme) ||
+				!Number.isInteger(d.forwardHttpCode) ||
+				d.forwardHttpCode < 300 ||
+				d.forwardHttpCode > 308)
+		) {
+			throw new Error("redirect");
+		}
+		if (
+			h.type === "stream" &&
+			(!/^\d{1,5}(?:-\d{1,5})?$/.test(String(d.incomingPort)) ||
+				!nonEmpty(d.forwardingHost) ||
+				(d.forwardingPort != null && !/^(?:\d{0,5}|\$server_port)$/.test(String(d.forwardingPort))))
+		) {
+			throw new Error("stream");
+		}
+		const data = settingsOf(d);
+		// Early version 1 exports omitted null upstream ports, but create requires the field.
+		if (h.type === "proxy") data.forwardPort ??= null;
+		if (h.type === "stream") {
+			data.incomingPort = String(data.incomingPort);
+			data.forwardingPort = data.forwardingPort == null ? null : String(data.forwardingPort);
+		}
+		return {
+			type: h.type,
+			name: h.type === "stream" ? `:${data.incomingPort}` : d.domainNames.join(", "),
+			data: mapReferences(data, (ref) => {
+				references.set(referenceKey(ref), ref);
+				return ref.id;
+			}),
+		};
+	});
+	return { items, references: [...references.values()] };
+}
+
+export function resolveImport(items: ImportItem[], choices: ReadonlyMap<string, number>): ImportItem[] {
+	return items.map((item) => ({
+		...item,
+		data: mapReferences(item.data, (ref) => {
+			const id = choices.get(referenceKey(ref));
+			if (id === undefined || !Number.isSafeInteger(id) || id < 1) throw new Error("unmatched reference");
+			return id;
+		}),
+	}));
 }
