@@ -7041,7 +7041,7 @@
 		"defaultMessage": "Claim with the groups"
 	},
 	"nginxions.rbac.oidc.hint": {
-		"defaultMessage": "When at least one role names OIDC groups, the roles of a user who logs in with OIDC follow the groups the IdP sends. The last administrator keeps the role."
+		"defaultMessage": "When at least one role names OIDC groups, the IdP groups determine the roles at sign-in. An empty or missing claim removes the assignments. The last active administrator retains the role."
 	},
 	"nginxions.rbac.oidc.saved": {
 		"defaultMessage": "OIDC group mapping saved"

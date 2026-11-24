@@ -184,7 +184,7 @@ const DEFINITIONS = {
 	},
 };
 
-const table = () => db()("nginxions_setting");
+const table = (connection = db()) => connection("nginxions_setting");
 
 const definition = (key) => {
 	const def = DEFINITIONS[key];
@@ -200,9 +200,9 @@ const parse = (value) => (typeof value === "string" ? JSON.parse(value) : value)
  * @param   {string} key
  * @returns {Promise<any>}
  */
-const getSetting = async (key) => {
+const getSetting = async (key, connection) => {
 	const def = definition(key);
-	const row = await table().where("key", key).first();
+	const row = await table(connection).where("key", key).first();
 	return row ? parse(row.value) : def.default();
 };
 
@@ -235,12 +235,12 @@ const writeRuntimeEnv = async () => {
  * @param   {any}    value
  * @returns {Promise<any>} the stored value
  */
-const setSetting = async (key, value) => {
+const setSetting = async (key, value, connection) => {
 	const def = definition(key);
 	if (!def.validate(value)) {
 		throw new errs.ValidationError(`Invalid value for ${key}`);
 	}
-	await table()
+	await table(connection)
 		.insert({ key, value: JSON.stringify(value), modified_on: new Date() })
 		.onConflict("key")
 		.merge();

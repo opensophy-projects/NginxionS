@@ -115,8 +115,8 @@ export const BUILTIN = {
 export function normalize(permissions) {
 	const result = new Set();
 	for (const permission of permissions) {
-		const [resource, action] = String(permission).split(":");
-		if (!RESOURCES[resource]?.includes(action)) continue;
+		if (!ALL_PERMISSIONS.includes(permission)) continue;
+		const [resource] = permission.split(":");
 		result.add(permission);
 		result.add(`${resource}:view`);
 	}
@@ -198,7 +198,7 @@ export const UPSTREAM_GRANTS = {
 export function decide(label, eff, context = {}) {
 	const [resource, action] = label.split(":");
 	// labels of NginxionS resources (the upstream host sections use their own labels: list, get, ...)
-	if (RESOURCES[resource]?.includes(action)) {
+	if (Object.hasOwn(RESOURCES, resource) && RESOURCES[resource].includes(action)) {
 		return eff.permissions.has(label) ? "grant" : "deny";
 	}
 	// upstream per-user permissions are replaced by roles

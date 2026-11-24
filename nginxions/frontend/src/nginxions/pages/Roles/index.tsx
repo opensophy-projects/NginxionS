@@ -9,7 +9,7 @@ import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { deleteRole, type OidcMapping, type Role, setOidcMapping } from "../../rbac/api";
-import { useCan, useOidcMapping, useRbacRefresh, useRoles } from "../../rbac/hooks";
+import { useCan, useOidcMapping, useRbacMe, useRbacRefresh, useRoles } from "../../rbac/hooks";
 import { roleDescription, roleName } from "../../rbac/labels";
 import { showRoleModal } from "../../rbac/RoleModal";
 import { Dropdown } from "../../ui/Dropdown";
@@ -88,6 +88,7 @@ export default function Roles() {
 	const { data: roles, isLoading, error } = useRoles({ enabled: can("roles", "view") });
 	const refresh = useRbacRefresh();
 	const canManage = can("roles", "manage");
+	const { data: me } = useRbacMe();
 
 	if (isLoading) return <LoadingPage />;
 	if (!can("roles", "view")) {
@@ -250,7 +251,7 @@ export default function Roles() {
 				</div>
 			</div>
 
-			<OidcCard canManage={canManage} />
+			<OidcCard canManage={canManage && !!me?.admin} />
 		</div>
 	);
 }

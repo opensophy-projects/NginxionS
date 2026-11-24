@@ -494,7 +494,8 @@ const internalMtls = {
 		// like the WAF: who edits the host, or a role with pki:manage on the hosts it sees
 		try {
 			await access.can(`${permission(hostType)}:update`, id);
-		} catch {
+		} catch (err) {
+			if (!(err instanceof errs.PermissionError)) throw err;
 			await access.can("pki:manage");
 			await access.can(`${permission(hostType)}:get`, id);
 		}
