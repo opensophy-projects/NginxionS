@@ -14,6 +14,7 @@ import errs from "../../lib/error.js";
 import { global as logger } from "../../logger.js";
 import control from "../control/client.js";
 import { EVENT_TABLE } from "../events/store.js";
+import { assertHostAccess, scopeHosts } from "../rbac/scope.js";
 import { scheduleRegenerate } from "../waf/policy.js";
 import { openTrials } from "../waf/trial.js";
 import * as appsec from "./appsec.js";
@@ -57,9 +58,9 @@ const audit = (access, action, meta) => internalAuditLog.add(access, { action, o
 // ------------------------------------------------------------------ hosts and assets
 
 /** proxy hosts with WAF on: id, name, domains, assets, mode, minimum confidence */
-const wafHosts = async () => {
+const wafHosts = async (accessData, userId) => {
 	const knex = db();
-	const rows = await knex("nginxions_waf_host")
+	const query = knex("nginxions_waf_host")
 		.join("proxy_host", "proxy_host.id", "nginxions_waf_host.proxy_host_id")
 		.where("proxy_host.is_deleted", 0)
 		.select(
@@ -69,6 +70,8 @@ const wafHosts = async () => {
 			"nginxions_waf_host.mode",
 			"nginxions_waf_host.minimum_confidence",
 		);
+	if (accessData) scopeHosts(query, accessData, "proxy_host", userId);
+	const rows = await query;
 	const locations = await knex("nginxions_waf_location").select("proxy_host_id", "path");
 	return rows.map((r) => {
 		const domains = parseJson(r.domain_names, []);
@@ -84,6 +87,9 @@ const wafHosts = async () => {
 		};
 	});
 };
+
+const accessibleWafHosts = async (access, permission = "waf_learning:view") =>
+	wafHosts(await access.can(permission), access.token.getUserId(1));
 
 const hostById = async (id) => (await wafHosts()).find((h) => h.id === id) ?? null;
 
@@ -340,10 +346,9 @@ const internalLearning = {
 	 * @param {{period?, host?, reason?, q?, limit?, offset?, suggestions?}} query
 	 */
 	queue: async (access, query = {}) => {
-		await access.can("waf_learning:view");
 		const period = Object.hasOwn(PERIODS, query.period) ? query.period : "7d";
 		const hostId = Number.parseInt(query.host, 10) || null;
-		const hosts = await wafHosts();
+		const hosts = await accessibleWafHosts(access);
 		const names = new Map(hosts.map((h) => [h.id, h.name]));
 		let groups = await queueGroups(period, hostId, hosts);
 		const counts = { blocked: 0, grey: 0, detected: 0 };
@@ -389,9 +394,8 @@ const internalLearning = {
 	 * @param {string} key
 	 */
 	group: async (access, key, only = null) => {
-		await access.can("waf_learning:view");
 		const from = new Date(Date.now() - PERIODS["30d"]);
-		const hosts = await wafHosts();
+		const hosts = await accessibleWafHosts(access);
 		const group = (await findGroups(from, hosts, new Set(), only)).find((g) => g.key === key);
 		if (!group) throw new errs.ItemNotFoundError(key);
 		const host = hosts.find((h) => h.id === group.hostId);
@@ -411,10 +415,9 @@ const internalLearning = {
 	 * @param {string} id  id of the event
 	 */
 	groupOfEvent: async (access, id) => {
-		await access.can("waf_learning:view");
+		const hosts = await accessibleWafHosts(access);
 		const event = await db()(EVENT_TABLE).where("id", id).where("kind", "security").first();
 		if (!event) throw new errs.ItemNotFoundError(id);
-		const hosts = await wafHosts();
 		const hostId = assetOwner(hosts)(event);
 		if (!hostId) throw new errs.ValidationError("The event is not of a host with WAF");
 		const key = groupKey({ hostId, uri: event.uri, parameter: event.parameter, indicators: event.indicators });
@@ -428,7 +431,7 @@ const internalLearning = {
 	 *   ttl_days?, ban?, ban_duration?, note?}} data
 	 */
 	label: async (access, data = {}) => {
-		await access.can("waf_learning:label");
+		const hosts = await accessibleWafHosts(access, "waf_learning:label");
 		const userId = access.token.getUserId(0);
 		const now = new Date();
 		if (data.suggestion) {
@@ -436,7 +439,7 @@ const internalLearning = {
 			const raw = data.suggestion;
 			const s = { ...raw, hostId: raw.host_id ?? raw.hostId, attackTypes: raw.attack_types ?? raw.attackTypes };
 			if (!["benign", "malicious", "dismiss"].includes(data.decision)) throw new errs.ValidationError("decision");
-			const host = await hostById(Number(s.hostId));
+			const host = hosts.find(({ id }) => id === Number(s.hostId));
 			if (!host?.assets.includes(s.asset)) throw new errs.ValidationError("suggestion: unknown asset");
 			const tenant = await getTenant();
 			await appsec.postSuggestions(tenant, s.asset, [
@@ -474,7 +477,6 @@ const internalLearning = {
 		}
 
 		const from = new Date(now.getTime() - PERIODS["30d"]);
-		const hosts = await wafHosts();
 		let group = (await findGroups(from, hosts)).find((g) => g.key === data.key);
 		// labelled from the card of an event whose group is not in the queue (allowed, or a low score)
 		const eventId = String(data.event_id ?? "");
@@ -482,14 +484,14 @@ const internalLearning = {
 			const event = await db()(EVENT_TABLE).where("id", eventId).where("kind", "security").first();
 			if (event) group = (await findGroups(from, hosts, new Set(), event)).find((g) => g.key === data.key);
 		}
-		if ((await activeKeys()).has(data.key)) throw new errs.ValidationError("The group is already labelled");
 		if (!group)
 			throw new errs.ValidationError(
 				"The group is no longer in the queue (labelled, or its events are older than 30 days)",
 			);
+		if ((await activeKeys()).has(data.key)) throw new errs.ValidationError("The group is already labelled");
 		const label = checkLabel(data);
 		if (label.errors) throw new errs.ValidationError(label.errors.join("; "));
-		const host = await hostById(group.hostId);
+		const host = hosts.find(({ id }) => id === group.hostId);
 		let banned = [];
 		if (label.ban) {
 			banned = label.scopes.filter((s) => s.type === "source").map((s) => s.value);
@@ -558,9 +560,12 @@ const internalLearning = {
 	 * @param {number} id
 	 */
 	undo: async (access, id) => {
-		await access.can("waf_learning:label");
+		const accessData = await access.can("waf_learning:label");
 		const row = await db()(LABEL_TABLE).where("id", id).first();
 		if (!row) throw new errs.ItemNotFoundError(id);
+		if (accessData.permission_visibility !== "all") {
+			await assertHostAccess("proxy_hosts:update", row.proxy_host_id, accessData, access.token.getUserId(1));
+		}
 		if (row.undone_on) throw new errs.ValidationError("Already undone");
 		const label = parseLabel(row);
 		if (label.origin === "tuning") {
@@ -591,10 +596,14 @@ const internalLearning = {
 	 * @param {{host?, decision?, active?, limit?, offset?}} query
 	 */
 	labels: async (access, query = {}) => {
-		await access.can("waf_learning:view");
+		const accessData = await access.can("waf_learning:view");
 		const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 25, 1), 200);
 		const offset = Math.max(Number.parseInt(query.offset, 10) || 0, 0);
 		const filter = (q) => {
+			if (accessData.permission_visibility !== "all") {
+				const hosts = db()("proxy_host").select("id").where("is_deleted", 0);
+				q.whereIn("proxy_host_id", scopeHosts(hosts, accessData, "proxy_host", access.token.getUserId(1)));
+			}
 			const hostId = Number.parseInt(query.host, 10);
 			if (hostId) q.where("proxy_host_id", hostId);
 			if (["benign", "malicious", "dismiss"].includes(query.decision)) q.where("decision", query.decision);
@@ -655,8 +664,7 @@ const internalLearning = {
 	},
 
 	hosts: async (access) => {
-		await access.can("waf_learning:view");
-		const hosts = (await wafHosts()).filter((h) => h.enabled);
+		const hosts = (await accessibleWafHosts(access)).filter((h) => h.enabled);
 		const tenant = await getTenant();
 		const labels = await activeLabels();
 		const trials = await openTrials();

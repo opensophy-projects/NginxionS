@@ -8,7 +8,7 @@ import { Button, Loading } from "src/components";
 import { intl, T } from "src/locale";
 import { showSuccess } from "src/notifications";
 import { setUserRoles } from "./api";
-import { useRbacMe, useRbacRefresh, useRoleAssignments, useRoles } from "./hooks";
+import { canDelegateRole, useRbacMe, useRbacRefresh, useRoleAssignments, useRoles } from "./hooks";
 import { roleDescription, roleName } from "./labels";
 import styles from "./UserRolesModal.module.css";
 
@@ -21,12 +21,11 @@ interface Props extends InnerModalProps {
 export function RolePicker({ selected, onChange }: { selected: Set<number>; onChange: (next: Set<number>) => void }) {
 	const { data: roles } = useRoles();
 	const { data: me } = useRbacMe();
-	const mine = (permissions: string[]) => !!me && (me.admin || permissions.every((p) => me.permissions.includes(p)));
 	if (!roles) return <Loading noLogo />;
 	return (
 		<div className={styles.list}>
 			{roles.map((role) => {
-				const allowed = role.builtin === "administrator" ? !!me?.admin : mine(role.permissions);
+				const allowed = canDelegateRole(me, role);
 				return (
 					<label key={role.id} className={cn(styles.item, !allowed && styles.locked)}>
 						<input
@@ -60,7 +59,7 @@ export function RolePicker({ selected, onChange }: { selected: Set<number>; onCh
 }
 
 const UserRolesModal = EasyModal.create(({ userId, name, visible, remove }: Props) => {
-	const { data: assignments } = useRoleAssignments();
+	const { data: assignments, error: assignmentError } = useRoleAssignments();
 	const refresh = useRbacRefresh();
 	const [chosen, setChosen] = useState<Set<number> | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -92,7 +91,12 @@ const UserRolesModal = EasyModal.create(({ userId, name, visible, remove }: Prop
 			</Modal.Header>
 			<Modal.Body>
 				{error && <Alert variant="danger">{error}</Alert>}
-				{!assignments ? <Loading noLogo /> : <RolePicker selected={selected} onChange={setChosen} />}
+				{assignmentError && <Alert variant="danger">{assignmentError.message}</Alert>}
+				{assignments ? (
+					<RolePicker selected={selected} onChange={setChosen} />
+				) : (
+					!assignmentError && <Loading noLogo />
+				)}
 				<p className={styles.note}>
 					<T id="nginxions.rbac.user-roles.note" />
 				</p>
@@ -101,7 +105,13 @@ const UserRolesModal = EasyModal.create(({ userId, name, visible, remove }: Prop
 				<Button onClick={remove} disabled={saving}>
 					<T id="cancel" />
 				</Button>
-				<Button actionType="primary" className="ms-auto" isLoading={saving} disabled={saving} onClick={save}>
+				<Button
+					actionType="primary"
+					className="ms-auto"
+					isLoading={saving}
+					disabled={saving || !assignments}
+					onClick={save}
+				>
 					<T id="save" />
 				</Button>
 			</Modal.Footer>

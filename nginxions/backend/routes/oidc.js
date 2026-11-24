@@ -131,32 +131,40 @@ router
 
 			const idTokenClaims = tokens.claims();
 
-			let claims = idTokenClaims;
-			if (!idTokenClaims.email) {
-				const userinfo = await client.fetchUserInfo(config, tokens.access_token, idTokenClaims.sub);
-				claims = { ...idTokenClaims, ...userinfo };
-			}
-
-			if (!claims.email) throw new errs.AuthError("The Identity Provider didn't send the 'email' claim");
-
-			if (claims.email_verified === false && process.env.OIDC_REQUIRE_VERIFIED_EMAIL === "true") {
-				throw new errs.AuthError("The email address has not been verified.");
-			}
-
-			logger.info(`Successful authentication for email: ${claims.email.toLowerCase().trim()}`);
-
-			const data = await internalToken.getTokenFromOAuthClaim({ identity: claims.email.toLowerCase().trim() });
-
-			// NginxionS: the roles follow the IdP groups (after the user is known to exist)
 			const { claim } = await getSetting("rbac.oidc");
-			if (claims[claim] === undefined && tokens.access_token) {
-				try {
-					claims = { ...claims, ...(await client.fetchUserInfo(config, tokens.access_token, claims.sub)) };
-				} catch (err) {
-					logger.warn(`OIDC userinfo for groups failed: ${err.message}`);
+			const requireVerified = process.env.OIDC_REQUIRE_VERIFIED_EMAIL === "true";
+			let userinfo;
+			// NginxionS: fetch UserInfo once; a groups lookup must not switch the identity of the session.
+			if (
+				!idTokenClaims.email ||
+				(requireVerified && idTokenClaims.email_verified === undefined) ||
+				!Object.hasOwn(idTokenClaims, claim)
+			) {
+				if (tokens.access_token) {
+					try {
+						userinfo = await client.fetchUserInfo(config, tokens.access_token, idTokenClaims.sub);
+					} catch (err) {
+						logger.warn(`OIDC UserInfo lookup failed: ${err.message}`);
+					}
 				}
 			}
-			await syncOidcGroups(claims.email.toLowerCase().trim(), claims);
+
+			const identity = idTokenClaims.email ?? userinfo?.email;
+			if (typeof identity !== "string" || !identity.trim()) {
+				throw new errs.AuthError("The Identity Provider didn't send the 'email' claim");
+			}
+			const email = identity.toLowerCase().trim();
+			const userinfoEmail = typeof userinfo?.email === "string" ? userinfo.email.toLowerCase().trim() : undefined;
+			const verified =
+				idTokenClaims.email_verified ?? (userinfoEmail === email ? userinfo?.email_verified : undefined);
+			if (requireVerified && verified !== true)
+				throw new errs.AuthError("The email address has not been verified.");
+
+			const claims = { ...userinfo, ...idTokenClaims };
+			await syncOidcGroups(email, claims);
+			const data = await internalToken.getTokenFromOAuthClaim({ identity: email });
+
+			logger.info(`Successful authentication for email: ${email}`);
 
 			res.cookie("__Host-Http-token", data.token, {
 				signed: true,

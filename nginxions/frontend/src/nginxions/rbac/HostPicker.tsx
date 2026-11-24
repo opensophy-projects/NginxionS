@@ -5,13 +5,19 @@ import * as api from "src/api/backend/base";
 import { intl, T } from "src/locale";
 import { SearchField } from "../ui/SearchField";
 import type { RoleHost, RoleHostType } from "./api";
+import { useCan } from "./hooks";
 import styles from "./RoleModal.module.css";
 
-const SOURCES: { type: RoleHostType; url: string; object: string }[] = [
-	{ type: "proxy_host", url: "/nginx/proxy-hosts", object: "proxy-host" },
-	{ type: "redirection_host", url: "/nginx/redirection-hosts", object: "redirection-host" },
-	{ type: "dead_host", url: "/nginx/dead-hosts", object: "dead-host" },
-	{ type: "stream", url: "/nginx/streams", object: "stream" },
+const SOURCES: { type: RoleHostType; url: string; object: string; resource: string }[] = [
+	{ type: "proxy_host", url: "/nginx/proxy-hosts", object: "proxy-host", resource: "proxy_hosts" },
+	{
+		type: "redirection_host",
+		url: "/nginx/redirection-hosts",
+		object: "redirection-host",
+		resource: "redirection_hosts",
+	},
+	{ type: "dead_host", url: "/nginx/dead-hosts", object: "dead-host", resource: "dead_hosts" },
+	{ type: "stream", url: "/nginx/streams", object: "stream", resource: "streams" },
 ];
 
 const t = (id: string) => intl.formatMessage({ id });
@@ -28,10 +34,12 @@ export function HostPicker({
 	onChange: (hosts: RoleHost[]) => void;
 }) {
 	const [filter, setFilter] = useState("");
+	const can = useCan();
 	const lists = useQueries({
 		queries: SOURCES.map((s) => ({
 			queryKey: ["nginxions-rbac-hosts", s.type],
 			queryFn: () => api.get({ url: s.url }) as Promise<any[]>,
+			enabled: can(s.resource),
 			staleTime: 30000,
 		})),
 	});

@@ -12,7 +12,7 @@ import { intl, T } from "src/locale";
 import { showSuccess } from "src/notifications";
 import { createRole, type Role, type RoleInput, type Scope, updateRole } from "./api";
 import { HostPicker } from "./HostPicker";
-import { useCan, useRbacMe, useRbacModel, useRbacRefresh, useRoles } from "./hooks";
+import { canDelegateRole, useCan, useRbacMe, useRbacModel, useRbacRefresh, useRoles } from "./hooks";
 import { actionHint, actionLabel, resourceHint, resourceLabel, roleName } from "./labels";
 import styles from "./RoleModal.module.css";
 
@@ -33,17 +33,21 @@ const RoleModal = EasyModal.create(({ role, from, visible, remove }: Props) => {
 	const { data: me } = useRbacMe();
 	const can = useCan();
 	const refresh = useRbacRefresh();
-	const readOnly = !!role?.builtin || !can("roles", "manage");
+	const canEdit = can("roles", "manage") && (!role || canDelegateRole(me, role));
+	const readOnly = !!role?.builtin || !canEdit;
+	const editableScope = (scope: Scope): Scope => (me?.scope === "all" ? scope : "own");
 	const [form, setForm] = useState<RoleInput>(() => {
 		const source = role ?? from;
-		if (!source) return EMPTY;
+		if (!source) return { ...EMPTY, scope: editableScope(EMPTY.scope) };
 		return {
 			name: role ? source.name : t("nginxions.rbac.copy-of", { name: roleName(source) }),
 			description: source.builtin && !role ? "" : source.description,
-			scope: source.scope,
+			scope: role ? source.scope : editableScope(source.scope),
 			oidcGroups: role ? source.oidcGroups : [],
-			permissions: source.permissions,
-			hosts: source.hosts ?? [],
+			permissions: role
+				? source.permissions
+				: source.permissions.filter((permission) => me?.permissions.includes(permission) || me?.admin),
+			hosts: source.scope === "hosts" && (role || me?.scope === "all") ? (source.hosts ?? []) : [],
 		};
 	});
 	const [groupsText, setGroupsText] = useState(form.oidcGroups.join(", "));
@@ -79,11 +83,18 @@ const RoleModal = EasyModal.create(({ role, from, visible, remove }: Props) => {
 		);
 
 	const applyTemplate = (value: string) => {
-		if (!value) return setForm({ ...form, permissions: [], scope: "all" });
+		if (!value) return setForm({ ...form, permissions: [], scope: editableScope("all"), hosts: [] });
 		const [kind, id] = value.split(":");
 		const source =
 			kind === "builtin" ? model?.builtin.find((b) => b.key === id) : roles?.find((r) => String(r.id) === id);
-		if (source) setForm({ ...form, scope: source.scope, permissions: source.permissions.filter(mine) });
+		if (source) {
+			setForm({
+				...form,
+				scope: editableScope(source.scope),
+				permissions: source.permissions.filter(mine),
+				hosts: "hosts" in source && me?.scope === "all" ? source.hosts : [],
+			});
+		}
 	};
 
 	const save = async () => {
@@ -92,7 +103,7 @@ const RoleModal = EasyModal.create(({ role, from, visible, remove }: Props) => {
 		const data = { ...form, oidcGroups: groupsText.split(/[,\s]+/).filter(Boolean) };
 		try {
 			// a built-in role changes only its OIDC groups
-			if (role) await updateRole(role.id, role.builtin ? { ...role, oidcGroups: data.oidcGroups } : data);
+			if (role) await updateRole(role.id, data);
 			else await createRole(data);
 			refresh();
 			showSuccess(t(role ? "nginxions.rbac.saved" : "nginxions.rbac.created", { name: data.name }));
@@ -238,9 +249,7 @@ const RoleModal = EasyModal.create(({ role, from, visible, remove }: Props) => {
 									<input
 										className="form-control"
 										value={groupsText}
-										disabled={
-											!can("roles", "manage") || (role?.builtin === "administrator" && !me?.admin)
-										}
+										disabled={!canEdit}
 										placeholder={t("nginxions.rbac.oidc-groups.placeholder")}
 										onChange={(e) => setGroupsText(e.target.value)}
 									/>
@@ -332,7 +341,7 @@ const RoleModal = EasyModal.create(({ role, from, visible, remove }: Props) => {
 						<T id="nginxions.rbac.duplicate" />
 					</Button>
 				)}
-				{(!readOnly || (role?.builtin && can("roles", "manage"))) && (
+				{canEdit && (
 					<Button
 						actionType="primary"
 						className={role?.builtin ? "" : "ms-auto"}

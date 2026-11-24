@@ -10,7 +10,7 @@ import { intl, T } from "src/locale";
 import { validateEmail, validateString } from "src/modules/Validations";
 import { showObjectSuccess } from "src/notifications";
 import { setUserRoles } from "src/nginxions/rbac/api";
-import { useRbacRefresh, useRoleAssignments } from "src/nginxions/rbac/hooks";
+import { useCan, useRbacRefresh, useRoleAssignments } from "src/nginxions/rbac/hooks";
 import { RolePicker } from "src/nginxions/rbac/UserRolesModal";
 
 const showUserModal = (id: number | "me" | "new") => {
@@ -27,7 +27,10 @@ const UserModal = EasyModal.create(({ id, visible, remove }: Props) => {
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	// NginxionS: roles of NginxionS instead of the Administrator switch, given with the user
-	const { data: assignments } = useRoleAssignments();
+	const can = useCan();
+	const editingAnother = id === "new" || (typeof id === "number" && !!currentUser && id !== currentUser.id);
+	const canAssignRoles = editingAnother && can("roles", "manage");
+	const { data: assignments } = useRoleAssignments({ enabled: canAssignRoles && id !== "new" });
 	const refreshRbac = useRbacRefresh();
 	const [chosenRoles, setChosenRoles] = useState<Set<number> | null>(null);
 	const currentRoles = new Set(id === "new" ? [] : (assignments?.[id === "me" ? -1 : id] ?? []).map((r) => r.id));
@@ -59,7 +62,7 @@ const UserModal = EasyModal.create(({ id, visible, remove }: Props) => {
 		setUser(payload, {
 			onError: (err: any) => setErrorMsg(err.message),
 			onSuccess: async (saved: any) => {
-				if (!self && chosenRoles && saved?.id) {
+				if (canAssignRoles && chosenRoles && saved?.id) {
 					try {
 						await setUserRoles(saved.id, [...chosenRoles]);
 						refreshRbac();
@@ -247,13 +250,17 @@ const UserModal = EasyModal.create(({ id, visible, remove }: Props) => {
 												</label>
 											</div>
 										</div>
-										<h4 className="py-2 mt-3">
-											<T id="nginxions.rbac.user-roles" />
-										</h4>
-										<RolePicker selected={selectedRoles} onChange={setChosenRoles} />
-										<p className="form-hint mt-2">
-											<T id="nginxions.rbac.user-roles.note" />
-										</p>
+										{canAssignRoles && (
+											<>
+												<h4 className="py-2 mt-3">
+													<T id="nginxions.rbac.user-roles" />
+												</h4>
+												<RolePicker selected={selectedRoles} onChange={setChosenRoles} />
+												<p className="form-hint mt-2">
+													<T id="nginxions.rbac.user-roles.note" />
+												</p>
+											</>
+										)}
 									</div>
 								) : null}
 							</Modal.Body>
