@@ -327,7 +327,7 @@ flowchart LR
 - `ROADMAP.md` — план разработки по фазам
 - `LEARNING-RESEARCH.md` — исследование обучения агента open-appsec (перед фазой 8)
 - `tutor.md` — черновик статьи об open-appsec
-- `adr/` — архитектурные решения: сеть (0001), RBAC (0007), политика WAF (0008), PKI и mTLS (0009), CrowdSec (0010), обучение (0011), несколько серверов (0012)
+- `adr/` — архитектурные решения: сеть (0001), RBAC (0007), политика WAF (0008), PKI и mTLS (0009), CrowdSec (0010), обучение (0011), несколько серверов (0012), проект восстановления ingress-интеграций и поддержки Traefik (`0013-multi-ingress.md`)
 
 ### `nginxions/` — образ nginxions (NPMplus + NginxionS)
 
