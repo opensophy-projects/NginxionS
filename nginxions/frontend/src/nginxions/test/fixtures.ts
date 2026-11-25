@@ -238,11 +238,21 @@ export const role = {
 	builtin: null,
 	scope: "all",
 	oidcGroups: ["analysts"],
-	permissions: ["events:view", "hosts:view"],
+	permissions: ["waf_events:view", "proxy_hosts:view"],
 	hosts: [],
 	users: [{ id: 1, name: "Admin", email: "admin@example.com" }],
 	createdOn: now,
 	modifiedOn: now,
+};
+
+export const rbacModel = {
+	resources: [
+		{ id: "proxy_hosts", actions: ["view", "manage"] },
+		{ id: "waf_events", actions: ["view"] },
+		{ id: "roles", actions: ["view", "manage"] },
+	],
+	scopes: ["all", "own", "hosts"],
+	builtin: [{ key: "viewer", name: "Viewer", scope: "all", permissions: role.permissions }],
 };
 
 export const learningHost = {

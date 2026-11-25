@@ -27,6 +27,7 @@ const ROUTES: [RegExp, unknown][] = [
 			roles: [{ id: 1, name: "Administrator", builtin: "administrator" }],
 		},
 	],
+	[/\/nginxions\/rbac\/model$/, f.rbacModel],
 	[/\/nginxions\/rbac\/roles$/, [f.role]],
 	[/\/nginxions\/pki$/, f.pkiOverview],
 	[/\/nginxions\/pki\/certs\/\d+$/, f.pkiCert],
