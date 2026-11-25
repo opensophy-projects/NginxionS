@@ -364,7 +364,7 @@ flowchart LR
     - `secrets.js` — шифрование секретов в базе (пароли SMTP, ключи webhook, токены ботов)
     - `redact.js` — маскировка секретов в тексте, который уходит наружу (диагностический архив)
     - `services.js` — Обзор → Сервисы: контейнеры стека через `nginxions-control`
-    - `hosts.js` — таблица Хостов: кто и когда менял хост, состояние upstream
+    - `hosts.js`, `hosts.test.js` — таблица Хостов: история изменений, видимость и состояние upstream
     - `certificates.js` — Сертификаты → реестр всех сертификатов системы с серверными страницами
     - `cert-terms.js` — сроки TLS-сертификатов хостов и когда пора обновлять
     - `cert-pair.js` — загруженный сертификат и ключ должны подходить друг к другу
@@ -377,7 +377,7 @@ flowchart LR
     - `stream-ports.js` — один входящий порт (диапазон) на протокол у потоков
     - **`acme/`** — `servers.js` (ACME-серверы: пресеты и свои, EAB), `lego.js` (второй ACME-клиент), `certs.js` (сертификаты NPMplus с сервером из настроек)
     - **`audit/`** — `index.js`: журнал аудита со страницами и фильтрами
-    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
+    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `server.test.js` (HTTP-проверки с подставным сокетом Docker), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (чтение файлов обучения, снимок и подготовка отката), `tar.js` (чтение политики агента из архива Docker API)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
       - `cluster-bans.js` — общие баны кластера (шаг 15.3): свои баны сервера, баны остальных через manager, решения CrowdSec с origin `nginxions-cluster`; `cluster-bans.test.js` — их тесты
@@ -482,7 +482,7 @@ flowchart LR
       - `Admonition.tsx` — блок предупреждения или подсказки
       - `InfoTip.tsx` — кнопка «?» с пояснением колонки, графика или числа
       - `Popover.tsx` — панель под кнопкой (фильтры, вид таблиц)
-      - `Dropdown.tsx`, `SearchField.tsx`, `DateTimePicker.tsx` — меню, поиск, выбор даты
+      - `Dropdown.tsx`, `SearchField.tsx`, `DateTimePicker.tsx` — меню, поиск, выбор даты. `Interactions.test.tsx` проверяет навигацию, язык и тему, клавиатуру и фокус в меню и панелях
       - `CodeDiff.tsx` — разница двух текстов, как в ревью кода
       - `Charts.tsx` — простые SVG-графики (столбцы, списки с полосами)
       - `charts/` — графики Аналитики: `AreaChart.tsx`, `Kpi.tsx`, `WorldMap.tsx`, `curves.ts`, `format.ts`
@@ -492,7 +492,7 @@ flowchart LR
       - `HiddenUsername.tsx` — скрытое поле имени для форм с паролем (предупреждение Chrome)
     - **`pages/`** — страницы
       - `Overview/` — Обзор: что требует внимания (`notices.ts`), хосты, трафик, сервисы
-      - `Hosts/` — Хосты: одна таблица всех типов (`index.tsx`), ячейки (`Cells.tsx`), панель поиска и фильтров (`Toolbar.tsx`), строки (`rows.ts`), рекомендации (`Recommendations.tsx`), API (`api.ts`)
+      - `Hosts/` — Хосты: одна таблица всех типов (`index.tsx`), ячейки (`Cells.tsx`), панель поиска и фильтров (`Toolbar.tsx`), строки (`rows.ts`), рекомендации (`Recommendations.tsx`), API (`api.ts`), сценарии работы с таблицей (`Hosts.test.tsx`)
       - `Access/Intro.tsx` — пояснение над Списками доступа
       - `WafAnalytics/` — Аналитика: вкладки (`tabs.tsx`), общие части (`common.tsx`), «Сейчас» (`Live.tsx`)
       - `WafEvents/` — События: лента, фильтры (`filters.ts`), значки (`badges.tsx`), срок хранения (`Retention.tsx`)

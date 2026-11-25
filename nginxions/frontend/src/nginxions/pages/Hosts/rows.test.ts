@@ -105,6 +105,17 @@ describe("hosts rows", () => {
 		expect(byId("stream-4").protocols).toEqual(["tcp"]);
 	});
 
+	it("shows only country strings from geo settings and ignores empty or unsupported policies", () => {
+		const rows = toRows({
+			proxy: [
+				{ ...sources.proxy[0], meta: { nginxionsGeo: { mode: "deny", countries: ["DE", 7, null, "FR"] } } },
+				{ ...sources.proxy[1], meta: { nginxionsGeo: { mode: "allow", countries: [false] } } },
+				{ ...sources.proxy[1], id: 3, meta: { nginxionsGeo: { mode: "unknown", countries: ["DE"] } } },
+			],
+		});
+		expect(rows.map((row) => row.geo)).toEqual([{ mode: "deny", countries: ["DE", "FR"] }, null, null]);
+	});
+
 	it("derives status, TLS, WAF, mTLS and access", () => {
 		const a = byId("proxy-1");
 		expect([a.status, a.tls, a.expiresInDays, a.waf, a.mtls, a.accessPublic, a.group]).toEqual([
@@ -147,6 +158,8 @@ describe("hosts rows", () => {
 		expect(f("", [["tls", "is", "expiring"]])).toEqual(["proxy-2"]);
 		expect(f("", [["tls", "is", "none"]])).toEqual(["redirect-3", "stream-4", "dead-5"]);
 		expect(f("", [["waf", "is", "off"]])).toEqual(["proxy-2"]);
+		expect(f("", [["mtls", "is", "optional"]])).toEqual(["proxy-2"]);
+		expect(f("", [["mtls", "not", "off"]])).toEqual(["proxy-1", "proxy-2"]);
 		expect(f("", [["access", "is", "7"]])).toEqual(["proxy-2"]);
 		expect(
 			f("", [
@@ -198,6 +211,43 @@ describe("hosts rows", () => {
 			"dead-5",
 			"redirect-3",
 			"stream-4",
+		]);
+	});
+
+	it("sorts types and statuses by their display order, and keeps ungrouped hosts last", () => {
+		expect(sortRows(rows, { key: "type", desc: false }).map((r) => r.type)).toEqual([
+			"proxy",
+			"proxy",
+			"redirect",
+			"stream",
+			"dead",
+		]);
+		expect(sortRows(rows, { key: "status", desc: false }).map((r) => r.status)).toEqual([
+			"online",
+			"online",
+			"online",
+			"error",
+			"disabled",
+		]);
+		expect(sortRows(rows, { key: "group", desc: false })[0].group).toBe("prod");
+		expect(
+			sortRows(rows, { key: "target", desc: false })
+				.filter((r) => r.type === "proxy")
+				.map((r) => r.id),
+		).toEqual([1, 2]);
+		expect(sortRows(rows, { key: "waf", desc: true }).map((r) => r.waf)).toEqual([
+			"prevent",
+			"off",
+			null,
+			null,
+			null,
+		]);
+		expect(sortRows(rows, { key: "mtls", desc: true }).map((r) => r.mtls)).toEqual([
+			"optional",
+			"required",
+			"off",
+			"off",
+			"off",
 		]);
 	});
 
@@ -307,6 +357,21 @@ describe("hosts rows", () => {
 		proxy.npmplusAccessListIds = [7];
 		proxy.domainNames = "bad.example.com";
 		expect(() => parseImport(JSON.stringify(file))).toThrow("domainNames");
+	});
+
+	it.each([
+		{ index: 0, data: { forwardPort: 65536 }, message: "upstream" },
+		{
+			index: 0,
+			data: { locations: [{ path: "", forwardHost: "backend", forwardScheme: "http", forwardPort: 80 }] },
+			message: "locations",
+		},
+		{ index: 2, data: { forwardHttpCode: 200 }, message: "redirect" },
+		{ index: 3, data: { incomingPort: "5432,5433" }, message: "stream" },
+	])("rejects invalid $message settings in a host export", ({ index, data, message }) => {
+		const file = exportData(rows);
+		Object.assign(file.hosts[index].data, data);
+		expect(() => parseImport(JSON.stringify(file))).toThrow(message);
 	});
 
 	it("rejects API key aliases that could overwrite explicit selections when serialized", () => {

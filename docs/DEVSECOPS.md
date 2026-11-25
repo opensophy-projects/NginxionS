@@ -173,7 +173,7 @@ security → Run workflow.
 | Часть | Откуда |
 |---|---|
 | backend (unit) | `node --test` (артефакт `security-quality`); считаются все файлы `nginxions/backend/nginxions`, и те, которые ни один тест не загрузил (0 %) |
-| backend (unit + stack) | то же плюс то, что backend выполнил в тестах стека (`smoke-*`, `gui`): `NODE_V8_COVERAGE` в `deploy/test/compose.airgap.yaml`, SIGUSR2 → `index.js` пишет покрытие, `test-airgap.sh` собирает его в `reports/coverage-stack` |
+| backend (unit + stack) | то же плюс строки backend и nginxions-control, выполненные в тестах стека (`smoke-*`, `gui`). После SIGUSR2 `test-airgap.sh` копирует покрытие V8 из контейнеров в `reports/coverage-stack` |
 | frontend | vitest |
 | go/&lt;сервис&gt; | `go test` сервисов агента |
 
