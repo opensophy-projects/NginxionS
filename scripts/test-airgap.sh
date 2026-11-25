@@ -23,6 +23,12 @@ read -r -a services <<< "${SERVICES:-nginxions openappsec crowdsec clamav}"
 export SMOKE_GROUPS="${SMOKE_GROUPS:-all}"
 smoke_has() { [ "$SMOKE_GROUPS" = all ] || [[ " ${SMOKE_GROUPS//,/ } " == *" $1 "* ]]; }
 
+# The learning-profile browser test waits four minutes for real learning data to reach disk. Use the same
+# one-minute learning window for every GUI run, including Nightly. Standalone smoke keeps the normal window.
+if [ "${GUI_E2E:-0}" = 1 ]; then
+  export NGINXIONS_LEARNING_INTERVAL_MINUTES="${NGINXIONS_LEARNING_INTERVAL_MINUTES:-1}"
+fi
+
 # every error and warning of the stack, compared with deploy/test/log-allowlist.tsv (scripts/audit-logs.mjs): the
 # report is in reports/logs and in the summary of the run; LOG_AUDIT=gate fails the test on a new one
 audit_logs() {
