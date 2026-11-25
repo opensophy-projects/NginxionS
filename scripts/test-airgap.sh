@@ -211,6 +211,11 @@ done <<< "$networks"
 # Test the actual boundary from the edge. Also check numeric addresses so a missing DNS alias
 # cannot hide a routing regression, and use nginx as a reachable control for the probe.
 echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
+control_container=$("${compose[@]}" ps -q control)
+if [ -n "$control_container" ] && [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$control_container")" != none ]; then
+  echo "FAIL: nginxions-control must run without a network" >&2
+  exit 1
+fi
 blocked=(postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080
   nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813 nginxions:7815)
 for endpoint in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 control:7080; do

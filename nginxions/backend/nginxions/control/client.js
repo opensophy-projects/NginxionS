@@ -1,8 +1,9 @@
 // Backend client of the nginxions-control service (see ./server.js).
 import { readFile } from "node:fs/promises";
+import { request } from "node:http";
 import errs from "../../lib/error.js";
 
-// nginxions-control runs in the openappsec container, whose network namespace nginxions shares
+const RPC_SOCKET = process.env.NGINXIONS_CONTROL_RPC_SOCKET;
 const CONTROL_URL = process.env.NGINXIONS_CONTROL_URL || "http://127.0.0.1:7080";
 const TOKEN_FILE = process.env.NGINXIONS_CONTROL_TOKEN_FILE || "/run/nginxions-secrets/control_token";
 const TIMEOUT_MS = 20000;
@@ -19,6 +20,22 @@ const getToken = async () => {
 	return token;
 };
 
+const socketResponse = (path, { method, headers, body, signal }) =>
+	new Promise((resolve, reject) => {
+		if (body !== undefined) headers["Content-Length"] = Buffer.byteLength(body);
+		const req = request({ socketPath: RPC_SOCKET, path, method, headers, signal }, (res) => {
+			const status = res.statusCode ?? 0;
+			const chunks = [];
+			res.on("data", (chunk) => chunks.push(chunk));
+			res.on("error", reject);
+			res.on("end", () =>
+				resolve({ status, ok: status >= 200 && status < 300, text: () => Buffer.concat(chunks).toString() }),
+			);
+		});
+		req.on("error", reject);
+		req.end(body);
+	});
+
 /**
  * @param   {string} method
  * @param   {string} path
@@ -34,17 +51,25 @@ const call = async (method, path, actor, body) => {
 	if (body !== undefined) headers["Content-Type"] = "application/json";
 
 	let response;
+	let text;
 	try {
-		response = await fetch(`${CONTROL_URL}${path}`, {
+		const options = {
 			method,
 			headers,
 			body: body === undefined ? undefined : JSON.stringify(body),
 			signal: AbortSignal.timeout(TIMEOUT_MS),
-		});
+		};
+		response = RPC_SOCKET ? await socketResponse(path, options) : await fetch(`${CONTROL_URL}${path}`, options);
+		text = await response.text();
 	} catch (err) {
 		throw new errs.ConfigurationError(`nginxions-control is unreachable: ${err.cause?.code || err.message}`, err);
 	}
-	const answer = await response.json().catch(() => ({}));
+	let answer = {};
+	try {
+		answer = JSON.parse(text) ?? {};
+	} catch {
+		// A response from an interrupted service or a reverse proxy may not hold JSON.
+	}
 	if (response.status === 404) {
 		throw new errs.ItemNotFoundError(answer.error || path);
 	}

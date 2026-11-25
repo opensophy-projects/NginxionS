@@ -22,10 +22,6 @@ services:
 
   control:
     container_name: ${CLUSTER_STACK:?}-control
-    networks:
-      control:
-        # the address the backend calls (NGINXIONS_CONTROL_URL), the name of the container elsewhere
-        aliases: [nginxions-control]
 
   nginxions:
     container_name: ${CLUSTER_STACK:?}-nginxions

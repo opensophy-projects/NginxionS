@@ -154,14 +154,12 @@ services:
         aliases: [nginxions]
       internal:
         aliases: [nginxions]
-      # nginxions-control, for the backend of nginxions (in this namespace)
-      control: {}
 
   # nginxions-control (nginxions/backend/nginxions/control): the Docker API of the GUI, the only container with the
   # Docker socket. A container of its own (the image of the agent, which carries its code and Node.js), so that a flaw
   # in nginx or in the agent, which take the traffic of the internet, does not reach the socket: other processes, other
   # files, the token only here and in nginxions. Only list, logs, restart and reload of this stack's nginxions.managed
-  # containers; on the network "control" alone (no internet, no other service), root filesystem read-only.
+  # containers. Docker runs control without a network; its Unix socket is shared only with the backend.
   control:
     # no limit by default; NGINXIONS_MEM_CONTROL / NGINXIONS_PIDS_CONTROL in deploy/.env set one (e.g. 2g / 1024)
     mem_limit: ${NGINXIONS_MEM_CONTROL:-0}
@@ -172,6 +170,7 @@ services:
     entrypoint: ["node", "/opt/nginxions-control/server.js"]
     command: []
     read_only: true
+    network_mode: none
     # root on the Docker socket of root and on the files of the agent: no capability is needed
     cap_drop:
       - ALL
@@ -180,7 +179,7 @@ services:
       # the profile of Docker without SCTP sockets (deploy/seccomp/README.md: NGINX2Root, the kernel bug)
       - seccomp=./seccomp/nginxions.json
     healthcheck:
-      test: ["CMD", "wget", "-q", "-T", "4", "-O", "/dev/null", "http://127.0.0.1:7080/healthz"]
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "4", "--unix-socket", "/run/nginxions-control/control.sock", "http://localhost/healthz"]
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -191,10 +190,10 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       NGINXIONS_CONTROL_TOKEN_FILE: /run/secrets/control/control_token
-      # every address of its container (its only network is "control"); older images listened on 127.0.0.1
-      NGINXIONS_CONTROL_LISTEN: 0.0.0.0
+      NGINXIONS_CONTROL_RPC_SOCKET: /run/nginxions-control/control.sock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - control-rpc:/run/nginxions-control
       # what the agent learned (read, and a snapshot staged back for its next start; control/learning.js)
       - appsec-conf:/etc/cp/conf
       - type: volume
@@ -203,8 +202,6 @@ services:
         read_only: true
         volume:
           subpath: control
-    networks:
-      - control
 
   nginxions:
     # no limit by default; NGINXIONS_MEM_NGINXIONS / NGINXIONS_PIDS_NGINXIONS in deploy/.env set one (e.g. 2g / 1024)
@@ -221,9 +218,8 @@ services:
       openappsec:
         condition: service_started
       control:
-        condition: service_started
+        condition: service_healthy
     # the network (ports) and IPC of openappsec; nginxions-control restarts nginxions when openappsec was restarted.
-    # nginxions-control is reached on the network "control" of openappsec
     network_mode: service:openappsec
     ipc: service:openappsec
     cap_drop:
@@ -244,7 +240,7 @@ services:
       retries: 3
     environment:
       TZ: ${TZ:-UTC}
-      NGINXIONS_CONTROL_URL: http://nginxions-control:7080
+      NGINXIONS_CONTROL_RPC_SOCKET: /run/nginxions-control/control.sock
       DB_POSTGRES_HOST: postgres
       DB_POSTGRES_NAME: nginxions
       DB_POSTGRES_USER: nginxions
@@ -262,6 +258,7 @@ services:
       DISABLE_IPV6: ${NGINXIONS_DISABLE_IPV6:-true}
     volumes:
       - nginxions-data:/data
+      - control-rpc:/run/nginxions-control:ro
       - type: volume
         source: secrets
         target: /run/nginxions-secrets
@@ -441,12 +438,10 @@ networks:
   # service-to-service traffic, no internet access
   internal:
     internal: true
-  # nginxions-control and openappsec (nginxions in its namespace) only: no other service reaches the Docker API
-  control:
-    internal: true
 
 volumes:
   secrets: {}
+  control-rpc: {}
   nginxions-data: {}
   postgres-data: {}
   appsec-shm:

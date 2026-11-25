@@ -97,6 +97,58 @@ const scans = (scan) => ({
 	"grype-published-nginxions-develop.json": grype,
 });
 
+test("Grype exceptions match only the reviewed advisory, exact Alpine package and version without a fix", (t) => {
+	const sqlite = (id, name = "sqlite-libs", version = "3.53.4-r0", versions = []) => ({
+		artifact: { name, version, type: "apk" },
+		vulnerability: { id, severity: "High", fix: { versions } },
+	});
+	const known = "CVE-2026-119373";
+	const report = runReport(t, {
+		"grype-nginxions.json": {
+			matches: [
+				sqlite(known),
+				sqlite("CVE-2026-999999"),
+				sqlite(known, "other-sqlite-libs"),
+				sqlite(known, "sqlite-libs", "3.53.5-r0"),
+				sqlite("CVE-2026-119374", "sqlite-libs", "3.53.4-r0", ["3.54.0-r0"]),
+			],
+		},
+	}, { scope: "images" });
+	assert.equal(report.status, 0, report.stdout);
+	assert.deepEqual(report.findings.map(({ verdict }) => verdict), ["accepted", "open", "open", "open", "open"]);
+});
+
+test("the runtime exception cannot suppress a Docker socket on another service or a networked control", (t) => {
+	const finding = (container, severity) => ({ rule: "docker-socket", container, severity, title: "Docker socket" });
+	const report = runReport(t, {
+		"runtime.json": [finding("control", "info"), finding("control-copy", "high"), finding("control", "high")],
+	}, { scope: "extended" });
+	assert.equal(report.status, 1, report.stdout);
+	assert.deepEqual(report.findings.map(({ verdict }) => verdict), ["blocking", "blocking", "accepted"]);
+});
+
+test("the IaC exception applies only to the reviewed Compose service and host path", (t) => {
+	const file = (search_key, path) => ({
+		file_name: "deploy/compose.yaml",
+		search_key,
+		actual_value: `There is a sensitive directory (${path}) mounted as a volume`,
+	});
+	const report = runReport(t, {
+		"results.json": { queries: [{
+			query_id: "1c1325ff-831d-43a1-973e-839ae57dfcc0",
+			query_name: "Volume Has Sensitive Host Directory",
+			severity: "HIGH",
+			files: [
+				file("services.control.volumes", "/var/run/docker.sock"),
+				file("services.openappsec.volumes", "/var/run/docker.sock"),
+				file("services.control.volumes", "/etc"),
+			],
+		}] },
+	}, { scope: "source" });
+	assert.equal(report.status, 0, report.stdout);
+	assert.deepEqual(report.findings.map(({ verdict }) => verdict), ["accepted", "open", "open"]);
+});
+
 function pinnedPython(scan) {
 	scan.Results[0].Packages.push(python("pip", "26.3", layer), python("setuptools", "84.2.1", layer));
 	return scan;

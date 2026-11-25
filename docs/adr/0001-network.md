@@ -50,9 +50,9 @@ NPMplus рекомендует `network_mode: host`. NginxionS — это сте
 команда `node /opt/nginxions-control/server.js`). Причина: в одном контейнере с сокетом Docker работал агент, который
 разбирает трафик из интернета, — выполнение кода в агенте давало сокет, то есть root на хосте. Теперь:
 
-- сокет и токен control есть только в `control`; у `openappsec` нет ни сокета, ни токена;
-- `control` в своей сети `control` (`internal: true`), где кроме него только `openappsec` (и `nginxions` в его
-  пространстве имён: клиент с копией токена); корень только для чтения, `cap_drop: ALL`, `no-new-privileges`;
+- сокет Docker монтирует только `control`. Backend получает копию токена для команд API, `openappsec` его не получает;
+- `control` работает без сети (`network_mode: none`), с корнем только для чтения, `cap_drop: ALL` и `no-new-privileges`.
+  Backend обращается к API через Unix-сокет в отдельном томе `control-rpc`;
 - политику, которую применяет агент (`/tmp/local_appsec.policy`), `control` читает через Docker API (архив файла
   контейнера), файлы обучения — через том `appsec-conf`;
 - «перезапуск» `openappsec` теперь перезапускает контейнер; `control` ждёт, пока агент станет healthy (проверка порта

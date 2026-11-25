@@ -8,6 +8,15 @@
 # with --profile attack, a generator of malicious requests for WAF testing.
 
 services:
+  control:
+    # The published agent image may still carry the previous control code during development.
+    image: nginxions-control:dev
+    build:
+      context: ../nginxions/backend/nginxions/control
+      dockerfile_inline: |
+        FROM ${NGINXIONS_REGISTRY}/nginxions-openappsec:${NGINXIONS_VERSION}
+        COPY server.js watchdog.js learning.js tar.js /opt/nginxions-control/
+
   nginxions-init:
     image: nginxions:dev
     # the healthcheck of compose.yaml, here too: KICS checks each compose file alone (capabilities and

@@ -43,7 +43,10 @@ export const accepted = (result) => {
 		(r) =>
 			!r.unfixed &&
 			!r.trivyPackage &&
-			(r.id === id || r.id === "*") &&
+			!r.grypePackage &&
+			!r.kicsFinding &&
+			!r.runtimeContainer &&
+			(Array.isArray(r.id) ? r.id.includes(id) : r.id === id || r.id === "*") &&
 			(!r.where || location.includes(r.where) || message.includes(r.where)),
 	);
 };

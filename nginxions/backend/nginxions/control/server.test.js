@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,10 +13,11 @@ import { fileURLToPath } from "node:url";
 const project = "control-test";
 const projectLabel = "com.docker.compose.project";
 const serviceLabel = "com.docker.compose.service";
+const managedLabel = "nginxions.managed";
 const managed = (service, extra = {}) => ({
 	Id: service,
 	Names: [`/${service}`],
-	Labels: { [projectLabel]: project, [serviceLabel]: service },
+	Labels: { [projectLabel]: project, [serviceLabel]: service, [managedLabel]: "true" },
 	Image: "local/test:1",
 	State: "running",
 	Status: "Up",
@@ -49,16 +50,44 @@ const frame = (stream, text) => {
 	return Buffer.concat([header, Buffer.from(text)]);
 };
 
+async function launch(env, onCleanup) {
+	const child = spawn(process.execPath, [fileURLToPath(new URL("./server.js", import.meta.url))], {
+		env,
+		stdio: ["ignore", "pipe", "inherit"],
+	});
+	onCleanup(async () => {
+		if (child.pid && child.exitCode === null && child.signalCode === null) {
+			const exited = once(child, "exit");
+			child.kill("SIGTERM");
+			await exited;
+		}
+	});
+	const lines = createInterface({ input: child.stdout });
+	const [line] = await Promise.race([
+		once(lines, "line"),
+		once(child, "exit").then(([status]) => {
+			throw new Error(`nginxions-control exited with ${status}`);
+		}),
+	]);
+	return { child, address: JSON.parse(line).address };
+}
+
 describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 	let dir;
 	let docker;
-	let child;
+	let stopServer;
+	let environment;
 	let base;
 	let policyArchive;
 	let archiveState = "present";
+	let largeLogs = false;
 	let agentStartedAt;
 	let dependentRestarted;
 	const dependent = managed("nginxions", { HostConfig: { NetworkMode: "container:openappsec" } });
+	const outsideProject = managed("foreign", {
+		Labels: { [projectLabel]: "other-project", [serviceLabel]: "foreign", [managedLabel]: "true" },
+	});
+	const unmanaged = managed("sidecar", { Labels: { [projectLabel]: project, [serviceLabel]: "sidecar" } });
 	const token = randomBytes(32).toString("hex");
 	const operations = [];
 
@@ -85,7 +114,8 @@ describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 					return asJson(res, { Config: { Labels: { [projectLabel]: project } } });
 				}
 				if (url.pathname === "/containers/json") {
-					return asJson(res, url.searchParams.has("filters") ? [agent, crowdsec, dependent] : apps);
+					const containers = [agent, crowdsec, dependent, outsideProject, unmanaged];
+					return asJson(res, url.searchParams.has("filters") ? containers : apps);
 				}
 				if (url.pathname === "/containers/crowdsec/json") {
 					return asJson(res, { State: { Health: { Status: "healthy" } }, RestartCount: 2 });
@@ -103,6 +133,7 @@ describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 					return;
 				}
 				if (url.pathname === "/containers/crowdsec/logs") {
+					if (largeLogs) return res.end(Buffer.alloc(9 * 1024 * 1024, "a"));
 					return res.end(Buffer.concat([frame(1, "line one\n"), frame(2, "line two\n")]));
 				}
 				if (
@@ -125,38 +156,28 @@ describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 			docker.listen(socket);
 			await once(docker, "listening");
 
-			child = spawn(process.execPath, [fileURLToPath(new URL("./server.js", import.meta.url))], {
-				env: {
-					...process.env,
-					NGINXIONS_CONTROL_LISTEN: "127.0.0.1",
-					NGINXIONS_CONTROL_PORT: "0",
-					NGINXIONS_CONTROL_WATCHDOG: "false",
-					NGINXIONS_CONTROL_TOKEN_FILE: tokenFile,
-					NGINXIONS_DOCKER_SOCKET: socket,
-					NGINXIONS_AGENT_SERVICE: "openappsec",
-					NGINXIONS_AGENT_LEARNING_DIR: learning,
-					NGINXIONS_AGENT_LEARNING_RESTORE_DIR: join(dir, "restore"),
-				},
-				stdio: ["ignore", "pipe", "inherit"],
+			environment = {
+				...process.env,
+				NGINXIONS_CONTROL_RPC_SOCKET: "",
+				NGINXIONS_CONTROL_LISTEN: "127.0.0.1",
+				NGINXIONS_CONTROL_PORT: "0",
+				NGINXIONS_CONTROL_WATCHDOG: "false",
+				NGINXIONS_CONTROL_TOKEN_FILE: tokenFile,
+				NGINXIONS_DOCKER_SOCKET: socket,
+				NGINXIONS_AGENT_SERVICE: "openappsec",
+				NGINXIONS_AGENT_LEARNING_DIR: learning,
+				NGINXIONS_AGENT_LEARNING_RESTORE_DIR: join(dir, "restore"),
+			};
+			const started = await launch(environment, (stop) => {
+				stopServer = stop;
 			});
-			const lines = createInterface({ input: child.stdout });
-			const [line] = await Promise.race([
-				once(lines, "line"),
-				once(child, "exit").then(([status]) => {
-					throw new Error(`nginxions-control exited with ${status}`);
-				}),
-			]);
-			base = `http://${JSON.parse(line).address}`;
+			base = `http://${started.address}`;
 		},
 		{ timeout: 5000 },
 	);
 
 	after(async () => {
-		if (child?.pid && child.exitCode === null && child.signalCode === null) {
-			const exited = once(child, "exit");
-			child.kill("SIGTERM");
-			await exited;
-		}
+		await stopServer?.();
 		if (docker?.listening) await new Promise((resolve) => docker.close(resolve));
 		if (dir) await rm(dir, { recursive: true, force: true });
 	});
@@ -175,6 +196,34 @@ describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 			body: { error: "Unauthorized" },
 		});
 		assert.equal(operations.length, before);
+	});
+
+	test("the backend uses the private Unix socket, including after control is restarted", async (t) => {
+		const socket = join(dir, "control.sock");
+		const env = { ...environment, NGINXIONS_CONTROL_RPC_SOCKET: socket };
+		const first = await launch(env, (stop) => t.after(stop));
+		const exited = once(first.child, "exit");
+		first.child.kill("SIGKILL");
+		await exited;
+		assert.equal((await lstat(socket)).isSocket(), true);
+		const replacement = await launch(env, (stop) => t.after(stop));
+		assert.equal(replacement.address, socket);
+		assert.equal((await lstat(socket)).mode & 0o077, 0);
+		const script = `import assert from "node:assert/strict";
+			const { default: control } = await import(${JSON.stringify(new URL("./client.js", import.meta.url).href)});
+			await assert.rejects(control.getService("absent"), /Unknown service/);
+			await assert.rejects(control.restoreAgentLearning({ detail: "тест" }, 71), /no files/);
+			console.log(JSON.stringify((await control.listServices()).map(({service}) => service)));`;
+		const helper = spawn(process.execPath, ["--input-type=module", "--eval", script], { env });
+		helper.stderr.pipe(process.stderr);
+		helper.stdout.setEncoding("utf8");
+		let output = "";
+		helper.stdout.on("data", (chunk) => {
+			output += chunk;
+		});
+		const [status] = await once(helper, "close");
+		assert.equal(status, 0);
+		assert.deepEqual(JSON.parse(output), ["openappsec", "crowdsec", "nginxions"]);
 	});
 
 	test("lists and inspects only the configured project's managed services", async () => {
@@ -196,6 +245,26 @@ describe("nginxions-control over HTTP with a fixture Docker socket", () => {
 		assert.equal(info.body.health, "healthy");
 		assert.equal(info.body.restartCount, 2);
 		assert.equal((await request("/v1/services/unrelated")).status, 404);
+		const start = operations.length;
+		assert.equal((await request("/v1/services/foreign/restart", { method: "POST" })).status, 404);
+		assert.equal((await request("/v1/services/sidecar/logs")).status, 404);
+		assert.deepEqual(
+			operations.slice(start).map(({ path }) => path),
+			["/containers/json", "/containers/json"],
+		);
+	});
+
+	test("returns a bounded error when Docker sends more log data than control can safely buffer", async () => {
+		largeLogs = true;
+		try {
+			assert.deepEqual(await request("/v1/services/crowdsec/logs"), {
+				status: 502,
+				body: { error: "Docker API response is too large" },
+			});
+		} finally {
+			largeLogs = false;
+		}
+		assert.equal((await request("/v1/services/crowdsec/logs")).status, 200);
 	});
 
 	test("only includes connected external apps and exposes only their shared network addresses", async () => {

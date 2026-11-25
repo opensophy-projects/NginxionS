@@ -214,6 +214,7 @@ const grype = (doc, { image }) =>
 	(doc?.matches ?? []).map((m) => ({
 		rule: m.vulnerability.id,
 		title: `${m.artifact.name} ${m.artifact.version}`,
+		grypePackage: m.artifact.type === "apk" ? { name: m.artifact.name, version: m.artifact.version } : undefined,
 		severity: fromWord(m.vulnerability.severity),
 		location: image,
 		fix: (m.vulnerability.fix?.versions ?? []).join(", "),
@@ -257,6 +258,7 @@ const kics = (doc) =>
 		(q.files ?? []).map((f) => ({
 			rule: q.query_id,
 			title: q.query_name,
+			kicsFinding: { searchKey: f.search_key, actualValue: f.actual_value },
 			severity: fromWord(q.severity),
 			path: repoPath(f.file_name),
 			location: at(repoPath(f.file_name), f.line),
@@ -306,6 +308,7 @@ const runtime = (doc) =>
 		rule: r.rule,
 		title: `${r.container}: ${r.title}`,
 		severity: r.severity,
+		runtimeContainer: r.container,
 		location: `контейнер ${r.container}`,
 		url: "https://docs.docker.com/reference/compose-file/services/",
 	}));
@@ -617,11 +620,17 @@ const acceptance = (check, f) =>
 	accepted.find(
 		(r) =>
 			(r.tool === check.id || r.tool === "*") &&
-			(r.id === f.rule || r.id === "*") &&
+			(Array.isArray(r.id) ? r.id.includes(f.rule) : r.id === f.rule || r.id === "*") &&
 			// "unfixed": only while the finding has no fixed version (a package of Alpine with no fix yet)
 			(!r.unfixed || !f.fix) &&
 			(!r.trivyPackage ||
 				(f.trivyPackage && Object.entries(r.trivyPackage).every(([key, value]) => f.trivyPackage[key] === value))) &&
+			(!r.grypePackage ||
+				(f.grypePackage && r.grypePackage.names.includes(f.grypePackage.name) &&
+				r.grypePackage.version === f.grypePackage.version)) &&
+			(!r.kicsFinding ||
+				(f.kicsFinding && Object.entries(r.kicsFinding).every(([key, value]) => f.kicsFinding[key] === value))) &&
+			(!r.runtimeContainer || (f.runtimeContainer === r.runtimeContainer && !severe(f.severity))) &&
 			(!r.where || f.location.includes(r.where) || f.title.includes(r.where)),
 	);
 
@@ -878,7 +887,11 @@ const markdown = () => {
 			"| Инструмент | Правило | Где | Причина |",
 			"|---|---|---|---|",
 		);
-		for (const r of stale) out.push(`| ${md(r.tool)} | ${md(r.id)} | ${md(r.where ?? "")} | ${md(r.reason)} |`);
+		for (const r of stale) {
+			const rules = Array.isArray(r.id) ? r.id.join(", ") : r.id;
+			const location = r.where ?? r.grypePackage?.names.join(", ") ?? "";
+			out.push(`| ${md(r.tool)} | ${md(rules)} | ${md(location)} | ${md(r.reason)} |`);
+		}
 		out.push("");
 	}
 	if (sboms.length) {

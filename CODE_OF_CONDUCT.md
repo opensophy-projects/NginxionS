@@ -95,7 +95,7 @@ flowchart TB
         end
     end
 
-    control["контейнер control: nginxions-control<br/>:7080 в сети control<br/>Docker API по белому списку"]
+    control["контейнер control: nginxions-control<br/>без сети, Unix-сокет<br/>Docker API по белому списку"]
     crowdsec["crowdsec — официальный образ<br/>LAPI :8080, AppSec :7422"]
     postgres[("postgres — официальный образ<br/>базы nginxions и appsec")]
     init["nginxions-init — разовый при старте<br/>секреты, тома, снимок hub CrowdSec"]
@@ -105,7 +105,7 @@ flowchart TB
     nginx -- "IPC /dev/shm/check-point" --> agent
     bouncer --> crowdsec
     backend --> postgres
-    backend --> control
+    backend -- "Unix-сокет в томе control-rpc" --> control
     backend --> storage
     backend --> tuning
     tuning --> postgres
@@ -120,8 +120,8 @@ flowchart TB
 - **Секреты.** Их создаёт `nginxions-init` в томе `secrets`; каждый сервис монтирует только свой подкаталог.
 - **Доступ к Docker** есть только у `nginxions-control` — отдельного контейнера `control` (образ агента со своей
   командой): список, логи и перезапуск контейнеров стека, с токеном и аудитом; корень только для чтения, без
-  capabilities, в сети `control` только с `openappsec`. Контейнеры `nginxions` и `openappsec`, которые принимают трафик
-  из интернета, сокета не получают: ошибка в nginx или агенте не даёт доступа к Docker.
+  capabilities и без сети. Backend обращается к нему через Unix-сокет в томе, который монтирует только для чтения.
+  `openappsec` не монтирует этот том. `/var/run/docker.sock` есть только у `control`.
 
 ### Путь запроса
 
@@ -210,6 +210,7 @@ flowchart LR
   - `compose.airgap.yaml` — стек без выхода в интернет
   - `airgap-network.sh` — проверка TCP-изоляции внутренних сервисов из внешней сети стека
   - `compose.cluster.yaml` — несколько стеков на одной машине (`scripts/test-cluster.sh`): имена контейнеров с именем стека, без опубликованных портов, общая внутренняя сеть `cluster` с постоянными адресами
+  - `compose.upgrade-legacy-control.yaml` — запуск старых образов с TCP-интерфейсом `control` на первом шаге теста обновления
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
   - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
