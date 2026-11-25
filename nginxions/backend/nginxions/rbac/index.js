@@ -40,6 +40,8 @@ async function rolesOf(userId, connection) {
 		.select(connection.raw("NULL as resource"), connection.raw("NULL as action"), "host.host_type", "host.host_id");
 	const roles = new Map();
 	for (const row of await permissions.unionAll(bindings)) {
+		// The upstream flag is authoritative for the Administrator role.
+		if (row.builtin === "administrator") continue;
 		const builtin = row.builtin ? model.BUILTIN[row.builtin] : undefined;
 		if (!roles.has(row.id)) {
 			roles.set(row.id, {
@@ -128,6 +130,13 @@ const actorOf = async (access, connection) => {
 		.first();
 	if (!user) throw new errs.PermissionError();
 	return effectiveOf(user, connection);
+};
+
+export const assertUserCreation = async (access, roles, connection) => {
+	const actor = await actorOf(access, connection);
+	if (!actor.admin && (!actor.permissions.has("users:manage") || isAdminRoles(roles))) {
+		throw new errs.PermissionError();
+	}
 };
 
 /** Recheck the account and the actor under the role write lock. */
@@ -290,22 +299,70 @@ const audit = (access, action, objectType, objectId, meta, connection) =>
 
 const findUser = (connection, userId) => userModel.query(connection).where({ id: userId, is_deleted: 0 }).first();
 
-const writeMemberships = async (connection, user, chosen, administrator) => {
-	const wasAdmin = isAdminRoles(user.roles);
+const administratorRole = (connection) => roleTable(connection).where({ builtin: "administrator" }).first();
+
+const readMemberships = async (connection, user, administratorId) => {
+	const rows = await connection("nginxions_user_role").where("user_id", user.id);
+	const memberships = new Map(
+		rows.map(({ role_id, manual_grant, oidc_grant }) => [
+			role_id,
+			{ manual_grant: Boolean(manual_grant), oidc_grant: Boolean(oidc_grant) },
+		]),
+	);
+	if (isAdminRoles(user.roles) && !memberships.has(administratorId)) {
+		memberships.set(administratorId, { manual_grant: true, oidc_grant: false });
+	}
+	return memberships;
+};
+
+const writeMemberships = async (connection, user, chosen, administratorId, source) => {
+	const memberships = await readMemberships(connection, user, administratorId);
+	const selected = new Set(chosen.map(({ id }) => id));
+	for (const id of selected) {
+		if (!memberships.has(id)) memberships.set(id, { manual_grant: false, oidc_grant: false });
+	}
+	for (const [id, grants] of memberships) grants[source] = selected.has(id);
+	const admin = memberships.get(administratorId);
+	if (
+		source === "oidc_grant" &&
+		admin &&
+		!admin.manual_grant &&
+		!admin.oidc_grant &&
+		isAdminRoles(user.roles) &&
+		!user.is_disabled &&
+		!(await hasOtherActiveAdministrator(connection, user.id))
+	) {
+		admin.oidc_grant = true;
+	}
+	const administrator = Boolean(admin?.manual_grant || admin?.oidc_grant);
 	const flags = (parse(user.roles) ?? []).filter((role) => role !== "admin");
 	const roles = administrator ? [...flags, "admin"] : flags;
 	await assertActiveAdministrator(connection, user, { roles });
 	await connection("nginxions_user_role").where("user_id", user.id).delete();
-	const memberships = chosen.filter((role) => role.builtin !== "administrator");
-	if (memberships.length) {
-		await connection("nginxions_user_role").insert(
-			memberships.map((role) => ({ user_id: user.id, role_id: role.id })),
-		);
-	}
-	if (wasAdmin !== administrator) {
+	const rows = [...memberships]
+		.filter(([, grants]) => grants.manual_grant || grants.oidc_grant)
+		.map(([role_id, grants]) => ({ user_id: user.id, role_id, ...grants }));
+	if (rows.length) await connection("nginxions_user_role").insert(rows);
+	if (isAdminRoles(user.roles) !== administrator) {
 		await userModel.query(connection).patch({ roles }).where("id", user.id);
 	}
 	await resyncUsers(connection, [user.id]);
+	return rows.map(({ role_id }) => role_id);
+};
+
+/** Keep the upstream account editor and manual Administrator membership in sync. */
+export const updateManualAdministrator = async (connection, user, requested) => {
+	const { id } = await administratorRole(connection);
+	const membership = connection("nginxions_user_role").where({ user_id: user.id, role_id: id });
+	const current = await membership.clone().first();
+	if (!current) return requested;
+	const manual = isAdminRoles(requested);
+	if (current.oidc_grant) {
+		await membership.update({ manual_grant: manual });
+		return manual ? requested : [...requested, "admin"];
+	}
+	if (!manual) await membership.delete();
+	return requested;
 };
 
 const internalRbac = {
@@ -334,12 +391,15 @@ const internalRbac = {
 			.first();
 		if (!user) throw new errs.PermissionError();
 		const eff = await effectiveOf(user);
-		const roles = await db()("nginxions_user_role")
+		const memberships = await db()("nginxions_user_role")
 			.join("nginxions_role", "nginxions_role.id", "nginxions_user_role.role_id")
 			.where("nginxions_user_role.user_id", userId)
 			.select("nginxions_role.id", "nginxions_role.name", "nginxions_role.builtin");
+		const roles = memberships.filter(({ builtin }) => builtin !== "administrator");
 		if (eff.admin) {
-			const admin = await roleTable().where("builtin", "administrator").select("id", "name", "builtin").first();
+			const admin =
+				memberships.find(({ builtin }) => builtin === "administrator") ??
+				(await roleTable().where("builtin", "administrator").select("id", "name", "builtin").first());
 			if (admin) roles.unshift(admin);
 		}
 		return { admin: eff.admin, scope: eff.scope, hosts: eff.hosts, permissions: [...eff.permissions], roles };
@@ -448,11 +508,25 @@ const internalRbac = {
 		const admin = roles.find((r) => r.builtin === "administrator");
 		const result = {};
 		for (const user of await userModel.query().select("id", "roles").where("is_deleted", 0)) {
-			result[user.id] = isAdminRoles(user.roles) && admin ? [admin] : [];
+			result[user.id] =
+				isAdminRoles(user.roles) && admin ? [{ ...admin, manual_grant: true, oidc_grant: false }] : [];
 		}
-		for (const row of await db()("nginxions_user_role").select("user_id", "role_id")) {
+		for (const row of await db()("nginxions_user_role").select(
+			"user_id",
+			"role_id",
+			"manual_grant",
+			"oidc_grant",
+		)) {
 			const role = roles.find((r) => r.id === row.role_id);
-			if (result[row.user_id] && role) result[row.user_id].push(role);
+			if (!result[row.user_id] || !role) continue;
+			const assignment = {
+				...role,
+				manual_grant: Boolean(row.manual_grant),
+				oidc_grant: Boolean(row.oidc_grant),
+			};
+			const userRoles = result[row.user_id];
+			if (role.builtin !== "administrator") userRoles.push(assignment);
+			else if (userRoles[0]?.builtin === "administrator") userRoles[0] = assignment;
 		}
 		return result;
 	},
@@ -472,11 +546,12 @@ const internalRbac = {
 			const roles = await roleRows(undefined, trx);
 			const chosen = roles.filter((role) => roleIds.includes(role.id));
 			if (chosen.length !== new Set(roleIds).size) throw new errs.ValidationError("Unknown role");
-			const administrator = chosen.some((role) => role.builtin === "administrator");
-			if (!actor.admin && (isAdminRoles(user.roles) || administrator)) forbid(["roles:administrator"]);
+			const administrator = roles.find((role) => role.builtin === "administrator");
+			if (!actor.admin && (isAdminRoles(user.roles) || chosen.includes(administrator)))
+				forbid(["roles:administrator"]);
 			const before = roles.filter((role) => role.users.some((member) => member.id === user.id));
 			for (const role of [...before, ...chosen]) forbid(model.missing(actor, role.permissions, role.scope));
-			await writeMemberships(trx, user, chosen, administrator);
+			const effectiveIds = await writeMemberships(trx, user, chosen, administrator.id, "manual_grant");
 			await audit(
 				access,
 				"updated",
@@ -485,7 +560,7 @@ const internalRbac = {
 				{ name: user.name, roles: chosen.map((role) => role.name) },
 				trx,
 			);
-			return chosen.map((role) => role.id);
+			return effectiveIds;
 		});
 	},
 
@@ -515,17 +590,18 @@ const groupNames = (value) => {
 export async function syncOidcGroups(email, claims) {
 	return withRbacWrite(async (trx) => {
 		const { claim } = await getSetting("rbac.oidc", trx);
-		const mapped = (await roleRows(undefined, trx)).filter((role) => role.oidc_groups.length);
-		if (!mapped.length) return;
+		const roles = await roleTable(trx).select("id", "name", "builtin", "oidc_groups");
+		const administrator = roles.find((role) => role.builtin === "administrator");
 		const user = await userModel.query(trx).where({ email, is_deleted: 0, is_disabled: 0 }).first();
 		if (!user) throw new errs.AuthError("User not found");
 		const groups = new Set(groupNames(claims && Object.hasOwn(claims, claim) ? claims[claim] : undefined));
-		const chosen = mapped.filter((role) => role.oidc_groups.some((group) => groups.has(group)));
-		const matchedAdmin = chosen.some((role) => role.builtin === "administrator");
-		const keepAdmin = isAdminRoles(user.roles) && !(await hasOtherActiveAdministrator(trx, user.id));
-		await writeMemberships(trx, user, chosen, matchedAdmin || keepAdmin);
-		const names = chosen.map((role) => role.name);
-		if (keepAdmin && !matchedAdmin) names.push(model.BUILTIN.administrator.name);
+		const chosen = roles.filter((role) => (parse(role.oidc_groups) ?? []).some((group) => groups.has(group)));
+		const prior = await trx("nginxions_user_role").where({ user_id: user.id, oidc_grant: true }).select("role_id");
+		if (prior.length === chosen.length && prior.every(({ role_id }) => chosen.some(({ id }) => id === role_id))) {
+			return;
+		}
+		const ids = await writeMemberships(trx, user, chosen, administrator.id, "oidc_grant");
+		const names = roles.filter((role) => ids.includes(role.id)).map((role) => role.name);
 		await internalAuditLog.add(
 			null,
 			{

@@ -489,7 +489,7 @@ function WafPolicyPage() {
 }
 
 const WafPolicy = () => (
-	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo>
+	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo allHosts>
 		<WafPolicyPage />
 	</HasPermission>
 );

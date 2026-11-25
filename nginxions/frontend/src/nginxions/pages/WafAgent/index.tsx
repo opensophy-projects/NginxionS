@@ -241,7 +241,7 @@ function WafAgentPage() {
 }
 
 const WafAgent = () => (
-	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo>
+	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo allHosts>
 		<WafAgentPage />
 	</HasPermission>
 );

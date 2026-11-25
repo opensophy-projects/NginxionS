@@ -1,14 +1,17 @@
 // Every component and every window of the interface of NginxionS renders, in both languages, with the data the API
 // answers (test/fixtures.ts): a page that throws on the data of a real stack, a window that does not open, a missing
 // provider or prop fail here, not in the browser of an administrator.
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import EasyModal from "ez-modal-react";
 import { changeLocale } from "src/locale";
+import Users from "src/pages/Users";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { toWafForm } from "./components/WafFields";
+import AgentOpenappsec from "./pages/AgentOpenappsec";
 import { type HostRow, recommendations, toRows } from "./pages/Hosts/rows";
+import { showUserRolesModal } from "./rbac/UserRolesModal";
 import * as f from "./test/fixtures";
-import { mockApi, renderApp, settle } from "./test/harness";
+import { answer, mockApi, renderApp, settle } from "./test/harness";
 
 beforeAll(mockApi);
 afterEach(cleanup);
@@ -321,5 +324,90 @@ describe("pages, used", () => {
 		const reported = errors.mock.calls.map((c) => String(c[0])).filter((m) => /The above error|Uncaught/.test(m));
 		errors.mockRestore();
 		expect(reported).toEqual([]);
+	});
+});
+
+describe("Phase 3 permissions", () => {
+	const delegate = { ...f.user, id: 2, name: "Delegate", roles: [] };
+	const other = { ...f.user, id: 3, name: "Other user", roles: [] };
+	const signIn = (permissions: string[]) =>
+		vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			const path = url.split("?")[0];
+			const body = path.endsWith("/rbac/me")
+				? { admin: false, scope: "own", permissions, roles: [] }
+				: path.endsWith("/users/me")
+					? delegate
+					: path.endsWith("/api/users")
+						? [f.user, delegate, other]
+						: answer(url);
+			return new Response(JSON.stringify(body), {
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+	const actionsOf = (name: string) => {
+		const row = screen.getByText(name).closest("tr");
+		if (!row) throw new Error(`Missing row for ${name}`);
+		return within(row);
+	};
+
+	afterEach(() => {
+		mockApi();
+	});
+
+	it("keeps the user directory read-only except for the current profile", async () => {
+		signIn(["users:view"]);
+		await changeLocale("en");
+		await renderApp(<Users />);
+		await screen.findByText("Delegate");
+		expect(screen.queryByText(/add user/i)).toBeNull();
+		expect(actionsOf("Delegate").getByRole("button", { name: "User #2" })).toBeTruthy();
+		expect(actionsOf("Other user").queryByRole("button")).toBeNull();
+	});
+
+	it("shows user management without administrator-only controls", async () => {
+		signIn(["users:view", "users:manage"]);
+		await changeLocale("en");
+		await renderApp(<Users />);
+		expect(await screen.findByText(/add user/i)).toBeTruthy();
+		expect(actionsOf("Admin").queryByRole("button")).toBeNull();
+		const otherActions = actionsOf("Other user");
+		expect(otherActions.getByRole("button", { name: "User #3" })).toBeTruthy();
+		expect(otherActions.queryByText(/log in as/i)).toBeNull();
+		expect(otherActions.queryByText("Permissions")).toBeNull();
+	});
+
+	it("distinguishes OIDC assignments from roles selected manually", async () => {
+		const requests = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			const data = url.endsWith("/rbac/users")
+				? { 1: [{ id: f.role.id, name: f.role.name, builtin: null, oidcGrant: true, manualGrant: false }] }
+				: answer(url);
+			return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+		});
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showUserRolesModal(1, f.user.name);
+		});
+		const role = (await screen.findByRole("checkbox", { name: /Analyst.*OIDC/ })) as HTMLInputElement;
+		expect(role.checked).toBe(false);
+		fireEvent.click(role);
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await settle();
+		const request = requests.mock.calls.find(([input]) => String(input).endsWith("/rbac/users/1"));
+		expect(JSON.parse(String(request?.[1]?.body))).toEqual({ roles: [f.role.id] });
+	});
+
+	it("keeps scoped WAF navigation on host policies and learning", async () => {
+		const requests = signIn(["waf_policy:view", "waf_learning:view"]);
+		await changeLocale("en");
+		await renderApp(<AgentOpenappsec />);
+		expect(await screen.findByRole("button", { name: /app\.example\.com/ })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Agent" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Versions" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Learning" }));
+		await settle();
+		expect(requests.mock.calls.some(([url]) => /learning\/(snapshots|profiles)/.test(String(url)))).toBe(false);
 	});
 });

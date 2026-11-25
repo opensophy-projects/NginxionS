@@ -698,6 +698,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			...ADMIN,
 			can: async (permission) => {
 				if (permission === "waf_learning:sync") throw new Error(`forbidden: ${permission}`);
+				return true;
 			},
 		};
 		await assert.rejects(() => snapshots.restore(withoutSync, imported.id), /forbidden: waf_learning:sync/);
@@ -726,6 +727,7 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 			...ADMIN,
 			can: async (permission) => {
 				assert.notEqual(permission, "waf_learning:sync");
+				return true;
 			},
 		};
 

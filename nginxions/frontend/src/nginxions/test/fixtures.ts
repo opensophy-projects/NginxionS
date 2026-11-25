@@ -251,11 +251,12 @@ export const learningHost = {
 	mode: "detect-learn",
 	minimumConfidence: "high",
 	stats: {
-		elapsedHours: 30,
+		elapsed: "30h",
 		requests: 12000,
-		uniqueSources: 40,
-		level: "Kindergarten",
-		readiness: 60,
+		sources: 40,
+		level: 1,
+		readiness: "kindergarten",
+		ready: false,
 		recommendation: "keep learning",
 	},
 	labels: { benign: 2, malicious: 1, dismiss: 0, exceptions: 1 },
@@ -286,7 +287,7 @@ export const queueGroup = {
 	last: now,
 	reason: "blocked",
 	new: true,
-	scopes: [{ type: "parameter", value: "q" }],
+	scopes: [{ type: "parameterName", value: "q" }],
 };
 
 export const suggestion = {
@@ -294,7 +295,7 @@ export const suggestion = {
 	asset: "app.example.com",
 	hostId: 1,
 	hostName: "app.example.com",
-	type: "parameter",
+	type: "parameterName",
 	title: "q",
 	severity: "high",
 	attackTypes: ["XSS"],

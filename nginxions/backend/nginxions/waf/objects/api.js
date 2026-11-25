@@ -5,6 +5,7 @@ import YAML from "yaml";
 import db from "../../../db.js";
 import internalAuditLog from "../../../internal/audit-log.js";
 import errs from "../../../lib/error.js";
+import { allHosts, assertGlobalAccess } from "../../rbac/scope.js";
 import { setSetting } from "../../settings.js";
 import { checkApplied } from "../applied.js";
 import { diffLines } from "../expert.js";
@@ -474,7 +475,8 @@ const internalWafObjects = {
 	 * @param {Access} access
 	 */
 	get: async (access) => {
-		await access.can("waf_policy:view");
+		// Host editors use the shared catalog. Policy diagnostics are deployment-wide.
+		const scope = await access.can("waf_policy:view");
 		const objects = await listObjects();
 		return {
 			objects,
@@ -482,7 +484,7 @@ const internalWafObjects = {
 			templates: Object.fromEntries(
 				Object.entries(TEMPLATES).map(([name, t]) => [name, { mode: t.mode, ...idsOf(t, objects) }]),
 			),
-			state: { ...getPolicyState(), check: await checkApplied() },
+			state: allHosts(scope) ? { ...getPolicyState(), check: await checkApplied() } : {},
 		};
 	},
 
@@ -491,7 +493,7 @@ const internalWafObjects = {
 	 * @param {{kind, name, description?, spec}} data
 	 */
 	create: async (access, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const objects = await listObjects();
 		const object = checkObject(data, objects, 0);
 		await ensureBaseline();
@@ -510,7 +512,7 @@ const internalWafObjects = {
 	 * @param {{kind, name, description?, spec}} data
 	 */
 	update: async (access, id, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const objects = await listObjects();
 		const old = getObject(objects, id);
 		if (old.builtin) throw new errs.ValidationError(`${old.name} is built in and read-only (duplicate it)`);
@@ -533,7 +535,7 @@ const internalWafObjects = {
 	 * @param {number} id
 	 */
 	delete: async (access, id) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const objects = await listObjects();
 		const object = getObject(objects, id);
 		if (object.builtin) throw new errs.ValidationError(`${object.name} is built in`);
@@ -549,7 +551,7 @@ const internalWafObjects = {
 	 * @param {{mode, threatPreventionPractices?, ...}} data
 	 */
 	setPolicy: async (access, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const objects = await listObjects();
 		const policy = checkPolicy(data, objects);
 		await ensureBaseline();
@@ -563,7 +565,7 @@ const internalWafObjects = {
 	 * @param {object} change  see candidateOf
 	 */
 	preview: async (access, change) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const objects = await listObjects();
 		let candidate;
 		try {
@@ -586,7 +588,7 @@ const internalWafObjects = {
 	 * @param {Access} access
 	 */
 	versions: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const rows = await db()("nginxions_waf_policy_version as v")
 			.leftJoin("user as u", "u.id", "v.user_id")
 			.select("v.id", "v.comment", "v.created_on", "u.name as user_name")
@@ -601,7 +603,7 @@ const internalWafObjects = {
 	 * @param {number} id
 	 */
 	rollback: async (access, id) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const row = await db()("nginxions_waf_policy_version").where({ id }).first();
 		if (!row) throw new errs.ItemNotFoundError(id);
 		await restore(parse(row.state));
@@ -614,7 +616,7 @@ const internalWafObjects = {
 	 * @returns {Promise<string>}
 	 */
 	export: async (access, format = "v1beta2", section = null) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		// one kind of objects (Agents → open-appsec → a kind → Code): the administrator's objects of it; the
 		// built-in ones are named in the head (they are not imported)
 		if (section) {
@@ -648,7 +650,7 @@ const internalWafObjects = {
 	 * @param {boolean} dryRun  only what would be done
 	 */
 	import: async (access, content, dryRun) => {
-		await access.can(dryRun ? "waf_policy:view" : "waf_policy:manage");
+		await assertGlobalAccess(access, dryRun ? "waf_policy:view" : "waf_policy:manage");
 		const plan = importPlan(content, await listObjects());
 		if (dryRun || plan.errors.length) return { applied: false, ...planSummary(plan) };
 		await ensureBaseline();

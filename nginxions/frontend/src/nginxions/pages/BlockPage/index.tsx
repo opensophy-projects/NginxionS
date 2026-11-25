@@ -297,7 +297,7 @@ function BlockPagePage() {
 }
 
 const BlockPage = () => (
-	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo>
+	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo allHosts>
 		<BlockPagePage />
 	</HasPermission>
 );

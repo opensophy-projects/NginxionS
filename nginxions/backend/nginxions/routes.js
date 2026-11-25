@@ -37,6 +37,7 @@ import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
 import { nodeLearningLimiter, nodeLimiter, sensitiveLimiter } from "./rate-limit.js";
 import internalRbac from "./rbac/index.js";
+import { assertGlobalAccess } from "./rbac/scope.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
 import internalWafAgent from "./waf/agent-settings.js";
@@ -688,7 +689,7 @@ router
 	.all(jwtdecode())
 	.get(
 		handle(async (_, res) => {
-			await res.locals.access.can("waf_policy:view");
+			await assertGlobalAccess(res.locals.access, "waf_policy:view");
 			return getAgentMetrics();
 		}),
 	);

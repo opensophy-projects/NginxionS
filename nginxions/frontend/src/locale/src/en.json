@@ -7212,7 +7212,7 @@
 		"defaultMessage": "Roles"
 	},
 	"nginxions.rbac.user-roles.note": {
-		"defaultMessage": "Permissions of several roles add up. Without a role the user can log in but sees nothing."
+		"defaultMessage": "Select the roles assigned manually. Roles marked OIDC also come from your identity provider and remain active while that assignment is supported by a group."
 	},
 	"nginxions.rbac.user-saved": {
 		"defaultMessage": "Roles of {name} saved"

@@ -1,6 +1,7 @@
 // WAF -> Policy (expert): edit, check (diff against the file in force), save and roll back the
 // YAML fragments merged over the generated policy (see custom.js). Every save is a new version.
 
+import { assertGlobalAccess } from "../rbac/scope.js";
 import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
@@ -101,7 +102,7 @@ const internalWafExpert = {
 	 * @param {Access} access
 	 */
 	get: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const current = await db()("nginxions_waf_custom_policy").orderBy("id", "desc").first();
 		return {
 			id: current?.id ?? null,
@@ -117,7 +118,7 @@ const internalWafExpert = {
 	 * @param {string} content
 	 */
 	check: async (access, content) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		let candidate;
 		try {
 			candidate = await candidatePolicy(content);
@@ -147,7 +148,7 @@ const internalWafExpert = {
 	 * @param {{content: string, comment?: string}} data
 	 */
 	save: async (access, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const result = await save(access, data.content, data.comment);
 		await internalAuditLog.add(access, {
 			action: "updated",
@@ -164,7 +165,7 @@ const internalWafExpert = {
 	 * @param {number} id
 	 */
 	rollback: async (access, id) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const old = await db()("nginxions_waf_custom_policy").where({ id }).first();
 		if (!old) {
 			throw new errs.ItemNotFoundError(id);
