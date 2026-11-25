@@ -1,6 +1,8 @@
 import express from "express";
 import internalAuditLog from "../internal/audit-log.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
+// NginxionS: bound requests before session or service-token authorization.
+import { panelLimiter } from "../nginxions/rate-limit.js";
 import validator from "../lib/validator/index.js";
 import { debug, express as logger } from "../logger.js";
 
@@ -18,7 +20,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/audit-log
@@ -62,7 +64,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/audit-log/123

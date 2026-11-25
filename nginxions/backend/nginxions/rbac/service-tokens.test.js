@@ -181,6 +181,7 @@ test("service token API and RBAC with PostgreSQL", { skip: !postgres }, async (t
 	await t.test("scope is based on assigned roles and selected hosts", async () => {
 		const { res, data } = await request(hosts, { bearer });
 		assert.equal(res.status, 200);
+		assert.match(res.headers.get("ratelimit-policy"), /q=1200; *w=60/);
 		assert.deepEqual(
 			data.map(({ id }) => id),
 			[published.id],

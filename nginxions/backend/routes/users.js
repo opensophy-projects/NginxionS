@@ -7,7 +7,7 @@ import jwtdecode from "../lib/express/jwt-decode.js";
 import userIdFromMe from "../lib/express/user-id-from-me.js";
 import apiValidator from "../lib/validator/api.js";
 import validator from "../lib/validator/index.js";
-import { sensitiveLimiter } from "../nginxions/rate-limit.js"; // NginxionS: limit of the login as another user
+import { panelLimiter, sensitiveLimiter } from "../nginxions/rate-limit.js"; // NginxionS: limit of the login as another user
 import { debug, express as logger } from "../logger.js";
 import { getValidationSchema } from "../schema/index.js";
 import { isSetup } from "../setup.js";
@@ -26,7 +26,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/users
@@ -101,7 +101,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -186,7 +186,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -216,7 +216,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -246,7 +246,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * POST /api/users/123/login
@@ -287,7 +287,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -349,7 +349,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -378,7 +378,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
