@@ -9,6 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { toWafForm } from "./components/WafFields";
 import AgentOpenappsec from "./pages/AgentOpenappsec";
 import { type HostRow, recommendations, toRows } from "./pages/Hosts/rows";
+import { showRoleModal } from "./rbac/RoleModal";
 import { showUserRolesModal } from "./rbac/UserRolesModal";
 import * as f from "./test/fixtures";
 import { answer, mockApi, renderApp, settle } from "./test/harness";
@@ -375,6 +376,83 @@ describe("Phase 3 permissions", () => {
 		expect(otherActions.getByRole("button", { name: "User #3" })).toBeTruthy();
 		expect(otherActions.queryByText(/log in as/i)).toBeNull();
 		expect(otherActions.queryByText("Permissions")).toBeNull();
+	});
+
+	it("creates a role from a template and saves the chosen hosts", async () => {
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal();
+		});
+		const template = await screen.findByRole("combobox", { name: "Start from" });
+		fireEvent.click(screen.getByRole("button", { name: "All" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" }).every((el) => el.checked)).toBe(
+			true,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "View only" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" }).some((el) => el.checked)).toBe(
+			false,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "None" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "View" }).some((el) => el.checked)).toBe(
+			false,
+		);
+		fireEvent.change(template, { target: { value: "builtin:viewer" } });
+		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "App reviewers" } });
+		fireEvent.click(screen.getByRole("radio", { name: "Own and chosen hosts" }));
+		const host = await screen.findByRole<HTMLInputElement>("checkbox", { name: f.proxyHost.domainNames[0] });
+		fireEvent.click(host);
+		expect(host.checked).toBe(true);
+		fireEvent.click(host);
+		expect(host.checked).toBe(false);
+		fireEvent.click(host);
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await settle();
+		const request = vi
+			.mocked(fetch)
+			.mock.calls.find(([url, options]) => String(url).endsWith("/rbac/roles") && options?.method === "POST");
+		expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+			name: "App reviewers",
+			scope: "hosts",
+			permissions: f.role.permissions,
+			hosts: [{ host_type: "proxy_host", host_id: f.proxyHost.id }],
+		});
+	});
+
+	it("disables the scope and permissions a delegated role editor cannot grant", async () => {
+		signIn(["roles:view", "roles:manage", "proxy_hosts:view"]);
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal();
+		});
+		expect((await screen.findByRole<HTMLInputElement>("radio", { name: "Own hosts" })).checked).toBe(true);
+		expect(screen.getByRole<HTMLInputElement>("radio", { name: "All hosts" }).disabled).toBe(true);
+		const [manageHosts, manageRoles] = screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" });
+		expect(manageHosts.disabled).toBe(true);
+		expect(manageRoles.disabled).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: "All" }));
+		expect(manageHosts.checked).toBe(false);
+		expect(manageRoles.checked).toBe(true);
+	});
+
+	it("edits the OIDC groups of a built-in role with its permissions locked", async () => {
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal({ role: { ...f.role, builtin: "viewer", scope: "all" } });
+		});
+		const groups = await screen.findByRole<HTMLInputElement>("textbox", { name: /OIDC groups/ });
+		expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(true);
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox").every((el) => el.disabled)).toBe(true);
+		fireEvent.change(groups, { target: { value: "editors, auditors" } });
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await settle();
+		const target = `/rbac/roles/${f.role.id}`;
+		const request = vi
+			.mocked(fetch)
+			.mock.calls.find(([url, options]) => String(url).endsWith(target) && options?.method === "PUT");
+		expect(JSON.parse(String(request?.[1]?.body)).oidc_groups).toEqual(["editors", "auditors"]);
 	});
 
 	it("distinguishes OIDC assignments from roles selected manually", async () => {
