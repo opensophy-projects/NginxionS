@@ -7,7 +7,7 @@ import errs from "../../lib/error.js";
 import jwtdecode from "../../lib/express/jwt-decode.js";
 import apiValidator from "../../lib/validator/api.js";
 import validator from "../../lib/validator/index.js";
-import { sensitiveLimiter } from "../../nginxions/rate-limit.js"; // NginxionS: limit of the download of a certificate
+import { panelLimiter, sensitiveLimiter } from "../../nginxions/rate-limit.js"; // NginxionS: limit of the download of a certificate
 import { debug, express as logger } from "../../logger.js";
 import { getValidationSchema } from "../../schema/index.js";
 
@@ -25,7 +25,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/certificates
@@ -84,7 +84,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/nginx/certificates/dns-providers
@@ -120,7 +120,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * POST /api/nginx/certificates/test-http
@@ -150,7 +150,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * POST /api/nginx/certificates/validate
@@ -187,7 +187,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/certificates/123
@@ -252,7 +252,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/certificates/123/upload
@@ -290,7 +290,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/certificates/123/renew
@@ -320,7 +320,7 @@ router
 	.options((_req, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/nginx/certificates/123/download
