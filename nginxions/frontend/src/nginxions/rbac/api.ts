@@ -54,8 +54,10 @@ export const updateRole = (id: number, data: RoleInput): Promise<Role> =>
 	api.put({ url: `/nginxions/rbac/roles/${id}`, data });
 export const deleteRole = (id: number) => api.del({ url: `/nginxions/rbac/roles/${id}` });
 type RoleRef = { id: number; name: string; builtin: BuiltinRole | null };
+type RoleAssignment = RoleRef & { manualGrant: boolean; oidcGrant: boolean };
 /** {user id: roles}; the Administrator role for admins */
-export const getRoleAssignments = (): Promise<Record<string, RoleRef[]>> => api.get({ url: "/nginxions/rbac/users" });
+export const getRoleAssignments = (): Promise<Record<string, RoleAssignment[]>> =>
+	api.get({ url: "/nginxions/rbac/users" });
 export const setUserRoles = (userId: number, roles: number[]): Promise<number[]> =>
 	api.put({ url: `/nginxions/rbac/users/${userId}`, data: { roles } });
 export const getOidcMapping = (): Promise<OidcMapping> => api.get({ url: "/nginxions/rbac/oidc" });

@@ -20,7 +20,7 @@ export const HOST_TABLES = Object.values(HOST_SECTIONS);
  * @param {number} userId
  */
 export const scopeHosts = (query, accessData, table, userId) => {
-	if (accessData?.permission_visibility === "all") return query;
+	if (allHosts(accessData)) return query;
 	const ids = accessData?.nginxions_hosts?.[table] ?? [];
 	return query.andWhere((q) => {
 		q.where(`${table}.owner_user_id`, userId);
@@ -37,4 +37,12 @@ export const assertHostAccess = async (label, id, accessData, userId) => {
 	const query = db()(table).where({ id, is_deleted: 0 }).select("id");
 	const host = await scopeHosts(query, accessData, table, userId).first();
 	if (!host) throw new errs.ItemNotFoundError(id);
+};
+
+export const allHosts = (scope) => scope === true || scope?.permission_visibility === "all";
+
+/** A deployment-wide operation cannot be limited to a subset of hosts. */
+export const assertGlobalAccess = async (access, permission) => {
+	const scope = await access.can(permission);
+	if (!allHosts(scope)) throw new errs.PermissionError();
 };

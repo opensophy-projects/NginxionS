@@ -11,6 +11,7 @@
 // The pure part (the form, the signature, the merge): profile-model.js.
 // RBAC: who sees learning sees the profiles; who labels takes and downloads them; apply, upload and delete also need
 // waf_policy:manage (they change what the WAF blocks), the profile for new nodes waf_learning:sync.
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
@@ -200,14 +201,14 @@ const audit = (access, meta) =>
 	internalAuditLog.add(access, { action: "updated", object_type: "waf_learning", meta: { profile: meta } });
 
 const canManage = async (access) => {
-	await access.can("waf_learning:label");
-	await access.can("waf_policy:manage");
+	await assertGlobalAccess(access, "waf_learning:label");
+	await assertGlobalAccess(access, "waf_policy:manage");
 };
 
 const internalLearningProfiles = {
 	/** @param {Access} access */
 	list: async (access) => {
-		await access.can("waf_learning:view");
+		await assertGlobalAccess(access, "waf_learning:view");
 		const key = await signingKey();
 		return { profiles: await listProfiles(), fingerprint: fingerprintOf(key.publicKeyPem) };
 	},
@@ -219,7 +220,7 @@ const internalLearningProfiles = {
 	 *   WAF of the sites goes with it (modes, policy objects), to move them to another cluster
 	 */
 	create: async (access, data) => {
-		await access.can("waf_learning:label");
+		await assertGlobalAccess(access, "waf_learning:label");
 		if (data.with_policy) await access.can("waf_policy:view");
 		const name = cleanName(data.name);
 		if (!name) throw new errs.ValidationError("The name of the profile: letters, digits, spaces, . _ ( ) + -");
@@ -318,7 +319,7 @@ const internalLearningProfiles = {
 	 * @param {boolean} on
 	 */
 	setForNewNodes: async (access, id, on) => {
-		await access.can("waf_learning:sync");
+		await assertGlobalAccess(access, "waf_learning:sync");
 		const meta = await loadMeta(id);
 		for (const other of await listProfiles()) {
 			if (other.forNewNodes && other.id !== id) await saveMeta({ ...other, forNewNodes: false });
@@ -334,7 +335,7 @@ const internalLearningProfiles = {
 	 * @param {string} id
 	 */
 	download: async (access, id) => {
-		await access.can("waf_learning:label");
+		await assertGlobalAccess(access, "waf_learning:label");
 		const meta = await loadMeta(id);
 		await audit(access, { action: "downloaded", id });
 		const safe = meta.name.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 60);

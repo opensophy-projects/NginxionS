@@ -18,7 +18,15 @@ interface Props extends InnerModalProps {
 }
 
 /** checkboxes of the roles; a role with permissions the current user lacks can't be given or taken */
-export function RolePicker({ selected, onChange }: { selected: Set<number>; onChange: (next: Set<number>) => void }) {
+export function RolePicker({
+	selected,
+	automatic,
+	onChange,
+}: {
+	selected: Set<number>;
+	automatic?: Set<number>;
+	onChange: (next: Set<number>) => void;
+}) {
 	const { data: roles } = useRoles();
 	const { data: me } = useRbacMe();
 	if (!roles) return <Loading noLogo />;
@@ -41,7 +49,10 @@ export function RolePicker({ selected, onChange }: { selected: Set<number>; onCh
 							}}
 						/>
 						<span className={styles.text}>
-							<span className={styles.name}>{roleName(role)}</span>
+							<span className={styles.name}>
+								{roleName(role)}
+								{automatic?.has(role.id) && " (OIDC)"}
+							</span>
 							<span className={styles.desc}>
 								{roleDescription(role) || (
 									<T
@@ -64,7 +75,9 @@ const UserRolesModal = EasyModal.create(({ userId, name, visible, remove }: Prop
 	const [chosen, setChosen] = useState<Set<number> | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
-	const current = new Set((assignments?.[userId] ?? []).map((r) => r.id));
+	const grants = assignments?.[userId] ?? [];
+	const current = new Set(grants.filter((r) => r.manualGrant).map((r) => r.id));
+	const automatic = new Set(grants.filter((r) => r.oidcGrant).map((r) => r.id));
 	const selected = chosen ?? current;
 
 	const save = async () => {
@@ -93,7 +106,7 @@ const UserRolesModal = EasyModal.create(({ userId, name, visible, remove }: Prop
 				{error && <Alert variant="danger">{error}</Alert>}
 				{assignmentError && <Alert variant="danger">{assignmentError.message}</Alert>}
 				{assignments ? (
-					<RolePicker selected={selected} onChange={setChosen} />
+					<RolePicker selected={selected} automatic={automatic} onChange={setChosen} />
 				) : (
 					!assignmentError && <Loading noLogo />
 				)}

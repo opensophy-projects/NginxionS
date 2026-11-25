@@ -54,6 +54,33 @@ test("the SQLite RBAC migration preserves and groups existing upstream permissio
 			);
 			assert.deepEqual(projection(effective(false, [{ scope, permissions }])), user_id === 3 ? custom : common);
 		}
+		await db.schema.createTable("audit_log", (table) => {
+			table.increments("id");
+			table.string("action");
+			table.string("object_type");
+			table.integer("object_id");
+			table.json("meta");
+		});
+		await db("audit_log").insert([
+			{
+				object_type: "user",
+				action: "updated",
+				object_id: 1,
+				meta: JSON.stringify({ roles: ["Imported"], source: "oidc" }),
+			},
+			{ object_type: "user", action: "updated", object_id: 1, meta: JSON.stringify({ name: "Updated name" }) },
+			{ object_type: "user", action: "updated", object_id: 2, meta: JSON.stringify({ roles: ["Manual"] }) },
+		]);
+		const grants = await import("../migrations/20261125000000_nginxions_role_grants.js");
+		await db.transaction(grants.up);
+		assert.deepEqual(await db("nginxions_user_role").orderBy("user_id").select("manual_grant", "oidc_grant"), [
+			{ manual_grant: 0, oidc_grant: 1 },
+			{ manual_grant: 1, oidc_grant: 0 },
+			{ manual_grant: 1, oidc_grant: 0 },
+		]);
+		await db.transaction(grants.down);
+		assert.deepEqual(await db("nginxions_user_role").orderBy("user_id"), assignments);
+
 		await db.transaction(down);
 		assert.equal((await db("user_permission")).length, 5);
 	} finally {
@@ -77,9 +104,36 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		User.query().insert({ name, nickname: name, email: `${name}@example.test`, avatar: "", roles });
 	const makeAccess = async (user) => {
 		const { token } = await tokenModel().create({ iss: "test", attrs: { id: user.id }, scope: ["user"] });
-		return new Access(token);
+		const access = new Access(token);
+		await access.load();
+		return access;
 	};
-	const administrator = await makeUser("first-admin", ["admin"]);
+	const setupAccess = new Access(null);
+	await setupAccess.load(true);
+	await assert.rejects(
+		users.create(
+			setupAccess,
+			{
+				name: "First administrator",
+				nickname: "admin",
+				email: "first-admin@example.test",
+			},
+			{ bootstrap: true },
+		),
+		{ status: 400 },
+	);
+	const administrator = await users.create(
+		setupAccess,
+		{
+			name: "First administrator",
+			nickname: "admin",
+			email: "first-admin@example.test",
+			auth: { type: "password", secret: "fixture-password" },
+		},
+		{ bootstrap: true },
+	);
+	assert.deepEqual(administrator.roles, ["admin"]);
+	assert.ok(await db("auth").where({ user_id: administrator.id, type: "password" }).first());
 	const access = await makeAccess(administrator);
 	const builtin = Object.fromEntries((await rbac.list(access)).map((role) => [role.builtin, role]));
 	const makeRole = (name, permissions, options = {}) =>
@@ -102,7 +156,7 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		const outside = await proxy(administrator, "outside.example.test");
 		const role = await makeRole(
 			"Host reviewer",
-			["proxy_hosts:view", "waf_policy:manage", "pki:manage", "crowdsec:manage", "waf_learning:view"],
+			["proxy_hosts:view", "waf_policy:manage", "pki:manage", "crowdsec:manage", "waf_learning:label"],
 			{
 				scope: "hosts",
 				hosts: [{ host_type: "proxy_host", host_id: shared.id }],
@@ -146,6 +200,20 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		await assert.rejects(crowdsec.setHost(reviewAccess, "proxy_host", outside.id, true), { status: 404 });
 		const { default: learning } = await import("../learning/index.js");
 		await assert.rejects(learning.learned(reviewAccess, outside.id), { status: 404 });
+		const { default: wafSettings } = await import("../waf/index.js");
+		const { default: wafObjects } = await import("../waf/objects/api.js");
+		const { default: snapshots } = await import("../learning/snapshots.js");
+		const { default: profiles } = await import("../learning/profiles.js");
+		const { default: cluster } = await import("../nodes/cluster-settings.js");
+		for (const check of [
+			() => wafSettings.getPolicy(reviewAccess),
+			() => wafObjects.versions(reviewAccess),
+			() => snapshots.list(reviewAccess),
+			() => profiles.list(reviewAccess),
+			() => cluster.set(reviewAccess, { minSources: 4 }),
+		])
+			await assert.rejects(check, { status: 403 });
+		assert.deepEqual((await wafObjects.get(reviewAccess)).state, {});
 	});
 
 	await t.test("delegated role changes respect existing permissions, scope and OIDC controls", async () => {
@@ -184,6 +252,49 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		);
 	});
 
+	await t.test("role changes update the permission projection and audit entries", async () => {
+		assert.ok(rbac.model().resources.some(({ id }) => id === "roles"));
+		const member = await makeUser("directory-reviewer");
+		const role = await makeRole("Directory reviewer", ["users:view", "roles:view"]);
+		await rbac.setUserRoles(access, member.id, [role.id]);
+		const memberAccess = await makeAccess(member);
+		assert.ok((await rbac.me(memberAccess)).permissions.includes("users:view"));
+		assert.ok((await rbac.assignments(memberAccess))[member.id].some(({ id }) => id === role.id));
+		const updated = await rbac.update(access, role.id, {
+			...role,
+			description: "Role directory only",
+			permissions: ["roles:view", "proxy_hosts:view"],
+		});
+		assert.equal(updated.description, "Role directory only");
+		assert.equal((await db("user_permission").where({ user_id: member.id }).first()).proxy_hosts, "view");
+		assert.ok((await rbac.assignments(await makeAccess(member)))[member.id].some(({ id }) => id === role.id));
+		assert.equal(await rbac.delete(access, role.id), true);
+		assert.equal((await db("user_permission").where({ user_id: member.id }).first()).proxy_hosts, "hidden");
+		assert.deepEqual((await rbac.assignments(access))[member.id], []);
+		assert.deepEqual(
+			await db("audit_log").where({ object_type: "role", object_id: role.id }).orderBy("id").pluck("action"),
+			["created", "updated", "deleted"],
+		);
+		await assert.rejects(rbac.delete(access, builtin.viewer.id), { status: 400 });
+	});
+
+	await t.test("an administrator can configure the group claim used for synchronization", async () => {
+		const initial = await rbac.getOidc(access);
+		try {
+			const configuration = { claim: "team", requestScope: true };
+			assert.deepEqual(await rbac.setOidc(access, configuration), configuration);
+			const member = await makeUser("mapped-claim");
+			await rbac.update(access, builtin.viewer.id, { oidc_groups: ["team-read"] });
+			await syncOidcGroups(member.email, { team: "team-read" });
+			assert.ok((await rbac.me(await makeAccess(member))).permissions.includes("proxy_hosts:view"));
+			await syncOidcGroups(member.email, { groups: ["team-read"] });
+			assert.deepEqual((await rbac.assignments(access))[member.id], []);
+		} finally {
+			await rbac.update(access, builtin.viewer.id, { oidc_groups: [] });
+			await rbac.setOidc(access, initial);
+		}
+	});
+
 	await t.test("OIDC refresh removes missing groups and retains the last active administrator", async () => {
 		const oidcUser = await makeUser("oidc-viewer");
 		await rbac.update(access, builtin.viewer.id, { oidc_groups: ["team-read"] });
@@ -197,6 +308,69 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		assert.equal((await db("user_permission").where({ user_id: oidcUser.id }).first()).proxy_hosts, "hidden");
 		await syncOidcGroups(administrator.email, {});
 		assert.ok((await User.query().findById(administrator.id)).roles.includes("admin"));
+	});
+
+	await t.test("the last mapping can be removed without losing manually assigned roles", async () => {
+		const user = await makeUser("group-member");
+		const viewer = builtin.viewer.id;
+		const operator = builtin.operator.id;
+		await rbac.update(access, builtin.administrator.id, { oidc_groups: [] });
+		await rbac.setUserRoles(access, user.id, [operator]);
+		await syncOidcGroups(user.email, { groups: ["team-read"] });
+		const grants = async () =>
+			(await rbac.assignments(access))[user.id].map(({ id, manual_grant, oidc_grant }) => [
+				id,
+				manual_grant,
+				oidc_grant,
+			]);
+		assert.deepEqual(await grants(), [
+			[operator, true, false],
+			[viewer, false, true],
+		]);
+		await rbac.setUserRoles(access, user.id, [operator, viewer]);
+		assert.deepEqual(await grants(), [
+			[operator, true, false],
+			[viewer, true, true],
+		]);
+		await rbac.setUserRoles(access, user.id, [operator]);
+		await rbac.update(access, viewer, { oidc_groups: [] });
+		await syncOidcGroups(user.email, { groups: ["team-read"] });
+		assert.deepEqual(await grants(), [[operator, true, false]]);
+	});
+
+	await t.test("group administrator privileges and manual administrator privileges are independent", async () => {
+		const user = await makeUser("group-administrator");
+		const administratorId = builtin.administrator.id;
+		await rbac.update(access, administratorId, { oidc_groups: ["team-admin"] });
+		await syncOidcGroups(user.email, { groups: ["team-admin"] });
+		assert.equal((await rbac.me(await makeAccess(user))).admin, true);
+		assert.equal((await rbac.assignments(access))[user.id].length, 1);
+		await users.update(access, { id: user.id, roles: ["admin"] });
+		await syncOidcGroups(user.email, {});
+		assert.equal((await rbac.me(await makeAccess(user))).admin, true);
+		await users.update(access, { id: user.id, roles: [] });
+		assert.equal((await rbac.me(await makeAccess(user))).admin, false);
+		await syncOidcGroups(user.email, { groups: ["team-admin"] });
+		await syncOidcGroups(user.email, {});
+		assert.equal((await rbac.me(await makeAccess(user))).admin, false);
+		await rbac.update(access, administratorId, { oidc_groups: [] });
+	});
+
+	await t.test("first administrator setup is available once", async () => {
+		const { isSetup } = await import("../../setup.js");
+		assert.equal(await isSetup(), true);
+		await assert.rejects(
+			users.create(
+				setupAccess,
+				{
+					name: "Another account",
+					nickname: "account",
+					email: "another-account@example.test",
+				},
+				{ bootstrap: true },
+			),
+			{ status: 403 },
+		);
 	});
 
 	await t.test(
@@ -230,5 +404,22 @@ test("RBAC on PostgreSQL", { skip: !postgres && "no test database" }, async (t) 
 		assert.equal(active.length, 1);
 		const finalAccess = await makeAccess(active[0]);
 		await assert.rejects(users.update(finalAccess, { id: active[0].id, is_disabled: true }), { status: 400 });
+	});
+	await t.test("an OIDC administrator can be retained until a local administrator takes over", async () => {
+		const existing = (await User.query().where({ is_deleted: 0, is_disabled: 0 })).find((user) =>
+			user.roles.includes("admin"),
+		);
+		const localAccess = await makeAccess(existing);
+		const member = await makeUser("administrator-handover");
+		const adminId = builtin.administrator.id;
+		await rbac.update(localAccess, adminId, { oidc_groups: ["handover"] });
+		await syncOidcGroups(member.email, { groups: ["handover"] });
+		await rbac.setUserRoles(localAccess, existing.id, []);
+		await syncOidcGroups(member.email, {});
+		const memberAccess = await makeAccess(member);
+		assert.equal((await rbac.me(memberAccess)).admin, true);
+		await rbac.setUserRoles(memberAccess, existing.id, [adminId]);
+		await syncOidcGroups(member.email, {});
+		assert.equal((await rbac.me(memberAccess)).admin, false);
 	});
 });

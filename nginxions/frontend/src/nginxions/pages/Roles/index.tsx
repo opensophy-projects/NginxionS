@@ -9,7 +9,7 @@ import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { deleteRole, type OidcMapping, type Role, setOidcMapping } from "../../rbac/api";
-import { useCan, useOidcMapping, useRbacMe, useRbacRefresh, useRoles } from "../../rbac/hooks";
+import { canDelegateRole, useCan, useOidcMapping, useRbacMe, useRbacRefresh, useRoles } from "../../rbac/hooks";
 import { roleDescription, roleName } from "../../rbac/labels";
 import { showRoleModal } from "../../rbac/RoleModal";
 import { Dropdown } from "../../ui/Dropdown";
@@ -230,7 +230,7 @@ export default function Roles() {
 															},
 														]
 													: []),
-												...(canManage && !role.builtin
+												...(canManage && !role.builtin && canDelegateRole(me, role)
 													? [
 															{
 																key: "delete",

@@ -31,7 +31,7 @@ import {
 } from "../../policy/api";
 import { type CodeCheck, CodePane } from "../../policy/CodePane";
 import { NodePicker, NodeServiceView } from "../../nodes/NodeView";
-import { useCan } from "../../rbac/hooks";
+import { useCan, useRbacMe } from "../../rbac/hooks";
 import hostStyles from "../Hosts/Hosts.module.css";
 import WafAgent from "../WafAgent";
 import WafExpert from "../WafExpert";
@@ -258,12 +258,12 @@ function Pane({
 	);
 }
 
-function PoliciesTab() {
+function PoliciesTab({ allHosts }: { allHosts: boolean }) {
 	const can = useCan();
 	const manage = can("waf_policy", "manage");
 	const queryClient = useQueryClient();
 	const [params, setParams] = useSearchParams();
-	const item = parseItem(params.get("item"));
+	const requestedItem = parseItem(params.get("item"));
 	const { data, isLoading, isError, error } = useQuery<PolicyObjects, Error>({
 		queryKey: QUERY,
 		queryFn: getPolicyObjects,
@@ -291,6 +291,8 @@ function PoliciesTab() {
 		name: (h.domainNames as string[]).join(", "),
 		paths: ((h.locations ?? []) as { path: string }[]).map((l) => l.path).filter(Boolean),
 	}));
+	const item: Item =
+		!allHosts && requestedItem.type !== "host" ? { type: "host", id: hosts[0]?.id ?? 0 } : requestedItem;
 	const mode = (id: number) => {
 		const s = waf.data?.[id];
 		return !s?.enabled ? "off" : s.mode === "prevent-learn" ? "prevent" : "detect";
@@ -312,9 +314,11 @@ function PoliciesTab() {
 				<div className={styles.navGroup}>
 					<T id="nginxions.agent.group.policies" />
 				</div>
-				<NavItem value={{ type: "default" }}>
-					<T id="nginxions.policy.default" />
-				</NavItem>
+				{allHosts && (
+					<NavItem value={{ type: "default" }}>
+						<T id="nginxions.policy.default" />
+					</NavItem>
+				)}
 				{hosts.map((h) => (
 					<NavItem
 						key={h.id}
@@ -328,27 +332,35 @@ function PoliciesTab() {
 						{h.name}
 					</NavItem>
 				))}
-				<div className={styles.navGroup}>
-					<T id="nginxions.agent.group.blocks" />
-				</div>
-				{KINDS.map((kind) => (
-					<NavItem
-						key={kind}
-						value={{ type: "kind", kind }}
-						sub={<span className={styles.count}>{data.objects.filter((o) => o.kind === kind).length}</span>}
-					>
-						<T id={`nginxions.policy.kinds.${kind}`} />
-					</NavItem>
-				))}
-				<div className={styles.navGroup}>
-					<T id="nginxions.agent.group.more" />
-				</div>
-				<NavItem value={{ type: "versions" }}>
-					<T id="nginxions.agent.item.versions" />
-				</NavItem>
-				<NavItem value={{ type: "expert" }}>
-					<T id="nginxions.agent.item.expert" />
-				</NavItem>
+				{allHosts && (
+					<>
+						<div className={styles.navGroup}>
+							<T id="nginxions.agent.group.blocks" />
+						</div>
+						{KINDS.map((kind) => (
+							<NavItem
+								key={kind}
+								value={{ type: "kind", kind }}
+								sub={
+									<span className={styles.count}>
+										{data.objects.filter((o) => o.kind === kind).length}
+									</span>
+								}
+							>
+								<T id={`nginxions.policy.kinds.${kind}`} />
+							</NavItem>
+						))}
+						<div className={styles.navGroup}>
+							<T id="nginxions.agent.group.more" />
+						</div>
+						<NavItem value={{ type: "versions" }}>
+							<T id="nginxions.agent.item.versions" />
+						</NavItem>
+						<NavItem value={{ type: "expert" }}>
+							<T id="nginxions.agent.item.expert" />
+						</NavItem>
+					</>
+				)}
 			</nav>
 			<Pane key={itemKey(item)} item={item} data={data} manage={manage} refresh={refresh} hosts={hosts} />
 		</div>
@@ -358,9 +370,16 @@ function PoliciesTab() {
 function AgentOpenappsecPage() {
 	const [params, setParams] = useSearchParams();
 	const can = useCan();
-	const tabs = ["policies", ...(can("waf_learning") ? ["learning"] : []), "agent"] as const;
+	const { data: me } = useRbacMe();
+	const allHosts = me?.scope === "all";
+	const policy = can("waf_policy");
+	const tabs = [
+		...(policy ? ["policies"] : []),
+		...(can("waf_learning") ? ["learning"] : []),
+		...(policy && allHosts ? ["agent"] : []),
+	];
 	const asked = params.get("tab") || "";
-	const tab = (tabs as readonly string[]).includes(asked) ? asked : "policies";
+	const tab = tabs.includes(asked) ? asked : tabs[0];
 	// a node of this manager instead of this server
 	const [nodeId, setNodeId] = useState(0);
 	return (
@@ -390,13 +409,19 @@ function AgentOpenappsecPage() {
 					</li>
 				))}
 			</ul>
-			{nodeId ? null : tab === "policies" ? <PoliciesTab /> : tab === "learning" ? <LearningTab /> : <WafAgent />}
+			{nodeId ? null : tab === "policies" ? (
+				<PoliciesTab allHosts={allHosts} />
+			) : tab === "learning" ? (
+				<LearningTab />
+			) : (
+				<WafAgent />
+			)}
 		</div>
 	);
 }
 
 const AgentOpenappsec = () => (
-	<HasPermission rbac="waf_policy" permission={VIEW} pageLoading loadingNoLogo>
+	<HasPermission rbac="waf_policy|waf_learning" permission={VIEW} pageLoading loadingNoLogo>
 		<AgentOpenappsecPage />
 	</HasPermission>
 );

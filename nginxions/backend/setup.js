@@ -12,16 +12,15 @@ import proxyModel from "./models/proxy_host.js";
 import redirectionModel from "./models/redirection_host.js";
 import deadModel from "./models/dead_host.js";
 import streamModel from "./models/stream.js";
+import { hasUsers, withRbacWrite } from "./nginxions/rbac/write.js";
 import Access from "./lib/access.js";
 import internalHost from "./internal/host.js";
 import internalNginx from "./internal/nginx.js";
 import internalProxyHost from "./internal/proxy-host.js";
 import internalProxyHostAccessList from "./internal/proxy-host-access-list.js";
 
-export const isSetup = async () => {
-	const row = await userModel.query().select("id").where("is_deleted", 0).first();
-	return row?.id > 0;
-};
+// NginxionS: share the setup check with the account write transaction.
+export const isSetup = () => hasUsers();
 
 /**
  * Creates a default admin users if one doesn't already exist in the database
@@ -41,10 +40,8 @@ const setupDefaultUser = async () => {
 		return Promise.resolve();
 	}
 
-	const userIsetup = await isSetup();
-	if (!userIsetup) {
-		// Create a new user and set password
-		logger.info(`Creating a new user: ${initialAdminEmail} with password: ${initialAdminPassword}`);
+	const created = await withRbacWrite(async (trx) => {
+		if (await hasUsers(trx)) return false;
 
 		const data = {
 			is_deleted: 0,
@@ -55,16 +52,16 @@ const setupDefaultUser = async () => {
 			roles: ["admin"],
 		};
 
-		const user = await userModel.query().insertAndFetch(data);
+		const user = await userModel.query(trx).insertAndFetch(data);
 
-		await authModel.query().insert({
+		await authModel.query(trx).insert({
 			user_id: user.id,
 			type: "password",
 			secret: initialAdminPassword,
 			meta: {},
 		});
 
-		await userPermissionModel.query().insert({
+		await userPermissionModel.query(trx).insert({
 			user_id: user.id,
 			visibility: "all",
 			proxy_hosts: "manage",
@@ -74,8 +71,9 @@ const setupDefaultUser = async () => {
 			access_lists: "manage",
 			certificates: "manage",
 		});
-		logger.info("Initial admin setup completed");
-	}
+		return true;
+	});
+	if (created) logger.info("Initial admin setup completed");
 };
 
 /**
