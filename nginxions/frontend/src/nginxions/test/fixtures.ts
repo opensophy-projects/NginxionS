@@ -1,5 +1,7 @@
 // Data of the tests of the interface (render.test.tsx): one realistic object of each kind the API of NginxionS answers
 // with, so that a page or a window renders its rows, badges and branches, not only its empty state.
+import type { ProxyHost } from "src/api/backend";
+
 const now = "2026-11-18T10:00:00.000Z";
 const later = "2027-02-18T10:00:00.000Z";
 
@@ -345,7 +347,7 @@ export const acmeServer = {
 	usedBy: 1,
 };
 
-export const proxyHost = {
+export const proxyHost: ProxyHost = {
 	id: 1,
 	createdOn: now,
 	modifiedOn: now,
@@ -354,22 +356,34 @@ export const proxyHost = {
 	forwardScheme: "http",
 	forwardHost: "app",
 	forwardPort: 8080,
-	accessListId: 0,
+	npmplusAccessListIds: [],
+	npmplusAccessListType: "public",
 	certificateId: 0,
 	sslForced: false,
 	cachingEnabled: false,
 	blockExploits: false,
 	advancedConfig: "",
+	npmplusLocationConfig: "",
 	meta: {},
 	allowWebsocketUpgrade: true,
 	http2Support: true,
+	npmplusHttp3Support: false,
 	enabled: true,
 	locations: [],
 	hstsEnabled: false,
 	hstsSubdomains: false,
-	owner: { id: 1, name: "Admin", email: "admin@example.com" },
-	certificate: null,
-	accessList: null,
+	trustForwardedProto: false,
+	npmplusNoindex: false,
+	npmplusCrowdsecAppsec: false,
+	npmplusProxyResponseBuffering: false,
+	npmplusProxyRequestBuffering: false,
+	npmplusDisableUriSanitisation: false,
+	npmplusSpoofHostHeader: false,
+	npmplusUpstreamCompression: false,
+	npmplusFancyindex: false,
+	npmplusXFrameOptions: "",
+	npmplusAuthRequest: "",
+	npmplusAuthRequestUpstream: "",
 };
 
 export const user = {

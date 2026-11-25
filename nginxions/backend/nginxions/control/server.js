@@ -432,7 +432,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, LISTEN, () => {
-	audit({ event: "listening", address: `${LISTEN}:${PORT}`, docker: DOCKER_SOCKET });
+	audit({ event: "listening", address: `${LISTEN}:${server.address().port}`, docker: DOCKER_SOCKET });
 });
 
 const inspectContainer = async (id) => (await docker("GET", `/containers/${id}/json`)).json();
