@@ -241,7 +241,10 @@ test("service token API and RBAC with PostgreSQL", { skip: !postgres }, async (t
 		const refused = await request(hosts, { bearer: replacement.secret, cookie });
 		assert.equal(refused.res.status, 401);
 		assert.equal(refused.res.headers.get("www-authenticate"), "Bearer");
-		assert.equal((await request(hosts, { bearer: "nxs_svc_invalid" })).res.status, 401);
+		const invalid = await request(hosts, { bearer: "nxs_svc_invalid", cookie });
+		assert.equal(invalid.res.status, 401);
+		assert.equal(invalid.res.headers.get("set-cookie"), null);
+		assert.equal((await request(hosts, { cookie })).res.status, 200);
 		assert.equal(
 			(
 				await request(`${tokens}/${replacement.id}`, {
