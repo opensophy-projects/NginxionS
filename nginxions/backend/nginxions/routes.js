@@ -37,6 +37,7 @@ import internalPki from "./pki/index.js";
 import internalMtls, { detachCas, usage as mtlsUsage, usedBy as mtlsUsedBy, protectedHosts } from "./pki/mtls.js";
 import { nodeLearningLimiter, nodeLimiter, sensitiveLimiter } from "./rate-limit.js";
 import internalRbac from "./rbac/index.js";
+import internalServiceTokens from "./rbac/service-tokens.js";
 import { assertGlobalAccess } from "./rbac/scope.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
@@ -68,6 +69,8 @@ const rawBytes = (req) => {
 	return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
 };
 
+const serviceAuth = jwtdecode({ serviceTokens: true });
+
 const SERVICE_NAME = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 
 /**
@@ -90,7 +93,7 @@ const handle =
 const MAX_ID = 2147483647;
 const validId = (id) => /^[1-9][0-9]{0,9}$/.test(id) && Number(id) <= MAX_ID;
 
-for (const param of ["role_id", "user_id"]) {
+for (const param of ["role_id", "user_id", "token_id"]) {
 	router.param(param, (req, _res, next, id) => {
 		if (!validId(id)) return next(new errs.ValidationError("Invalid ID"));
 		req.params[param] = Number(id);
@@ -345,13 +348,61 @@ router
 		}),
 	);
 
+const tokenRoles = {
+	type: "array",
+	minItems: 1,
+	maxItems: 100,
+	uniqueItems: true,
+	items: { type: "integer", minimum: 1, maximum: MAX_ID },
+};
+const serviceTokenSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["name", "roles", "expires_in_days"],
+	properties: {
+		name: { type: "string", minLength: 1, maxLength: 100 },
+		roles: tokenRoles,
+		expires_in_days: { type: "integer", minimum: 1, maximum: 365 },
+	},
+};
+const serviceTokenRolesSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["roles"],
+	properties: { roles: tokenRoles },
+};
+
+router
+	.route("/rbac/service-tokens")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.get(handle((_, res) => internalServiceTokens.list(res.locals.access)))
+	.post(
+		handle(async (req, res) => {
+			const data = await validator(serviceTokenSchema, req.body);
+			return internalServiceTokens.create(res.locals.access, data);
+		}, 201),
+	);
+
+router
+	.route("/rbac/service-tokens/:token_id")
+	.options((_, res) => res.sendStatus(204))
+	.all(jwtdecode())
+	.put(
+		handle(async (req, res) => {
+			const { roles } = await validator(serviceTokenRolesSchema, req.body);
+			return internalServiceTokens.updateRoles(res.locals.access, req.params.token_id, roles);
+		}),
+	)
+	.delete(handle((req, res) => internalServiceTokens.revoke(res.locals.access, req.params.token_id)));
+
 /**
  * GET /api/nginxions/hosts/changes — the last change of every visible host (audit log)
  */
 router
 	.route("/hosts/changes")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalHosts.changes(res.locals.access)));
 
 /**
@@ -360,7 +411,7 @@ router
 router
 	.route("/hosts/changes/:object_type/:host_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalHosts.history(res.locals.access, req.params.object_type, req.params.host_id)));
 
 /**
@@ -369,7 +420,7 @@ router
 router
 	.route("/hosts/upstreams")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalHosts.upstreams(res.locals.access)));
 
 /**
@@ -379,7 +430,7 @@ router
 router
 	.route("/waf")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWaf.getStatus(res.locals.access)))
 	.put(
 		handle(async (req, res) => {
@@ -457,7 +508,7 @@ const wafObject = {
 router
 	.route("/waf/hosts")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWafHosts.list(res.locals.access)));
 
 /**
@@ -467,7 +518,7 @@ router
 router
 	.route("/waf/hosts/:host_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalWafHosts.get(res.locals.access, req.params.host_id)))
 	.put(
 		handle(async (req, res) => {
@@ -509,7 +560,7 @@ router
 router
 	.route("/waf/hosts/:host_id/simulate")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle(async (req, res) => {
 			const query = await validator(
@@ -539,7 +590,7 @@ router
 router
 	.route("/waf/hosts/:host_id/trial")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalWafTrial.get(res.locals.access, Number(req.params.host_id))))
 	.post(
 		handle(async (req, res) => {
@@ -577,7 +628,7 @@ router
 router
 	.route("/waf/hosts/:host_id/code")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle(async (req, res) =>
 			internalWafHostCode.get(res.locals.access, req.params.host_id, await hostLabel(req.params.host_id)),
@@ -614,13 +665,13 @@ const hostLabel = async (id) => {
 router
 	.route("/waf/policy")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWaf.getPolicy(res.locals.access)));
 
 router
 	.route("/waf/policy/apply")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((_, res) => internalWaf.applyPolicy(res.locals.access)));
 
 /**
@@ -630,7 +681,7 @@ router
 router
 	.route("/waf/agent")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWafAgent.get(res.locals.access)))
 	.put(
 		handle(async (req, res) => {
@@ -686,7 +737,7 @@ router
 router
 	.route("/waf/agent/metrics")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle(async (_, res) => {
 			await assertGlobalAccess(res.locals.access, "waf_policy:view");
@@ -1034,7 +1085,7 @@ router
 router
 	.route("/analytics")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalAnalytics.get(res.locals.access, req.query)));
 
 /**
@@ -1046,7 +1097,7 @@ router
 router
 	.route("/analytics/traffic")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalTraffic.get(res.locals.access, req.query)));
 
 /**
@@ -1056,7 +1107,7 @@ router
 router
 	.route("/analytics/requests")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalTraffic.list(res.locals.access, req.query)));
 
 const REQUEST_CSV_COLUMNS = [
@@ -1095,7 +1146,7 @@ const REQUEST_CSV_COLUMNS = [
 router
 	.route("/analytics/requests/export")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(async (req, res, next) => {
 		try {
 			const { rows, capped } = await internalTraffic.export(res.locals.access, req.query);
@@ -1124,7 +1175,7 @@ router
 router
 	.route("/analytics/hosts")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalAnalytics.hosts(res.locals.access)));
 
 /**
@@ -1136,7 +1187,7 @@ router
 router
 	.route("/events")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalEvents.list(res.locals.access, req.query)));
 
 const CSV_COLUMNS = [
@@ -1176,7 +1227,7 @@ const csvCell = (value) => {
 router
 	.route("/events/export")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(async (req, res, next) => {
 		try {
 			const { rows, capped } = await internalEvents.export(res.locals.access, req.query);
@@ -1543,7 +1594,7 @@ router
 router
 	.route("/events/:event_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalEvents.get(res.locals.access, req.params.event_id, req.query.time)));
 
 /**
@@ -1554,7 +1605,7 @@ router
 router
 	.route("/waf/policy/objects")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWafObjects.get(res.locals.access)))
 	.post(
 		handle(
@@ -1570,7 +1621,7 @@ router
 router
 	.route("/waf/policy/objects/:object_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) =>
 			internalWafObjects.update(res.locals.access, req.params.object_id, await validator(wafObject, req.body)),
@@ -1587,14 +1638,14 @@ router
 router
 	.route("/waf/files")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_req, res) => internalWafFiles.status(res.locals.access)))
 	.put(handle((req, res) => internalWafFiles.setSettings(res.locals.access, req.body)));
 
 router
 	.route("/waf/files/signatures/:name")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		express.raw({ type: () => true, limit: MAX_SIGNATURE_BYTES }),
 		handle((req, res) =>
@@ -1612,13 +1663,13 @@ router
 router
 	.route("/waf/policy/schemas")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_req, res) => internalWafSchemas.list(res.locals.access)));
 
 router
 	.route("/waf/policy/schemas/:name")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		express.raw({ type: () => true, limit: "6mb" }),
 		handle((req, res) => internalWafSchemas.upload(res.locals.access, String(req.params.name), rawBytes(req))),
@@ -1643,7 +1694,7 @@ router
 router
 	.route("/waf/policy/default")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) =>
 			internalWafObjects.setPolicy(res.locals.access, await validator(wafDefaultPolicy, req.body)),
@@ -1657,7 +1708,7 @@ router
 router
 	.route("/waf/policy/preview")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const change = await validator(
@@ -1693,13 +1744,13 @@ router
 router
 	.route("/waf/policy/versions")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWafObjects.versions(res.locals.access)));
 
 router
 	.route("/waf/policy/versions/:version_id/rollback")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((req, res) => internalWafObjects.rollback(res.locals.access, req.params.version_id)));
 
 /**
@@ -1710,7 +1761,7 @@ router
 router
 	.route("/waf/policy/export")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(async (req, res, next) => {
 		try {
 			const format = req.query.format === "v1beta1" ? "v1beta1" : "v1beta2";
@@ -1731,7 +1782,7 @@ router
 router
 	.route("/waf/policy/import")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -1764,7 +1815,7 @@ const customPolicy = {
 router
 	.route("/waf/policy/custom")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalWafExpert.get(res.locals.access)))
 	.put(
 		handle(async (req, res) => internalWafExpert.save(res.locals.access, await validator(customPolicy, req.body))),
@@ -1776,7 +1827,7 @@ router
 router
 	.route("/waf/policy/custom/check")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(customPolicy, req.body);
@@ -1790,7 +1841,7 @@ router
 router
 	.route("/waf/policy/custom/:version_id/rollback")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((req, res) => internalWafExpert.rollback(res.locals.access, req.params.version_id)));
 
 /**
@@ -1875,7 +1926,7 @@ const p12Properties = {
 router
 	.route("/pki")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle(async (_, res) => {
 			const overview = await internalPki.overview(res.locals.access);
@@ -1902,7 +1953,7 @@ router
 router
 	.route("/pki/settings")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -1957,7 +2008,7 @@ router
 router
 	.route("/pki/cas")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -1986,7 +2037,7 @@ router
 router
 	.route("/pki/cas/import")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2018,7 +2069,7 @@ router
 router
 	.route("/pki/cas/:ca_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalPki.getCa(res.locals.access, req.params.ca_id)))
 	.put(
 		handle(async (req, res) => {
@@ -2052,7 +2103,7 @@ router
 router
 	.route("/pki/cas/:ca_id/export")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2076,7 +2127,7 @@ router
 router
 	.route("/pki/cas/:ca_id/revoke")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2121,7 +2172,7 @@ const issueProperties = {
 router
 	.route("/pki/certs")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2143,7 +2194,7 @@ router
 router
 	.route("/pki/certs/revoke")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2168,7 +2219,7 @@ router
 router
 	.route("/pki/certs/delete")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2192,7 +2243,7 @@ router
 router
 	.route("/pki/certs/:cert_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2214,7 +2265,7 @@ router
 router
 	.route("/pki/certs/:cert_id/renew")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2244,7 +2295,7 @@ router
 router
 	.route("/pki/certs/:cert_id/download")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2267,7 +2318,7 @@ router
 router
 	.route("/pki/certs/:cert_id/links")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalPki.links(res.locals.access, req.params.cert_id)))
 	.post(
 		handle(async (req, res) => {
@@ -2290,7 +2341,7 @@ router
 router
 	.route("/pki/links/:link_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.delete(handle((req, res) => internalPki.deleteLink(res.locals.access, req.params.link_id)));
 
 /**
@@ -2390,7 +2441,7 @@ router.get("/pki/public/download/:token", async (req, res, next) => {
 router
 	.route("/mtls")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalMtls.list(res.locals.access)));
 
 /**
@@ -2401,7 +2452,7 @@ router
 router
 	.route("/mtls/:host_type/:host_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalMtls.get(res.locals.access, req.params.host_type, req.params.host_id)))
 	.put(
 		handle(async (req, res) => {
@@ -2449,7 +2500,7 @@ router
 router
 	.route("/mtls/:host_type/:host_id/enable")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle((req, res) => internalMtls.quick(res.locals.access, req.params.host_type, Number(req.params.host_id))),
 	);
@@ -2461,7 +2512,7 @@ router
 router
 	.route("/crowdsec")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.overview(res.locals.access)));
 
 /**
@@ -2472,7 +2523,7 @@ router
 router
 	.route("/crowdsec/settings")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.getSettings(res.locals.access)))
 	.put(
 		handle(async (req, res) => {
@@ -2515,7 +2566,7 @@ router
 router
 	.route("/crowdsec/settings/code")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.getCode(res.locals.access)))
 	.put(
 		handle(async (req, res) =>
@@ -2540,7 +2591,7 @@ router
 router
 	.route("/crowdsec/apply")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((_, res) => internalCrowdsec.apply(res.locals.access)));
 
 /**
@@ -2549,7 +2600,7 @@ router
 router
 	.route("/crowdsec/alerts")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle((req, res) =>
 			internalCrowdsec.alerts(res.locals.access, {
@@ -2569,7 +2620,7 @@ router
 router
 	.route("/crowdsec/alerts/:alert_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle((req, res) => {
 			if (!/^[1-9][0-9]{0,12}$/.test(req.params.alert_id)) throw new errs.ValidationError("Invalid alert id");
@@ -2584,7 +2635,7 @@ router
 router
 	.route("/crowdsec/decisions")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle((req, res) =>
 			internalCrowdsec.decisions(res.locals.access, {
@@ -2628,7 +2679,7 @@ router
 router
 	.route("/crowdsec/decisions/delete")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2653,7 +2704,7 @@ router
 router
 	.route("/crowdsec/registry")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.registry(res.locals.access)));
 
 /**
@@ -2662,7 +2713,7 @@ router
 router
 	.route("/crowdsec/registry/:kind/:name")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.delete(
 		handle((req, res) => {
 			if (!["machines", "bouncers"].includes(req.params.kind))
@@ -2674,7 +2725,7 @@ router
 router
 	.route("/crowdsec/metrics")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.metrics(res.locals.access)));
 
 /**
@@ -2684,7 +2735,7 @@ router
 router
 	.route("/crowdsec/hub")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(
 		handle((req, res) =>
 			internalCrowdsec.hub(res.locals.access, {
@@ -2721,19 +2772,19 @@ router
 router
 	.route("/crowdsec/hub/upgrade")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((_, res) => internalCrowdsec.hubUpgrade(res.locals.access)));
 
 router
 	.route("/crowdsec/hub/online")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((_, res) => internalCrowdsec.hubOnline(res.locals.access)));
 
 router
 	.route("/crowdsec/hub/snapshot")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		express.raw({ type: () => true, limit: "200mb" }),
 		handle((req, res) => internalCrowdsec.hubUpload(res.locals.access, rawBytes(req))),
@@ -2778,7 +2829,7 @@ const blocklistBody = async (req) => {
 router
 	.route("/crowdsec/blocklists")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.blocklists(res.locals.access)))
 	.post(
 		express.text({ type: "text/plain", limit: "20mb" }),
@@ -2792,7 +2843,7 @@ router
 router
 	.route("/crowdsec/blocklists/:blocklist_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		express.text({ type: "text/plain", limit: "20mb" }),
 		handle(async (req, res) =>
@@ -2804,7 +2855,7 @@ router
 router
 	.route("/crowdsec/blocklists/:blocklist_id/sync")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((req, res) => internalCrowdsec.syncBlocklist(res.locals.access, req.params.blocklist_id)));
 
 /**
@@ -2853,13 +2904,13 @@ router.get("/crowdsec/public/decisions", async (req, res, next) => {
 router
 	.route("/crowdsec/hosts")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_, res) => internalCrowdsec.hosts(res.locals.access)));
 
 router
 	.route("/crowdsec/hosts/:type/:host_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) => {
 			const data = await validator(
@@ -2884,19 +2935,19 @@ router
 router
 	.route("/learning/queue")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalLearning.queue(res.locals.access, req.query)));
 
 router
 	.route("/learning/events/:event_id/group")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalLearning.groupOfEvent(res.locals.access, req.params.event_id)));
 
 router
 	.route("/learning/groups/:key")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalLearning.group(res.locals.access, String(req.params.key).slice(0, 64))));
 
 /**
@@ -2907,14 +2958,14 @@ router
 router
 	.route("/learning/labels")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalLearning.labels(res.locals.access, req.query)))
 	.post(handle((req, res) => internalLearning.label(res.locals.access, req.body), 201));
 
 router
 	.route("/learning/labels/:label_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.delete(handle((req, res) => internalLearning.undo(res.locals.access, req.params.label_id)));
 
 /**
@@ -2923,7 +2974,7 @@ router
 router
 	.route("/learning/hosts")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_req, res) => internalLearning.hosts(res.locals.access)));
 
 /**
@@ -2933,7 +2984,7 @@ router
 router
 	.route("/learning/hosts/:host_id/learned")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((req, res) => internalLearning.learned(res.locals.access, Number(req.params.host_id))));
 
 /**
@@ -2949,14 +3000,14 @@ router
 router
 	.route("/learning/snapshots")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_req, res) => internalLearningSnapshots.list(res.locals.access)))
 	.post(handle((_req, res) => internalLearningSnapshots.take(res.locals.access), 201));
 
 router
 	.route("/learning/snapshots/upload")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		express.raw({ type: () => true, limit: "100mb" }),
 		handle((req, res) => internalLearningSnapshots.upload(res.locals.access, rawBytes(req)), 201),
@@ -2965,13 +3016,13 @@ router
 router
 	.route("/learning/snapshots/:snapshot_id/restore")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(handle((req, res) => internalLearningSnapshots.restore(res.locals.access, String(req.params.snapshot_id))));
 
 router
 	.route("/learning/snapshots/:snapshot_id/download")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(async (req, res, next) => {
 		try {
 			const file = await internalLearningSnapshots.download(res.locals.access, String(req.params.snapshot_id));
@@ -2986,7 +3037,7 @@ router
 router
 	.route("/learning/snapshots/:snapshot_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.delete(handle((req, res) => internalLearningSnapshots.remove(res.locals.access, String(req.params.snapshot_id))));
 
 /**
@@ -3007,7 +3058,7 @@ const hostIdsSchema = { type: "array", maxItems: 1000, items: { type: "integer",
 router
 	.route("/learning/profiles")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(handle((_req, res) => internalLearningProfiles.list(res.locals.access)))
 	.post(
 		handle(
@@ -3036,7 +3087,7 @@ router
 router
 	.route("/learning/profiles/upload")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		express.raw({ type: () => true, limit: "100mb" }),
 		handle((req, res) => internalLearningProfiles.upload(res.locals.access, rawBytes(req)), 201),
@@ -3045,7 +3096,7 @@ router
 router
 	.route("/learning/profiles/:profile_id/apply")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.post(
 		handle(async (req, res) =>
 			internalLearningProfiles.apply(
@@ -3066,7 +3117,7 @@ router
 router
 	.route("/learning/profiles/:profile_id/download")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.get(async (req, res, next) => {
 		try {
 			const file = await internalLearningProfiles.download(res.locals.access, String(req.params.profile_id));
@@ -3081,7 +3132,7 @@ router
 router
 	.route("/learning/profiles/:profile_id")
 	.options((_, res) => res.sendStatus(204))
-	.all(jwtdecode())
+	.all(serviceAuth)
 	.put(
 		handle(async (req, res) => {
 			const data = await validator(

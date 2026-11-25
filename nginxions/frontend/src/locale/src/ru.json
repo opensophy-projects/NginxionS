@@ -972,7 +972,7 @@
 		"defaultMessage": "Перезапуск"
 	},
 	"nginxions.audit.action.revoked": {
-		"defaultMessage": "Отзыв"
+		"defaultMessage": "Отозван"
 	},
 	"nginxions.audit.action.unbanned": {
 		"defaultMessage": "Снятие бана"
@@ -7208,6 +7208,66 @@
 	"nginxions.rbac.template.empty": {
 		"defaultMessage": "Пустая роль"
 	},
+	"nginxions.rbac.tokens.copied": {
+		"defaultMessage": "Скопировано"
+	},
+	"nginxions.rbac.tokens.copy": {
+		"defaultMessage": "Скопировать токен"
+	},
+	"nginxions.rbac.tokens.copy-error": {
+		"defaultMessage": "Буфер обмена недоступен. Выделите и скопируйте токен вручную."
+	},
+	"nginxions.rbac.tokens.created": {
+		"defaultMessage": "Токен создан"
+	},
+	"nginxions.rbac.tokens.days": {
+		"defaultMessage": "Срок действия в днях"
+	},
+	"nginxions.rbac.tokens.edit": {
+		"defaultMessage": "Изменить роли токена"
+	},
+	"nginxions.rbac.tokens.empty": {
+		"defaultMessage": "Сервисных токенов пока нет."
+	},
+	"nginxions.rbac.tokens.error": {
+		"defaultMessage": "Сервисные токены временно недоступны."
+	},
+	"nginxions.rbac.tokens.expires": {
+		"defaultMessage": "Истекает"
+	},
+	"nginxions.rbac.tokens.hint": {
+		"defaultMessage": "Выдавайте токены сервисам для автоматизации по API. Права токена определяют назначенные роли. Для ролей с выбранными хостами доступны только явно указанные хосты."
+	},
+	"nginxions.rbac.tokens.new": {
+		"defaultMessage": "Создать токен"
+	},
+	"nginxions.rbac.tokens.once": {
+		"defaultMessage": "Скопируйте токен и сохраните его в защищённом месте. Он показывается только один раз."
+	},
+	"nginxions.rbac.tokens.revoke": {
+		"defaultMessage": "Отозвать токен"
+	},
+	"nginxions.rbac.tokens.revoke-hint": {
+		"defaultMessage": "Сервисы, использующие {name}, сразу потеряют доступ."
+	},
+	"nginxions.rbac.tokens.secret": {
+		"defaultMessage": "Значение токена"
+	},
+	"nginxions.rbac.tokens.status.active": {
+		"defaultMessage": "Активен"
+	},
+	"nginxions.rbac.tokens.status.expired": {
+		"defaultMessage": "Истёк"
+	},
+	"nginxions.rbac.tokens.status.issuer_inactive": {
+		"defaultMessage": "Выпустивший пользователь неактивен"
+	},
+	"nginxions.rbac.tokens.status.revoked": {
+		"defaultMessage": "Отозван"
+	},
+	"nginxions.rbac.tokens.title": {
+		"defaultMessage": "Сервисные API-токены"
+	},
 	"nginxions.rbac.user-roles": {
 		"defaultMessage": "Роли"
 	},
@@ -9082,6 +9142,9 @@
 	},
 	"service": {
 		"defaultMessage": "Сервис"
+	},
+	"service_token": {
+		"defaultMessage": "Сервисный токен"
 	},
 	"setting": {
 		"defaultMessage": "Настройка"

@@ -20,7 +20,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode()) // preferred so it doesn't apply to nonexistent routes
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/streams
@@ -80,7 +80,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode()) // preferred so it doesn't apply to nonexistent routes
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/streams/123
@@ -162,7 +162,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/streams/123/enable
@@ -189,7 +189,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/streams/123/disable
