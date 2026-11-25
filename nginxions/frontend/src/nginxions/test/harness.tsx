@@ -29,6 +29,7 @@ const ROUTES: [RegExp, unknown][] = [
 	],
 	[/\/nginxions\/rbac\/model$/, f.rbacModel],
 	[/\/nginxions\/rbac\/roles$/, [f.role]],
+	[/\/nginxions\/rbac\/service-tokens$/, []],
 	[/\/nginxions\/pki$/, f.pkiOverview],
 	[/\/nginxions\/pki\/certs\/\d+$/, f.pkiCert],
 	[/\/nginxions\/notifications$/, f.notifications],

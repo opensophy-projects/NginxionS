@@ -14,6 +14,7 @@ import { roleDescription, roleName } from "../../rbac/labels";
 import { showRoleModal } from "../../rbac/RoleModal";
 import { Dropdown } from "../../ui/Dropdown";
 import styles from "./Roles.module.css";
+import { ServiceTokens } from "./ServiceTokens";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 
@@ -252,6 +253,7 @@ export default function Roles() {
 			</div>
 
 			<OidcCard canManage={canManage && !!me?.admin} />
+			{me?.admin && <ServiceTokens roles={roles ?? []} />}
 		</div>
 	);
 }

@@ -9,6 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { toWafForm } from "./components/WafFields";
 import AgentOpenappsec from "./pages/AgentOpenappsec";
 import { type HostRow, recommendations, toRows } from "./pages/Hosts/rows";
+import Roles from "./pages/Roles";
 import { showRoleModal } from "./rbac/RoleModal";
 import { showUserRolesModal } from "./rbac/UserRolesModal";
 import * as f from "./test/fixtures";
@@ -170,6 +171,7 @@ const PROPS: Record<string, Record<string, unknown>> = {
 	BarList: { items: [{ label: "DE", value: 3 }], emptyText: "none" },
 	Label: { id: "nginxions.hosts.add" },
 	HostPicker: { value: [], onChange: noop, hosts: [] },
+	ServiceTokens: { roles: [f.role] },
 	StackedBars: { data: [{ label: "a", values: [1, 2] }], series: ["x", "y"] },
 	CodeDiff: { diff },
 	Diff: { diff },
@@ -475,6 +477,87 @@ describe("Phase 3 permissions", () => {
 		await settle();
 		const request = requests.mock.calls.find(([input]) => String(input).endsWith("/rbac/users/1"));
 		expect(JSON.parse(String(request?.[1]?.body))).toEqual({ roles: [f.role.id] });
+	});
+
+	it("issues, edits and revokes a service token in the Roles panel", async () => {
+		const urlPath = "/rbac/service-tokens";
+		const viewer = { ...f.role, id: 3, builtin: "viewer", name: "Viewer" };
+		const admin = { ...f.role, id: 1, builtin: "administrator", name: "Administrator" };
+		const secret = "one-time-fixture-value";
+		const issued = {
+			id: 7,
+			name: "Deployment job",
+			roles: [viewer.id],
+			expiresOn: "2099-01-01T00:00:00Z",
+			status: "active",
+			revokedOn: null as string | null,
+		};
+		let exists = false;
+		const api = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			let data = answer(url);
+			if (url.endsWith("/rbac/roles")) data = [admin, viewer, f.role];
+			if (url.endsWith(urlPath)) {
+				if (options?.method === "POST") {
+					exists = true;
+					data = { ...issued, secret };
+				} else {
+					data = exists ? [issued] : [];
+				}
+			}
+			if (url.endsWith(`${urlPath}/${issued.id}`)) {
+				if (options?.method === "PUT") issued.roles = [f.role.id];
+				if (options?.method === "DELETE") {
+					issued.revokedOn = "2026-11-25T00:00:00Z";
+					issued.status = "revoked";
+				}
+				data = { ...issued };
+			}
+			return Response.json(data);
+		});
+		await changeLocale("en");
+		await renderApp(<Roles />);
+		fireEvent.click(await screen.findByRole("button", { name: "Create token" }));
+		const editor = await screen.findByRole("dialog");
+		const dialog = within(editor);
+		expect(dialog.queryByRole("checkbox", { name: "Administrator" })).toBeNull();
+		fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), { target: { value: issued.name } });
+		fireEvent.click(dialog.getByRole("checkbox", { name: "Viewer" }));
+		fireEvent.click(dialog.getByRole("button", { name: "Create" }));
+		expect((await dialog.findByRole<HTMLInputElement>("textbox", { name: "Token value" })).value).toBe(secret);
+		fireEvent.click(dialog.getByText("Close"));
+		await settle();
+		expect(screen.queryByDisplayValue(secret)).toBeNull();
+		fireEvent.click(await screen.findByRole("button", { name: "Permissions" }));
+		const edit = within(await screen.findByRole("dialog"));
+		expect(edit.getByRole<HTMLInputElement>("checkbox", { name: "Viewer" }).checked).toBe(true);
+		fireEvent.click(edit.getByRole("checkbox", { name: "Viewer" }));
+		fireEvent.click(edit.getByRole("checkbox", { name: "Analyst" }));
+		fireEvent.click(edit.getByRole("button", { name: "Save" }));
+		await settle();
+		fireEvent.click(await screen.findByRole("button", { name: "Revoke token" }));
+		fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Revoke token" }));
+		expect(await screen.findByText("Revoked")).toBeTruthy();
+		const requests = api.mock.calls.filter(([url]) => String(url).includes(urlPath));
+		expect(requests.filter(([, opt]) => opt?.method !== "GET").map(([, opt]) => opt?.method)).toEqual([
+			"POST",
+			"PUT",
+			"DELETE",
+		]);
+		expect(JSON.parse(String(requests.find(([, opt]) => opt?.method === "POST")?.[1]?.body))).toEqual({
+			name: issued.name,
+			roles: [viewer.id],
+			expires_in_days: 30,
+		});
+	});
+
+	it("hides the service token panel for delegated role editors", async () => {
+		const requests = signIn(["roles:view", "roles:manage"]);
+		await changeLocale("en");
+		await renderApp(<Roles />);
+		await screen.findByRole("heading", { name: "Roles", level: 1 });
+		expect(screen.queryByRole("heading", { name: "Service API tokens" })).toBeNull();
+		expect(requests.mock.calls.some(([url]) => String(url).endsWith("/rbac/service-tokens"))).toBe(false);
 	});
 
 	it("keeps scoped WAF navigation on host policies and learning", async () => {

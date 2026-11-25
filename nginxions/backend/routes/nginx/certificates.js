@@ -25,7 +25,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/certificates
@@ -187,7 +187,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/certificates/123
@@ -252,7 +252,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/certificates/123/upload
@@ -290,7 +290,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/certificates/123/renew

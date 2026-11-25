@@ -20,10 +20,9 @@ const hostsOf = (roleIds, connection) =>
 	connection("nginxions_role_host").whereIn("role_id", roleIds).select("role_id", "host_type", "host_id");
 
 /** Role scope, grants and host bindings come from a single database snapshot. */
-async function rolesOf(userId, connection) {
-	const membership = connection("nginxions_user_role as membership")
+async function rolesOf(memberships, connection) {
+	const membership = memberships
 		.join("nginxions_role as role", "role.id", "membership.role_id")
-		.where("membership.user_id", userId)
 		.select("role.id", "role.builtin", "role.scope");
 	const permissions = membership
 		.clone()
@@ -61,8 +60,15 @@ async function rolesOf(userId, connection) {
 /** effective permissions of a user loaded with its upstream "roles" column */
 const effectiveOf = async (user, connection = db()) => {
 	const admin = isAdminRoles(user.roles);
-	return model.effective(admin, admin ? [] : await rolesOf(user.id, connection));
+	const memberships = connection("nginxions_user_role as membership").where("membership.user_id", user.id);
+	return model.effective(admin, admin ? [] : await rolesOf(memberships, connection));
 };
+
+/** Service credentials have their own grants and never inherit the issuing user's permissions. */
+export async function serviceRolePermissions(tokenId, connection = db()) {
+	const memberships = connection("nginxions_service_token_role as membership").where("membership.token_id", tokenId);
+	return model.effective(false, await rolesOf(memberships, connection));
+}
 
 /**
  * Adapter for access.js (init): the permissions of the token's user come from the roles.

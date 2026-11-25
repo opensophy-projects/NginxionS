@@ -15,7 +15,8 @@ const PATTERNS = [
 		/\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|pass|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)["']?\s*[=:]\s*["']?)(?!\*\*\*)[^\s"'&,;}]+/gi,
 		`$1${MASK}`,
 	],
-	// JSON Web Tokens
+	// Standalone service credentials and JSON Web Tokens
+	[/(?<![A-Za-z0-9_-])nxs_svc_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, MASK],
 	[/\beyJ[a-z0-9_-]{5,}\.[a-z0-9_-]{5,}\.[a-z0-9_-]+/gi, MASK],
 	// private keys in PEM
 	[

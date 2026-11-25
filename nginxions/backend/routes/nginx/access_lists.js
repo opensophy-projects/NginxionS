@@ -20,7 +20,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/access-lists
@@ -80,7 +80,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/access-lists/123

@@ -20,7 +20,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/redirection-hosts
@@ -80,7 +80,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/redirection-hosts/123
@@ -165,7 +165,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/redirection-hosts/123/enable
@@ -192,7 +192,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/redirection-hosts/123/disable
