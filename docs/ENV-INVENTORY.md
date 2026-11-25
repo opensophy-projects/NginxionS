@@ -104,7 +104,7 @@ smartsync (общее обучение нескольких агентов) ра
 
 Задаются один раз в `deploy/compose.yaml` и меняются только при обновлении NginxionS:
 
-- сети `edge`, `internal` и `control` (у двух последних нет выхода в интернет; в `control` только `nginxions-control` и `openappsec`);
+- сети `edge` и `internal`. `nginxions-control` работает без сети. Backend подключается через Unix-сокет в томе `control-rpc`;
 - лимиты памяти и процессов каждого сервиса, по умолчанию без ограничений: `NGINXIONS_MEM_<СЕРВИС>` (например `2g`) и `NGINXIONS_PIDS_<СЕРВИС>` (например `1024`) в `deploy/.env`; сервисы `NGINXIONS`, `OPENAPPSEC`, `CONTROL`, `POSTGRES`, `CROWDSEC`, `CLAMAV`, `NGINXIONS_INIT`;
 - адрес панели `NGINXIONS_ADMIN_BIND_IP` (по умолчанию `127.0.0.1`) и сайтов `NGINXIONS_BIND_IP` (по умолчанию `0.0.0.0`);
 - `openappsec` владеет сетью и IPC (`ipc: shareable`, опубликованные порты), `nginxions` подключается к ним (`network_mode`/`ipc: service:openappsec`); tmpfs-том `appsec-shm`;
