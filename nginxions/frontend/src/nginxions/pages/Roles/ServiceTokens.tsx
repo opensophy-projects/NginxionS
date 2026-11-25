@@ -58,12 +58,13 @@ function TokenEditor({
 		}
 	};
 
-	const copy = async () => {
-		if (!secret) return;
+	const copy = async (value: string) => {
 		try {
-			await navigator.clipboard.writeText(secret);
+			await navigator.clipboard.writeText(value);
 			setCopied(true);
+			setError(null);
 		} catch {
+			setCopied(false);
 			setError(label("copy-error"));
 		}
 	};
@@ -156,7 +157,7 @@ function TokenEditor({
 				</Button>
 				{secret ? (
 					navigator.clipboard && (
-						<Button actionType="primary" onClick={copy}>
+						<Button actionType="primary" onClick={() => copy(secret)}>
 							<T id={copied ? "nginxions.rbac.tokens.copied" : "nginxions.rbac.tokens.copy"} />
 						</Button>
 					)
