@@ -153,6 +153,13 @@ test("service token API and RBAC with PostgreSQL", { skip: !postgres }, async (t
 			body: { name: "Invalid lifetime", roles: [viewer.id], expires_in_days: 366 },
 		});
 		assert.equal(res.status, 400);
+		const blankName = await request(tokens, {
+			cookie,
+			method: "POST",
+			body: { name: "  ", roles: [viewer.id], expires_in_days: 1 },
+		});
+		assert.equal(blankName.res.status, 400);
+		assert.equal((await request(`${tokens}/2147483647`, { cookie, method: "DELETE" })).res.status, 404);
 		assert.deepEqual((await request(tokens, { cookie })).data, []);
 	});
 
@@ -192,6 +199,7 @@ test("service token API and RBAC with PostgreSQL", { skip: !postgres }, async (t
 			).res.status,
 			403,
 		);
+		assert.equal((await request("/nginx/access-lists", { bearer })).res.status, 403);
 		assert.equal((await request("/tokens", { bearer })).res.status, 403);
 		assert.equal((await request("/users/me", { bearer })).res.status, 403);
 		assert.equal((await request(tokens, { bearer, cookie })).res.status, 403);
@@ -249,6 +257,16 @@ test("service token API and RBAC with PostgreSQL", { skip: !postgres }, async (t
 			.where({ id: expiring.id })
 			.update({ expires_on: new Date(0) });
 		assert.equal((await request(hosts, { bearer: expiring.secret })).res.status, 401);
+		assert.equal(
+			(
+				await request(`${tokens}/${expiring.id}`, {
+					cookie,
+					method: "PUT",
+					body: { roles: [viewer.id] },
+				})
+			).res.status,
+			400,
+		);
 		assert.equal((await request(tokens, { cookie })).data[0].status, "expired");
 
 		const issuer = await userModel.query().insert({

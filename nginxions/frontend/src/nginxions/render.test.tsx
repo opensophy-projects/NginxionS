@@ -493,12 +493,17 @@ describe("Phase 3 permissions", () => {
 			revokedOn: null as string | null,
 		};
 		let exists = false;
+		let rejectFirstIssue = true;
 		const api = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
 			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 			let data = answer(url);
 			if (url.endsWith("/rbac/roles")) data = [admin, viewer, f.role];
 			if (url.endsWith(urlPath)) {
 				if (options?.method === "POST") {
+					if (rejectFirstIssue) {
+						rejectFirstIssue = false;
+						return Response.json({ error: { message: "Please retry issuance" } }, { status: 400 });
+					}
 					exists = true;
 					data = { ...issued, secret };
 				} else {
@@ -523,8 +528,30 @@ describe("Phase 3 permissions", () => {
 		expect(dialog.queryByRole("checkbox", { name: "Administrator" })).toBeNull();
 		fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), { target: { value: issued.name } });
 		fireEvent.click(dialog.getByRole("checkbox", { name: "Viewer" }));
-		fireEvent.click(dialog.getByRole("button", { name: "Create" }));
-		expect((await dialog.findByRole<HTMLInputElement>("textbox", { name: "Token value" })).value).toBe(secret);
+		const days = dialog.getByRole("spinbutton", { name: "Valid for, days" });
+		const create = dialog.getByRole<HTMLButtonElement>("button", { name: "Create" });
+		fireEvent.change(days, { target: { value: "" } });
+		expect(create.disabled).toBe(true);
+		fireEvent.change(days, { target: { value: "366" } });
+		expect(create.disabled).toBe(true);
+		fireEvent.change(days, { target: { value: "14" } });
+		fireEvent.click(create);
+		expect(await dialog.findByText("Please retry issuance")).toBeTruthy();
+		fireEvent.click(create);
+		const value = await dialog.findByRole<HTMLInputElement>("textbox", { name: "Token value" });
+		expect(value.value).toBe(secret);
+		fireEvent.focus(value);
+		expect(value.selectionEnd).toBe(secret.length);
+		const clipboard = vi
+			.spyOn(navigator.clipboard, "writeText")
+			.mockRejectedValueOnce(new Error("Clipboard denied"))
+			.mockResolvedValueOnce(undefined);
+		fireEvent.click(dialog.getByRole("button", { name: "Copy token" }));
+		expect(await dialog.findByText(/clipboard unavailable/i)).toBeTruthy();
+		fireEvent.click(dialog.getByRole("button", { name: "Copy token" }));
+		expect(await dialog.findByRole("button", { name: "Copied" })).toBeTruthy();
+		expect(clipboard).toHaveBeenLastCalledWith(secret);
+		clipboard.mockRestore();
 		fireEvent.click(dialog.getByText("Close"));
 		await settle();
 		expect(screen.queryByDisplayValue(secret)).toBeNull();
@@ -541,13 +568,14 @@ describe("Phase 3 permissions", () => {
 		const requests = api.mock.calls.filter(([url]) => String(url).includes(urlPath));
 		expect(requests.filter(([, opt]) => opt?.method !== "GET").map(([, opt]) => opt?.method)).toEqual([
 			"POST",
+			"POST",
 			"PUT",
 			"DELETE",
 		]);
 		expect(JSON.parse(String(requests.find(([, opt]) => opt?.method === "POST")?.[1]?.body))).toEqual({
 			name: issued.name,
 			roles: [viewer.id],
-			expires_in_days: 30,
+			expires_in_days: 14,
 		});
 	});
 
