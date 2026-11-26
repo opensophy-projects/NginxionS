@@ -2,10 +2,15 @@
 
 #pragma once
 
+#include <utility>
+
 namespace Waap {
     namespace Util {
         struct CIDRData; // forward decleration
         struct RegexComparator;
+    }
+    namespace Override {
+        class Match;
     }
 }
 
@@ -23,6 +28,9 @@ public:
         const std::set<std::shared_ptr<boost::regex>, Waap::Util::RegexComparator> &rxes
     );
 
+    bool matchSameHeader(const Waap::Override::Match &conditions) const;
+
 private:
     Waf2Transaction &waf2Transaction;
+    const std::pair<std::string, std::string> *current_header = nullptr;
 };

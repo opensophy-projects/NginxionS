@@ -327,7 +327,7 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
 
   host_objects() {
     $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/hosts/1" -d "{\"enabled\": true,
-      \"mode\": \"prevent-learn\", \"minimum_confidence\": \"high\", \"objects\": $1}" > /dev/null
+      \"mode\": \"${2:-prevent-learn}\", \"minimum_confidence\": \"high\", \"objects\": $1}" > /dev/null
   }
   step "WAF -> Policy: every exception of a rule applies, not only the first"
   # the agent took the first exception of a rule only: the second one, for the tester's IP, had no effect
@@ -361,6 +361,9 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
   [ "$(status /)" = 200 ] || fail "a request without the header of a drop exception is dropped"
   host_objects null
   wait_status "$SQLI" 403 "SQLi is not blocked once the exceptions of x-nginxions are gone"
+
+  # shellcheck source=deploy/test/smoke/waf-exceptions.sh
+  . "$GROUPS_DIR/waf-exceptions.sh"
 
   step "WAF -> Policy: the IPS of a practice blocks a known vulnerability (signatures of NginxionS, CrowdSec virtual patching)"
   PHPUNIT=/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php

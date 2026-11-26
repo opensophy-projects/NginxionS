@@ -207,13 +207,13 @@ public:
     ParsedMatch(const std::string &_operator, const std::string &_tag, const std::string &_value);
 
     ParsedMatch(const ExceptionMatch &exceptions);
-    // NginxionS: "and"/"or" of the matches from `first` on, two operands at a time (Waap::Override::Match reads
-    // operand1 and operand2 only)
-    ParsedMatch(const std::string &_operator, const std::vector<ExceptionMatch> &matches, size_t first);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
+    // Waap::Override::Match reads two operands at a time for and/or.
+    ParsedMatch(const std::string &_operator, const std::vector<ParsedMatch> &matches, size_t first);
+
     std::string operator_type;
     std::string tag;
     std::string value;
