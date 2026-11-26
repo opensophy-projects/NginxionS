@@ -333,6 +333,8 @@ jobs:
     # the full and the extended run (see the head of this file); other branches stop after the fast checks
     if: needs.level.outputs.level == 'full' || needs.level.outputs.level == 'extended'
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.versions.outputs.tag }}
     permissions:
       contents: read
       security-events: write
@@ -345,8 +347,10 @@ jobs:
         with:
           version: latest
       - name: versions
+        id: versions
         run: |
           v="$(git rev-parse --short HEAD)"
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
           {
             echo "VERSION=$v"
             echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
@@ -462,6 +466,13 @@ jobs:
           name: tests-policy-contract
           path: reports/policy-contract/
           if-no-files-found: ignore
+
+  offline-bundle:
+    name: Offline bundle
+    needs: images
+    uses: ./.github/workflows/offline-bundle.yml
+    with:
+      ci_image_tag: ${{ needs.images.outputs.tag }}
 
   stack:
     name: Stack test (${{ matrix.suite }})
