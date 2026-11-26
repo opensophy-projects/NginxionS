@@ -57,6 +57,8 @@ exception_status 403 "$path" "matching method and header" -X POST -H 'X-Smoke-Cl
 exception_status 200 "$path" "wrong method" -X GET -H 'X-Smoke-Client: Legacy-Smoke-Client'
 exception_status 200 "$path" "wrong header value" -X POST -H 'X-Smoke-Client: current-smoke-client'
 exception_status 200 "$path" "right value under the wrong name" -X POST -H 'X-Other-Client: legacy-smoke-client'
+exception_status 200 "$path" "the name and value belong to different headers" -X POST \
+  -H 'X-Smoke-Client: current-smoke-client' -H 'X-Other-Client: legacy-smoke-client'
 exception_status 200 /smoke-exception-control "same method and header on a different path" \
   -X POST -H 'X-Smoke-Client: legacy-smoke-client'
 
