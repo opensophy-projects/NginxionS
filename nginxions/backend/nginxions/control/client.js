@@ -53,13 +53,11 @@ const call = async (method, path, actor, body) => {
 	let response;
 	let text;
 	try {
-		const options = {
-			method,
-			headers,
-			body: body === undefined ? undefined : JSON.stringify(body),
-			signal: AbortSignal.timeout(TIMEOUT_MS),
-		};
-		response = RPC_SOCKET ? await socketResponse(path, options) : await fetch(`${CONTROL_URL}${path}`, options);
+		const options = { method, headers, body: body === undefined ? undefined : JSON.stringify(body) };
+		const signal = AbortSignal.timeout(TIMEOUT_MS);
+		response = RPC_SOCKET
+			? await socketResponse(path, { ...options, signal })
+			: await fetch(`${CONTROL_URL}${path}`, { ...options, signal });
 		text = await response.text();
 	} catch (err) {
 		throw new errs.ConfigurationError(`nginxions-control is unreachable: ${err.cause?.code || err.message}`, err);
