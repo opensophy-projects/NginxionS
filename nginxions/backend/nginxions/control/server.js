@@ -5,8 +5,8 @@ import { takeCoverage } from "node:v8";
 //
 // Runs in a container of its own (service "control" of deploy/compose.yaml: the image of the agent with a command of
 // its own), the only one with the Docker socket: neither nginxions nor the agent, which take the traffic of the
-// internet, share its processes or files. It listens on the network "control", which only the openappsec container
-// (and nginxions in its namespace) joins, and allows only a whitelist:
+// internet, share its processes or Docker socket. The production deployment uses a Unix socket shared with the
+// backend alone and gives control no network. The API allows only a whitelist:
 //   - only containers of this compose project labelled nginxions.managed=true;
 //   - only these operations: list (state, health, version), restart, read logs, and a reload
 //     (SIGHUP) of the services that reread their configuration on it (RELOADABLE).
@@ -14,7 +14,7 @@ import { takeCoverage } from "node:v8";
 // audit line (who, what, result). The backend also records user actions in the NginxionS audit log.
 //
 // No dependencies besides Node.js (the image copies this directory as is).
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync, unlinkSync } from "node:fs";
 import http from "node:http";
 import { hostname } from "node:os";
 import {
@@ -28,9 +28,7 @@ import {
 import { untarOne } from "./tar.js";
 import { coordinateRestarts, repairNamespaces } from "./watchdog.js";
 
-const PORT = Number.parseInt(process.env.NGINXIONS_CONTROL_PORT || "7080", 10);
-// every address of this container: its only network is "control" (deploy/compose.yaml)
-const LISTEN = process.env.NGINXIONS_CONTROL_LISTEN || "0.0.0.0";
+const RPC_SOCKET = process.env.NGINXIONS_CONTROL_RPC_SOCKET;
 const DOCKER_SOCKET = process.env.NGINXIONS_DOCKER_SOCKET || "/var/run/docker.sock";
 // the service of the agent: its networks are those of nginx, its container holds the policy the agent applies
 const AGENT_SERVICE = process.env.NGINXIONS_AGENT_SERVICE || "openappsec";
@@ -43,6 +41,7 @@ const DOCKER_TIMEOUT_MS = 15000;
 // a restarted container is waited for until its healthcheck passes (the agent: its port 7777 answers)
 const HEALTHY_TIMEOUT_MS = 180000;
 const MAX_LOG_LINES = 5000;
+const MAX_DOCKER_RESPONSE_BYTES = 8 * 1024 * 1024;
 // nginxions is restarted this long after nginxions-control has answered (see the restart route)
 const RESTART_GRACE_MS = 2000;
 const MANAGED_LABEL = "nginxions.managed";
@@ -73,13 +72,25 @@ class HttpError extends Error {
  * @param   {string} method
  * @param   {string} path    Docker API path with query
  */
-const docker = (method, path) =>
+const docker = (method, path, maxBytes = MAX_DOCKER_RESPONSE_BYTES) =>
 	new Promise((resolve, reject) => {
 		const req = http.request(
 			{ socketPath: DOCKER_SOCKET, method, path, headers: { Host: "docker" }, timeout: DOCKER_TIMEOUT_MS },
 			(res) => {
 				const chunks = [];
-				res.on("data", (c) => chunks.push(c));
+				let size = 0;
+				res.on("error", (err) =>
+					reject(new HttpError(502, `Docker API response interrupted: ${err.code || err.message}`)),
+				);
+				res.on("data", (chunk) => {
+					size += chunk.length;
+					if (size > maxBytes) {
+						reject(new HttpError(502, "Docker API response is too large"));
+						res.destroy();
+						return;
+					}
+					chunks.push(chunk);
+				});
 				res.on("end", () => {
 					const body = Buffer.concat(chunks);
 					const status = res.statusCode ?? 0;
@@ -140,11 +151,16 @@ const portsOf = (c) =>
 	].sort((x, y) => x.port - y.port || (x.type < y.type ? -1 : x.type > y.type ? 1 : 0));
 
 const listManaged = async () => {
-	const filters = JSON.stringify({ label: [`${PROJECT_LABEL}=${await getProject()}`, `${MANAGED_LABEL}=true`] });
+	const project = await getProject();
+	const filters = JSON.stringify({ label: [`${PROJECT_LABEL}=${project}`, `${MANAGED_LABEL}=true`] });
 	const containers = await (
 		await docker("GET", `/containers/json?all=true&filters=${encodeURIComponent(filters)}`)
 	).json();
-	return containers.map((c) => ({
+	const managed = containers.filter(
+		({ Labels }) =>
+			Labels?.[PROJECT_LABEL] === project && Labels?.[MANAGED_LABEL] === "true" && Labels?.[SERVICE_LABEL],
+	);
+	return managed.map((c) => ({
 		id: c.Id,
 		service: c.Labels[SERVICE_LABEL],
 		name: (c.Names?.[0] || "").replace(/^\//, ""),
@@ -176,7 +192,8 @@ const agentPolicy = async () => {
 			Buffer.from(head.headers["x-docker-container-path-stat"] || "", "base64").toString() || "{}",
 		);
 		if (stat.size > AGENT_POLICY_MAX_BYTES) throw new HttpError(413, "the policy of the agent is too large");
-		response = await docker("GET", path);
+		// A tar adds a header, padding and end blocks outside the file size checked by HEAD.
+		response = await docker("GET", path, AGENT_POLICY_MAX_BYTES + 64 * 1024);
 	} catch (err) {
 		if (err.dockerStatus === 404) return { modifiedAt: null, policy: null };
 		throw err;
@@ -431,9 +448,20 @@ const server = http.createServer(async (req, res) => {
 	}
 });
 
-server.listen(PORT, LISTEN, () => {
-	audit({ event: "listening", address: `${LISTEN}:${PORT}`, docker: DOCKER_SOCKET });
-});
+if (RPC_SOCKET) {
+	// Docker can stop PID 1 without unlinking the socket. Remove only a socket left by our previous process.
+	const previous = lstatSync(RPC_SOCKET, { throwIfNoEntry: false });
+	if (previous) {
+		if (!previous.isSocket()) throw new Error(`Refusing to replace a file at ${RPC_SOCKET}`);
+		unlinkSync(RPC_SOCKET);
+	}
+	process.umask(0o077);
+	server.listen(RPC_SOCKET, () => audit({ event: "listening", address: RPC_SOCKET }));
+} else {
+	const port = Number.parseInt(process.env.NGINXIONS_CONTROL_PORT || "7080", 10);
+	const address = process.env.NGINXIONS_CONTROL_LISTEN || "127.0.0.1";
+	server.listen(port, address, () => audit({ event: "listening", address: `${address}:${server.address().port}` }));
+}
 
 const inspectContainer = async (id) => (await docker("GET", `/containers/${id}/json`)).json();
 const restartContainer = (id) => docker("POST", `/containers/${id}/restart?t=10`);

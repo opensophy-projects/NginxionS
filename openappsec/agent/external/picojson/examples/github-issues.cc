@@ -26,81 +26,58 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <curl/curl.h>
+#include <limits>
 #include "../picojson.h"
 
-typedef struct {
-  char *data;  // response data from server
-  size_t size; // response size of data
-} MEMFILE;
-
-MEMFILE *memfopen() {
-  MEMFILE *mf = (MEMFILE *)malloc(sizeof(MEMFILE));
-  mf->data = NULL;
-  mf->size = 0;
-  return mf;
-}
-
-void memfclose(MEMFILE *mf) {
-  if (mf->data)
-    free(mf->data);
-  free(mf);
-}
-
-size_t memfwrite(char *ptr, size_t size, size_t nmemb, void *stream) {
-  MEMFILE *mf = (MEMFILE *)stream;
-  int block = size * nmemb;
-  if (!mf->data)
-    mf->data = (char *)malloc(block);
-  else
-    mf->data = (char *)realloc(mf->data, mf->size + block);
-  if (mf->data) {
-    memcpy(mf->data + mf->size, ptr, block);
-    mf->size += block;
+// NginxionS: propagate buffer allocation failures to libcurl without letting an exception cross its callback.
+static size_t append_response(char *ptr, size_t size, size_t count, void *stream) {
+  if (size != 0 && count > std::numeric_limits<size_t>::max() / size)
+    return 0;
+  const size_t bytes = size * count;
+  try {
+    static_cast<std::string *>(stream)->append(ptr, bytes);
+  } catch (const std::exception &) {
+    return 0;
   }
-  return block;
+  return bytes;
 }
 
-char *memfstrdup(MEMFILE *mf) {
-  char *buf = (char *)malloc(mf->size + 1);
-  memcpy(buf, mf->data, mf->size);
-  buf[mf->size] = 0;
-  return buf;
-}
+int main() {
+  char error[CURL_ERROR_SIZE] = {};
+  std::string response;
 
-using namespace std;
-using namespace picojson;
-
-int main(int argc, char *argv[]) {
-  char error[256];
-
-  MEMFILE *mf = memfopen();
   CURL *curl = curl_easy_init();
-  curl_easy_setopt(curl, CURLOPT_URL, "https://api.github.com/repos/kazuho/picojson/issues");
-  curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-  curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl");
-  curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, &error);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, memfwrite);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, mf);
-  if (curl_easy_perform(curl) != CURLE_OK) {
-    cerr << error << endl;
-  } else {
-    value v;
-    string err;
-    parse(v, mf->data, mf->data + mf->size, &err);
-    if (err.empty()) {
-      array arr = v.get<array>();
-      array::iterator it;
-      for (it = arr.begin(); it != arr.end(); it++) {
-        object obj = it->get<object>();
-        cout << "#" << obj["number"].to_str() << ": " << obj["title"].to_str() << endl;
-        cout << "  " << obj["html_url"].to_str() << endl << endl;
-      }
-    } else {
-      cerr << err << endl;
-    }
+  if (!curl) {
+    std::cerr << "Could not initialize curl" << std::endl;
+    return 1;
   }
+  curl_easy_setopt(curl, CURLOPT_URL, "https://api.github.com/repos/kazuho/picojson/issues");
+  // NginxionS: keep libcurl's default TLS verification for the API.
+  curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl");
+  curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, append_response);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+  const CURLcode result = curl_easy_perform(curl);
   curl_easy_cleanup(curl);
-  memfclose(mf);
+  if (result != CURLE_OK) {
+    std::cerr << (error[0] ? error : curl_easy_strerror(result)) << std::endl;
+    return 1;
+  }
+
+  picojson::value v;
+  const std::string err = picojson::parse(v, response);
+  if (!err.empty() || !v.is<picojson::array>()) {
+    std::cerr << (err.empty() ? "Expected a JSON array from GitHub" : err) << std::endl;
+    return 1;
+  }
+  const picojson::array &issues = v.get<picojson::array>();
+  for (picojson::array::const_iterator it = issues.begin(); it != issues.end(); it++) {
+    if (!it->is<picojson::object>())
+      continue;
+    picojson::object obj = it->get<picojson::object>();
+    std::cout << "#" << obj["number"].to_str() << ": " << obj["title"].to_str() << std::endl;
+    std::cout << "  " << obj["html_url"].to_str() << std::endl << std::endl;
+  }
 
   return 0;
 }

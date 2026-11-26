@@ -37,8 +37,9 @@
 			"tool": "osv",
 			"id": "CVE-2026-112366",
 			"where": "nginxions/frontend/pnpm-lock.yaml",
-			"reason": "picomatch (ReDoS on single-branch repeated extglobs such as +(*)): no fixed release, 4.0.7 is the last one and affected (fix upstream in micromatch/picomatch PR 194). Only build tools of the frontend use it (vite, tinyglobby, fdir, @parcel/watcher of sass, vitest), with globs of our own config; nothing of it is in the images (the frontend ships as static files) and no input of a user reaches a glob. Update picomatch once a fixed version is out",
-			"until": "2027-01-15"
+			"reason": "Picomatch through 4.0.7 has a published ReDoS advisory; no fixed npm release exists. Only frontend build and test tools use it with project-defined globs. The production frontend ships as static assets.",
+			"until": "2027-01-15",
+			"unfixed": true
 		},
 		{
 			"tool": "dockle-nginxions",
@@ -200,8 +201,15 @@
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "CVE-2025-47273",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (PackageIndex)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel is pinned by hash in certbot-requirements.txt. Its SBOM uses setuptools 70.3.0 for the pkg_resources subset, which has no setuptools/package_index.py. This record applies to SBOM-only entries from the same layer as the pinned packages",
 			"until": "2027-05-01"
 		},
 		{
@@ -359,22 +367,30 @@
 			"tool": "codeql-js",
 			"id": "js/file-access-to-http",
 			"where": "nginxions/backend/nginxions/control/client.js",
-			"reason": "the token of nginxions-control, read from the secrets volume, is sent to nginxions-control on 127.0.0.1 only",
+			"reason": "The stack sends the token only through the private Unix socket shared with nginxions-control. The legacy URL is a deployment setting; its default is loopback.",
 			"until": "2027-05-01"
 		},
 		{
 			"tool": "kics",
 			"id": "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b",
 			"where": "deploy/compose.yaml",
-			"reason": "the Docker socket is for nginxions-control alone, a container of its own (service control): a whitelist of operations on containers labelled nginxions.managed, a token, an audit log, a read-only root filesystem, no capability, the network control shared with openappsec only; the containers that take the traffic of the internet (nginxions, openappsec) do not get it",
-			"until": "2027-05-01"
+			"reason": "The networkless nginxions-control service alone mounts the Docker socket. Its command API requires a token over a separate Unix socket mounted by the backend. Direct access to the Docker daemon remains if the control process is compromised.",
+			"until": "2027-05-01",
+			"kicsFinding": {
+				"searchKey": "services.control.volumes",
+				"actualValue": "There is a docker socket named 'docker.sock' mounted in a volume"
+			}
 		},
 		{
 			"tool": "kics",
 			"id": "1c1325ff-831d-43a1-973e-839ae57dfcc0",
 			"where": "deploy/compose.yaml",
-			"reason": "the sensitive host path is the Docker socket of nginxions-control, see the finding Docker Socket Mounted In Container",
-			"until": "2027-05-01"
+			"reason": "The networkless nginxions-control service alone mounts the Docker socket. Its command API requires a token over a separate Unix socket mounted by the backend. Direct access to the Docker daemon remains if the control process is compromised.",
+			"until": "2027-05-01",
+			"kicsFinding": {
+				"searchKey": "services.control.volumes",
+				"actualValue": "There is a sensitive directory (/var/run/docker.sock) mounted as a volume"
+			}
 		},
 		{
 			"tool": "kics",
@@ -467,7 +483,7 @@
 		{
 			"tool": "scorecard",
 			"id": "FuzzingID",
-			"reason": "fuzzing through OSS-Fuzz or ClusterFuzzLite needs registering the project with an outside service; NginxionS registers nowhere",
+			"reason": "Parser fuzz tests run in CI and Nightly (scripts/fuzz.test.mjs) and the extended CI validates the API schema. Scorecard monitors separate integrations with OSS-Fuzz or ClusterFuzzLite.",
 			"until": "2027-05-01"
 		},
 		{
@@ -480,16 +496,30 @@
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "CVE-2026-59890",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (sdist and MANIFEST.in)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel vendors pkg_resources without the affected file-list module used to build source distributions. The matching record describes an SBOM-only package in the same layer as the pinned distributions",
 			"until": "2027-05-01"
 		},
 		{
 			"kind": "false-positive",
 			"tool": "trivy-nginxions",
 			"id": "GHSA-xmj3-9gf7-h52w",
-			"where": "setuptools",
-			"reason": "not installed: pip ships an SBOM of its vendored code (pip/_vendor/bom.cdx.json) that names setuptools 70.3.0 as the source of its pkg_resources; the setuptools of the image is 84.2.1, and the flaw is in a part pkg_resources does not have (install of legacy wheels on Windows)",
+			"where": "nginxions · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "the inspected pip 26.3 wheel vendors pkg_resources without the affected setuptools/wheel.py module for legacy wheel installation on Windows. The matching record describes an SBOM-only package in the same layer as the pinned distributions",
 			"until": "2027-05-01"
 		},
 		{
@@ -582,74 +612,157 @@
 		},
 		{
 			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "sqlite-libs",
+			"id": [
+				"CVE-2026-119371",
+				"CVE-2026-119372",
+				"CVE-2026-119373",
+				"CVE-2026-119374",
+				"CVE-2026-119375",
+				"CVE-2026-119376",
+				"CVE-2026-119377",
+				"CVE-2026-119378",
+				"CVE-2026-119379",
+				"CVE-2026-119591"
+			],
+			"grypePackage": {
+				"names": [
+					"sqlite-libs"
+				],
+				"version": "3.53.4-r0"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite) and of python3 (certbot); NginxionS uses neither node:sqlite nor the sqlite module of Python, its data is in PostgreSQL",
+			"reason": "Grype reports specific SQLite library advisories. The NginxionS databases use PostgreSQL. SQLite is linked by Node.js or Python, and the application does not use their SQLite interfaces.",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "grype-nginxions",
+			"id": "CVE-2026-119586",
+			"grypePackage": {
+				"names": [
+					"sqlite-libs"
+				],
+				"version": "3.53.4-r0"
+			},
+			"reason": "This advisory concerns the SQLite CLI recovery command. The CI image SBOM contains sqlite-libs, without the sqlite3 executable from the separate Alpine sqlite package.",
 			"until": "2027-02-01"
 		},
 		{
 			"tool": "grype-nginxions-openappsec",
-			"id": "*",
-			"where": "sqlite-libs",
+			"id": [
+				"CVE-2026-119371",
+				"CVE-2026-119372",
+				"CVE-2026-119373",
+				"CVE-2026-119374",
+				"CVE-2026-119375",
+				"CVE-2026-119376",
+				"CVE-2026-119377",
+				"CVE-2026-119378",
+				"CVE-2026-119379",
+				"CVE-2026-119591"
+			],
+			"grypePackage": {
+				"names": [
+					"sqlite-libs"
+				],
+				"version": "3.53.4-r0"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy, which reads the security data of Alpine, reports none); sqlite-libs is a dependency of the nodejs package of Alpine (its node:sqlite), installed for nginxions-control, which listens on 127.0.0.1 and does not use node:sqlite; the agent links no sqlite",
+			"reason": "Grype reports specific SQLite library advisories. The NginxionS databases use PostgreSQL. SQLite is linked by Node.js or Python, and the application does not use their SQLite interfaces.",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "grype-nginxions-openappsec",
+			"id": "CVE-2026-119586",
+			"grypePackage": {
+				"names": [
+					"sqlite-libs"
+				],
+				"version": "3.53.4-r0"
+			},
+			"reason": "This advisory concerns the SQLite CLI recovery command. The CI image SBOM contains sqlite-libs, without the sqlite3 executable from the separate Alpine sqlite package.",
 			"until": "2027-02-01"
 		},
 		{
 			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "python3",
+			"id": [
+				"CVE-2025-15367",
+				"CVE-2026-103995",
+				"CVE-2026-115559",
+				"CVE-2026-115791",
+				"CVE-2026-116566",
+				"CVE-2026-119170",
+				"CVE-2026-124249",
+				"CVE-2026-16052",
+				"CVE-2026-19552"
+			],
+			"grypePackage": {
+				"names": [
+					"python3"
+				],
+				"version": "3.14.10-r2"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy reports none); python3 runs certbot of NPMplus, no request of a client reaches it",
+			"reason": "Grype reports these advisories for the Certbot Python runtime. Alpine 3.24 does not offer a newer package. CVE-2026-119170 affects only OpenSSL FIPS enforcement in Python 3.14.10.",
 			"until": "2027-02-01"
 		},
 		{
 			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "busybox",
+			"id": "CVE-2025-60876",
+			"grypePackage": {
+				"names": [
+					"busybox",
+					"busybox-binsh",
+					"ssl_client"
+				],
+				"version": "1.37.0-r31"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy reports none); the CVE is in wget/ssl_client of busybox, which no service of NginxionS runs with input of a client",
+			"reason": "Grype reports CVE-2025-60876 for the BusyBox wget/ssl_client implementation. These packages are present in Alpine; the application services do not pass client-supplied URLs to it.",
 			"until": "2027-02-01"
 		},
 		{
 			"tool": "grype-nginxions-openappsec",
-			"id": "*",
-			"where": "busybox",
+			"id": "CVE-2025-60876",
+			"grypePackage": {
+				"names": [
+					"busybox",
+					"busybox-binsh",
+					"ssl_client"
+				],
+				"version": "1.37.0-r31"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy reports none); the CVE is in wget/ssl_client of busybox, used only by the healthcheck against 127.0.0.1",
+			"reason": "Grype reports CVE-2025-60876 for the BusyBox wget/ssl_client implementation. These packages are present in Alpine; the application services do not pass client-supplied URLs to it.",
 			"until": "2027-02-01"
 		},
 		{
+			"kind": "false-positive",
 			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "ssl_client",
+			"id": "CVE-2024-9410",
+			"grypePackage": {
+				"names": [
+					"ada-libs"
+				],
+				"version": "4.0.0-r0"
+			},
 			"unfixed": true,
-			"reason": "part of busybox, see busybox",
+			"reason": "CVE-2024-9410 is associated with the Sentry configuration of Ada.cx. Alpine ada-libs is the independent Ada C++ URL parser used by Node.js.",
 			"until": "2027-02-01"
 		},
 		{
+			"kind": "false-positive",
 			"tool": "grype-nginxions-openappsec",
-			"id": "*",
-			"where": "ssl_client",
+			"id": "CVE-2024-9410",
+			"grypePackage": {
+				"names": [
+					"ada-libs"
+				],
+				"version": "4.0.0-r0"
+			},
 			"unfixed": true,
-			"reason": "part of busybox, see busybox",
-			"until": "2027-02-01"
-		},
-		{
-			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "ada-libs",
-			"unfixed": true,
-			"reason": "no fixed version in Alpine (the URL parser of Node.js); Grype matches an old CVE of ada 2.x by name, Trivy reports none for ada 4",
-			"until": "2027-02-01"
-		},
-		{
-			"tool": "grype-nginxions-openappsec",
-			"id": "*",
-			"where": "ada-libs",
-			"unfixed": true,
-			"reason": "no fixed version in Alpine (the URL parser of Node.js of nginxions-control, which listens on 127.0.0.1); Trivy reports none for ada 4",
+			"reason": "CVE-2024-9410 is associated with the Sentry configuration of Ada.cx. Alpine ada-libs is the independent Ada C++ URL parser used by Node.js.",
 			"until": "2027-02-01"
 		},
 		{
@@ -668,18 +781,40 @@
 		},
 		{
 			"tool": "grype-nginxions",
-			"id": "*",
-			"where": "coreutils",
+			"id": [
+				"CVE-2026-56391",
+				"CVE-2026-56392"
+			],
+			"grypePackage": {
+				"names": [
+					"coreutils",
+					"coreutils-env",
+					"coreutils-fmt",
+					"coreutils-sha512sum"
+				],
+				"version": "9.11-r0"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy reports none); coreutils are used by the scripts of the image with their own arguments",
+			"reason": "Grype reports these advisories for Coreutils 9.11 in Alpine 3.24. The runtime uses these tools for its own scripts; the observed scans provide no fixed package version.",
 			"until": "2027-02-01"
 		},
 		{
 			"tool": "grype-nginxions-openappsec",
-			"id": "*",
-			"where": "coreutils",
+			"id": [
+				"CVE-2026-56391",
+				"CVE-2026-56392"
+			],
+			"grypePackage": {
+				"names": [
+					"coreutils",
+					"coreutils-env",
+					"coreutils-fmt",
+					"coreutils-sha512sum"
+				],
+				"version": "9.11-r0"
+			},
 			"unfixed": true,
-			"reason": "no fixed version in Alpine yet (Trivy reports none); coreutils are used by the scripts of the agent with their own arguments",
+			"reason": "Grype reports these advisories for Coreutils 9.11 in Alpine 3.24. The runtime uses these tools for its own scripts; the observed scans provide no fixed package version.",
 			"until": "2027-02-01"
 		},
 		{
@@ -825,15 +960,15 @@
 		{
 			"tool": "runtime",
 			"id": "docker-socket",
-			"where": "контейнер control",
-			"reason": "nginxions-control is the only service with the Docker socket: its own container without capabilities, read-only, on the internal network control, with a whitelist of operations on the containers of the stack and a token (CLAUDE.md, \"Безопасность\")",
-			"until": "2027-05-01"
+			"reason": "The networkless nginxions-control service alone mounts the Docker socket. Its command API requires a token over a separate Unix socket mounted by the backend. Direct access to the Docker daemon remains if the control process is compromised.",
+			"until": "2027-05-01",
+			"runtimeContainer": "control"
 		},
 		{
 			"tool": "runtime",
 			"id": "root-user",
 			"where": "контейнер control",
-			"reason": "the Docker socket belongs to root:docker with a group id that differs from host to host; the container has no capabilities, a read-only root and no network but control",
+			"reason": "The Docker socket belongs to root:docker, whose group ID varies by host. The container runs without network, capabilities or a writable root filesystem.",
 			"until": "2027-05-01"
 		},
 		{
@@ -988,6 +1123,67 @@
 			"where": "nginxions/backend/nginxions/nodes/member.js",
 			"reason": "the check of the certificate of the manager is the pin, not the CAs of the system (panels of NginxionS have a certificate of their own, often self-signed): the TLS socket is opened without the CA check, its SHA-256 fingerprint is compared with the one pinned at the join on secureConnect and the socket is closed before anything (join code, token) is written when it differs (docs/adr/0012-nodes.md, point 4; test: another certificate on the address of the manager, the node sends nothing)",
 			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "semgrep",
+			"id": "github.security.nginxions-tls-verification-off",
+			"where": "nginxions/backend/nginxions/nodes/member.js:77",
+			"reason": "managerExchange checks the administrator-verified SHA-256 pin on secureConnect before constructing the HTTP request. Tests verify a missing or mismatched pin sends no HTTP request (docs/adr/0012-nodes.md, point 4)",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "codeql-js",
+			"id": "js/http-to-file-access",
+			"where": "nginxions/backend/nginxions/nodes/member.js:193",
+			"reason": "the pinned manager response contributes fields to the member state that is serialized as JSON, with the token and key encrypted. The state writer uses a fixed administrator-configured destination in the data directory and a private temporary file. No response field selects either path",
+			"until": "2027-05-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "CVE-2025-47273",
+			"where": " · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "verified the layers from run 45400876961 and its successor: pip 26.3 lists setuptools 70.3.0 in its vendoring SBOM for pkg_resources. The affected setuptools/package_index.py is absent from the vendored files. The image installs setuptools 84.2.1",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "CVE-2026-59890",
+			"where": " · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "verified that pip vendors pkg_resources without the affected setuptools file-list module used to build source distributions. The installed distribution is setuptools 84.2.1",
+			"until": "2027-02-01"
+		},
+		{
+			"kind": "false-positive",
+			"tool": "published",
+			"id": "GHSA-xmj3-9gf7-h52w",
+			"where": " · Python",
+			"trivyPackage": {
+				"purl": "pkg:pypi/setuptools@70.3.0",
+				"analyzedBy": "sbom",
+				"path": "",
+				"pip": "pkg:pypi/pip@26.3",
+				"setuptools": "pkg:pypi/setuptools@84.2.1"
+			},
+			"reason": "verified that pip vendors pkg_resources without the affected setuptools/wheel.py module for legacy wheel installation on Windows. The installed distribution is setuptools 84.2.1",
+			"until": "2027-02-01"
 		}
 	]
 }

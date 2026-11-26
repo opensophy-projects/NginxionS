@@ -48,6 +48,23 @@ if [ "${1:-}" = after-restart ]; then
   exit 0
 fi
 
+if [ "${1:-}" = fail-close ]; then
+  step "WAF -> Agent: enable fail-close for the agent fault test"
+  wait_api
+  $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/agent" \
+    -d '{"fail_open": {"enabled": false, "timeout_ms": 50}}' | grep -q '"restarting": *true' \
+    || fail "saving agent settings did not restart the agent"
+  sleep 7
+  for i in $(seq 1 90); do
+    if $CURL "$ADMIN/api/nginxions/waf/agent" 2> /dev/null | grep -q '"restartRequired": *false' \
+      && $CURL "$ADMIN/api/nginxions/waf" 2> /dev/null | grep -q '"reachable": *true'; then
+      exit 0
+    fi
+    sleep 2
+  done
+  fail "the agent did not come back in fail-close"
+fi
+
 # ---------------------------------------------------------------- helpers of every group
 
 want() { [ "$1" = "$2" ] || fail "$3: expected $2, got $1"; }
@@ -200,29 +217,6 @@ done
 for g in $selected; do
   case " $ALL_GROUPS " in *" $g "*) ;; *) fail "unknown smoke group $g (groups: $ALL_GROUPS)" ;; esac
 done
-
-# fail-close for the checks after smoke (scripts/test-airgap.sh: a request the agent does not answer gets the 403 page,
-# not a closed connection). Switched on after all the groups, not at the end of the group waf: the groups after it run
-# on the same stack in test-airgap.sh, and in fail-close a request that met the agent busy applying the policy of a new
-# host got the 403 page (the nightly run: the Basic Auth page of the group hosts)
-case " $ran " in *" waf "*)
-  if $CURL "$ADMIN/api/nginxions/waf" 2> /dev/null | grep -q '"reachable": *true'; then
-    echo
-    echo "======== after the groups"
-    step "WAF -> Agent: fail-close on for the checks after smoke"
-    $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/waf/agent" \
-      -d '{"fail_open": {"enabled": false, "timeout_ms": 50}}' | grep -q '"restarting": *true' \
-      || fail "saving agent settings did not restart the agent"
-    sleep 7
-    for i in $(seq 1 90); do
-      $CURL "$ADMIN/api/nginxions/waf/agent" 2> /dev/null | grep -q '"restartRequired": *false' \
-        && $CURL "$ADMIN/api/nginxions/waf" 2> /dev/null | grep -q '"reachable": *true' && break
-      [ "$i" = 90 ] && fail "the agent did not come back in fail-close"
-      sleep 2
-    done
-  fi
-  ;;
-esac
 
 echo
 echo "groups:$ran"

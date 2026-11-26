@@ -1,0 +1,25 @@
+# Only for starting a previously published image without Unix socket support in the upgrade test.
+services:
+  openappsec:
+    networks:
+      control: {}
+
+  control:
+    network_mode: !reset null
+    networks:
+      control:
+        aliases: [nginxions-control]
+    environment:
+      NGINXIONS_CONTROL_LISTEN: 0.0.0.0
+      NGINXIONS_CONTROL_RPC_SOCKET: ""
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "4", "-O", "/dev/null", "http://127.0.0.1:7080/healthz"]
+
+  nginxions:
+    environment:
+      NGINXIONS_CONTROL_RPC_SOCKET: ""
+      NGINXIONS_CONTROL_URL: http://nginxions-control:7080
+
+networks:
+  control:
+    internal: true

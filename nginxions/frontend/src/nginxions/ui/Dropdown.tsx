@@ -131,10 +131,8 @@ export function Dropdown({
 			if (box.current && !box.current.contains(target) && !menu.current?.contains(target)) setOpen(false);
 		};
 		document.addEventListener("mousedown", outside);
-		const first = Math.max(
-			0,
-			items.findIndex((i) => i.active),
-		);
+		const active = items.findIndex((item) => item.active && !item.disabled);
+		const first = active >= 0 ? active : items.findIndex((item) => !item.disabled);
 		requestAnimationFrame(() => refs.current[first]?.focus());
 		return () => document.removeEventListener("mousedown", outside);
 	}, [open]);
@@ -146,14 +144,16 @@ export function Dropdown({
 
 	const onKeyDown = (e: React.KeyboardEvent) => {
 		if (!open) return;
-		const index = refs.current.indexOf(document.activeElement as HTMLButtonElement);
 		if (e.key === "Escape") {
 			e.preventDefault();
 			close();
 		} else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 			e.preventDefault();
-			const next = e.key === "ArrowDown" ? Math.min(index + 1, items.length - 1) : Math.max(index - 1, 0);
-			refs.current[next]?.focus();
+			const enabled = refs.current.filter((item): item is HTMLButtonElement => item !== null && !item.disabled);
+			const focused = document.activeElement;
+			const index = focused instanceof HTMLButtonElement ? enabled.indexOf(focused) : -1;
+			if (e.key === "ArrowDown") enabled[Math.min(index + 1, enabled.length - 1)]?.focus();
+			else enabled[index < 0 ? enabled.length - 1 : Math.max(index - 1, 0)]?.focus();
 		} else if (e.key === "Tab") {
 			setOpen(false);
 		}

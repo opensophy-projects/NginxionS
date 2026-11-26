@@ -156,6 +156,7 @@ const limited = async (jobs, limit) => {
 
 /** host names nginx resolves itself or that are not a plain address (variables, sockets) are not probed */
 const probeable = (host) => typeof host === "string" && /^[A-Za-z0-9.:[\]_-]+$/.test(host) && !host.startsWith("unix:");
+const probePort = (port) => Number.isInteger(port) && port >= 1 && port <= 65535;
 
 const internalHosts = {
 	/**
@@ -165,15 +166,18 @@ const internalHosts = {
 	 */
 	changes: async (access) => {
 		const result = [];
-		for (const type of Object.keys(HOST_OBJECTS)) {
+		for (const [type, { table }] of Object.entries(HOST_OBJECTS)) {
 			const hosts = await visibleHosts(access, type);
 			if (!hosts?.length) continue;
 			const ids = hosts.map((h) => h.id);
 			const latest = db()("audit_log")
-				.max("id as id")
-				.whereIn("object_type", auditTypes(type))
-				.whereIn("object_id", ids)
-				.groupBy("object_id");
+				.join(table, `${table}.id`, "audit_log.object_id")
+				// Match the history endpoint when a restored database reuses a host ID.
+				.whereColumn("audit_log.created_on", ">=", `${table}.created_on`)
+				.max("audit_log.id as id")
+				.whereIn("audit_log.object_type", auditTypes(type))
+				.whereIn("audit_log.object_id", ids)
+				.groupBy("audit_log.object_id");
 			const rows = await auditQuery().whereIn("audit_log.id", latest);
 			for (const row of rows) {
 				result.push({ type, object_id: row.object_id, ...entry(row) });
@@ -237,7 +241,7 @@ const internalHosts = {
 			if (!host.enabled) continue;
 			const add = (scheme, address, port) => {
 				const target = Number(port) || DEFAULT_PORT[scheme];
-				if (probeable(address) && target) {
+				if (probeable(address) && probePort(target)) {
 					targets.push({ type: "proxy-host", object_id: host.id, host: address, port: target });
 				}
 			};
@@ -256,12 +260,13 @@ const internalHosts = {
 		]);
 		for (const stream of streams ?? []) {
 			// UDP has no handshake to check
-			if (stream.enabled && stream.tcp_forwarding && probeable(stream.forwarding_host)) {
+			const port = Number(stream.forwarding_port);
+			if (stream.enabled && stream.tcp_forwarding && probeable(stream.forwarding_host) && probePort(port)) {
 				targets.push({
 					type: "stream",
 					object_id: stream.id,
 					host: stream.forwarding_host,
-					port: Number(stream.forwarding_port),
+					port,
 				});
 			}
 		}

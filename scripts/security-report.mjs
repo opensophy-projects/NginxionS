@@ -157,19 +157,37 @@ const osv = (doc) => {
 	return out;
 };
 
-const trivy = (doc, { image }) => {
+const trivy = (doc, { image } = {}) => {
 	const out = [];
 	for (const result of doc?.Results ?? []) {
-		for (const v of result.Vulnerabilities ?? [])
+		const packages = new Map((result.Packages ?? []).filter((p) => p.Identifier?.UID).map((p) => [p.Identifier.UID, p]));
+		const installedPython = new Map();
+		for (const p of packages.values()) {
+			if (p.AnalyzedBy === "python-pkg" && p.FilePath && p.Layer?.Digest) {
+				installedPython.set(`${p.Layer.Digest}/${p.Name}`, p.Identifier.PURL);
+			}
+		}
+		for (const v of result.Vulnerabilities ?? []) {
+			const pkg = packages.get(v.PkgIdentifier?.UID);
+			const layer = v.Layer?.Digest;
 			out.push({
 				rule: v.VulnerabilityID,
 				title: `${v.PkgName} ${v.InstalledVersion}: ${firstLine(v.Title) || v.VulnerabilityID}`,
 				severity: fromWord(v.Severity),
 				location: `${image} · ${result.Target}`,
+				trivyPackage: {
+					purl: v.PkgIdentifier?.PURL,
+					layer,
+					path: v.PkgPath || pkg?.FilePath || "",
+					analyzedBy: pkg?.AnalyzedBy,
+					pip: installedPython.get(`${layer}/pip`),
+					setuptools: installedPython.get(`${layer}/setuptools`),
+				},
 				fix: v.FixedVersion ?? "",
 				url: v.PrimaryURL ?? "",
 				kind: "vuln",
 			});
+		}
 		for (const s of result.Secrets ?? [])
 			out.push({
 				rule: s.RuleID,
@@ -196,6 +214,7 @@ const grype = (doc, { image }) =>
 	(doc?.matches ?? []).map((m) => ({
 		rule: m.vulnerability.id,
 		title: `${m.artifact.name} ${m.artifact.version}`,
+		grypePackage: m.artifact.type === "apk" ? { name: m.artifact.name, version: m.artifact.version } : undefined,
 		severity: fromWord(m.vulnerability.severity),
 		location: image,
 		fix: (m.vulnerability.fix?.versions ?? []).join(", "),
@@ -239,6 +258,7 @@ const kics = (doc) =>
 		(q.files ?? []).map((f) => ({
 			rule: q.query_id,
 			title: q.query_name,
+			kicsFinding: { searchKey: f.search_key, actualValue: f.actual_value },
 			severity: fromWord(q.severity),
 			path: repoPath(f.file_name),
 			location: at(repoPath(f.file_name), f.line),
@@ -288,6 +308,7 @@ const runtime = (doc) =>
 		rule: r.rule,
 		title: `${r.container}: ${r.title}`,
 		severity: r.severity,
+		runtimeContainer: r.container,
 		location: `контейнер ${r.container}`,
 		url: "https://docs.docker.com/reference/compose-file/services/",
 	}));
@@ -507,6 +528,17 @@ const CHECKS = [
 		dedupe: true,
 		blocks: (f) => severe(f.severity) && !!f.fix,
 	},
+	{
+		id: "grype-published",
+		group: "published",
+		category: "Опубликованные образы",
+		tool: "Grype · Docker Hub",
+		what: "второе мнение по SBOM опубликованных образов",
+		match: /^grype-published-.+\.json$/,
+		parse: (doc, file) => grype(doc, { image: imageOf(file, "grype-published-") }),
+		dedupe: true,
+		blocks: () => false,
+	},
 	...[
 		["zap-api", "интерфейс: API (:81, OpenAPI, с сессией)", "активная атака на API по схеме OpenAPI"],
 		["zap-ui", "интерфейс: страницы (:81)", "заголовки, cookies, утечки на страницах интерфейса"],
@@ -588,9 +620,17 @@ const acceptance = (check, f) =>
 	accepted.find(
 		(r) =>
 			(r.tool === check.id || r.tool === "*") &&
-			(r.id === f.rule || r.id === "*") &&
+			(Array.isArray(r.id) ? r.id.includes(f.rule) : r.id === f.rule || r.id === "*") &&
 			// "unfixed": only while the finding has no fixed version (a package of Alpine with no fix yet)
 			(!r.unfixed || !f.fix) &&
+			(!r.trivyPackage ||
+				(f.trivyPackage && Object.entries(r.trivyPackage).every(([key, value]) => f.trivyPackage[key] === value))) &&
+			(!r.grypePackage ||
+				(f.grypePackage && r.grypePackage.names.includes(f.grypePackage.name) &&
+				r.grypePackage.version === f.grypePackage.version)) &&
+			(!r.kicsFinding ||
+				(f.kicsFinding && Object.entries(r.kicsFinding).every(([key, value]) => f.kicsFinding[key] === value))) &&
+			(!r.runtimeContainer || (f.runtimeContainer === r.runtimeContainer && !severe(f.severity))) &&
 			(!r.where || f.location.includes(r.where) || f.title.includes(r.where)),
 	);
 
@@ -605,10 +645,13 @@ for (const check of CHECKS) {
 		const seen = new Set();
 		for (const file of own) {
 			const doc = check.lines ? readJsonLines(file) : readJson(file);
+			if (check.id === "published" && doc?.SchemaVersion !== 2) throw new Error(`${basename(file)}: invalid Trivy scan`);
+			if (check.id === "grype-published" && !Array.isArray(doc?.matches))
+				throw new Error(`${basename(file)}: invalid Grype scan`);
 			for (let f of check.parse(doc, file)) {
 				if (check.normalize) f = check.normalize(f);
 				if (check.dedupe) {
-					const key = `${f.rule}\u0000${f.location}\u0000${f.title}`;
+					const key = `${f.rule}\u0000${f.location}\u0000${f.title}\u0000${JSON.stringify(f.trivyPackage)}`;
 					if (seen.has(key)) continue;
 					seen.add(key);
 				}
@@ -626,6 +669,13 @@ for (const check of CHECKS) {
 				}
 				result.findings.push(f);
 			}
+		}
+		if (check.id === "grype-published" && expect.has("published")) {
+			const available = new Set(own.map((file) => basename(file)));
+			const missing = files.map((file) => basename(file)).filter((name) =>
+				/^trivy-published-.+\.json$/.test(name) && !available.has(name.replace(/^trivy-/, "grype-")),
+			);
+			if (missing.length) throw new Error(`Grype results missing for ${missing.join(", ")}`);
 		}
 	} catch (err) {
 		result.error = `не удалось прочитать результат: ${err.message}`;
@@ -837,7 +887,11 @@ const markdown = () => {
 			"| Инструмент | Правило | Где | Причина |",
 			"|---|---|---|---|",
 		);
-		for (const r of stale) out.push(`| ${md(r.tool)} | ${md(r.id)} | ${md(r.where ?? "")} | ${md(r.reason)} |`);
+		for (const r of stale) {
+			const rules = Array.isArray(r.id) ? r.id.join(", ") : r.id;
+			const location = r.where ?? r.grypePackage?.names.join(", ") ?? "";
+			out.push(`| ${md(r.tool)} | ${md(rules)} | ${md(location)} | ${md(r.reason)} |`);
+		}
 		out.push("");
 	}
 	if (sboms.length) {
