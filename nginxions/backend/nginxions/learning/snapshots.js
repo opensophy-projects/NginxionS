@@ -12,6 +12,7 @@
 //     a sync of smartsync that brings a shift can be rolled back to the hour before.
 // RBAC: who sees learning sees the snapshots; who labels takes and downloads them; restore, upload and delete also need
 // waf_policy:manage (they change what the WAF blocks).
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -248,20 +249,20 @@ const audit = (access, meta) =>
 	internalAuditLog.add(access, { action: "updated", object_type: "waf_learning", meta: { snapshot: meta } });
 
 const canManage = async (access) => {
-	await access.can("waf_learning:label");
-	await access.can("waf_policy:manage");
+	await assertGlobalAccess(access, "waf_learning:label");
+	await assertGlobalAccess(access, "waf_policy:manage");
 };
 
 const internalLearningSnapshots = {
 	/** @param {Access} access */
 	list: async (access) => {
-		await access.can("waf_learning:view");
+		await assertGlobalAccess(access, "waf_learning:view");
 		return { snapshots: await listSnapshots(), keepAuto: KEEP_AUTO };
 	},
 
 	/** @param {Access} access */
 	take: async (access) => {
-		await access.can("waf_learning:label");
+		await assertGlobalAccess(access, "waf_learning:label");
 		const meta = await takeSnapshot("manual", access.token.getUserId(0));
 		await audit(access, { action: "taken", id: meta.id });
 		return meta;
@@ -278,7 +279,7 @@ const internalLearningSnapshots = {
 		const payload = await loadSnapshot(id);
 		// An empty cluster list clears the merged state. A snapshot without the field leaves that state alone.
 		const restoreCluster = payload.cluster !== undefined;
-		if (restoreCluster) await access.can("waf_learning:sync");
+		if (restoreCluster) await assertGlobalAccess(access, "waf_learning:sync");
 		const before = await takeSnapshot("before-restore", access.token.getUserId(0), {
 			requireCluster: restoreCluster,
 		});
@@ -312,7 +313,7 @@ const internalLearningSnapshots = {
 	 * @param {string} id
 	 */
 	download: async (access, id) => {
-		await access.can("waf_learning:label");
+		await assertGlobalAccess(access, "waf_learning:label");
 		await loadSnapshot(id);
 		await audit(access, { action: "downloaded", id });
 		return { name: `nginxions-learning-${id}.json.gz`, content: await readFile(fileOf(id, "json.gz")) };

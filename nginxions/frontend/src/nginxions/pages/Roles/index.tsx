@@ -9,11 +9,12 @@ import { intl, T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { deleteRole, type OidcMapping, type Role, setOidcMapping } from "../../rbac/api";
-import { useCan, useOidcMapping, useRbacMe, useRbacRefresh, useRoles } from "../../rbac/hooks";
+import { canDelegateRole, useCan, useOidcMapping, useRbacMe, useRbacRefresh, useRoles } from "../../rbac/hooks";
 import { roleDescription, roleName } from "../../rbac/labels";
 import { showRoleModal } from "../../rbac/RoleModal";
 import { Dropdown } from "../../ui/Dropdown";
 import styles from "./Roles.module.css";
+import { ServiceTokens } from "./ServiceTokens";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 
@@ -230,7 +231,7 @@ export default function Roles() {
 															},
 														]
 													: []),
-												...(canManage && !role.builtin
+												...(canManage && !role.builtin && canDelegateRole(me, role)
 													? [
 															{
 																key: "delete",
@@ -252,6 +253,7 @@ export default function Roles() {
 			</div>
 
 			<OidcCard canManage={canManage && !!me?.admin} />
+			{me?.admin && <ServiceTokens roles={roles ?? []} />}
 		</div>
 	);
 }

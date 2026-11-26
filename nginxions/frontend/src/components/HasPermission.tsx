@@ -17,6 +17,7 @@ interface Props {
 	/** NginxionS: an RBAC resource ("users", "waf_policy:apply", or any of several: "certificates|pki"); with `permission` it
 	 * decides instead of `section` */
 	rbac?: string;
+	allHosts?: boolean;
 }
 function HasPermission({
 	section,
@@ -26,9 +27,10 @@ function HasPermission({
 	pageLoading = false,
 	loadingNoLogo = false,
 	rbac,
+	allHosts = false,
 }: Props) {
 	const { data, isLoading: userIsLoading } = useUser("me");
-	const { isLoading: rbacIsLoading } = useRbacMe();
+	const { data: rbacMe, isLoading: rbacIsLoading } = useRbacMe();
 	const can = useCan();
 	const isLoading = userIsLoading || (!!rbac && rbacIsLoading);
 
@@ -51,7 +53,7 @@ function HasPermission({
 	const allowed = rbac
 		? rbac.split("|").some((one) => {
 				const [resource, action] = one.split(":");
-				return can(resource, action || permission);
+				return (!allHosts || rbacMe?.admin || rbacMe?.scope === "all") && can(resource, action || permission);
 			})
 		: !!section && hasPermission(section, permission, data?.permissions, data?.roles);
 	if (allowed) {

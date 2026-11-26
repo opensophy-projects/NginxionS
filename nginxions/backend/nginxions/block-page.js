@@ -2,6 +2,7 @@
 // bouncer, an access list). The page is rendered here into /data/nginxions/block-page.html; nginx puts it in place of
 // the refusal (conf.d/nginxions-block-page.conf), filling in the IP, the time, the host and the request ID. Off: no
 // file, each component answers with its own page.
+import { assertGlobalAccess } from "./rbac/scope.js";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import YAML from "yaml";
 
@@ -116,7 +117,7 @@ export const bootstrap = async () => {
 
 const internalBlockPage = {
 	get: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const { getSetting } = await deps();
 		const settings = await getSetting("block.page");
 		return { settings, preview: render(settings) };
@@ -124,7 +125,7 @@ const internalBlockPage = {
 
 	/** @param {{enabled, title, text, contact, details, accent}} data */
 	set: async (access, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const { setSetting, audit } = await deps();
 		await setSetting("block.page", data);
 		await writePage(data);
@@ -151,7 +152,7 @@ const internalBlockPage = {
 	 * @param {(data: object) => Promise<object>} validate  the schema of the route
 	 */
 	setCode: async (access, data, validate) => {
-		await access.can(data.dry_run ? "waf_policy:view" : "waf_policy:manage");
+		await assertGlobalAccess(access, data.dry_run ? "waf_policy:view" : "waf_policy:manage");
 		let settings;
 		try {
 			settings = await validate(YAML.parse(data.content));
@@ -165,7 +166,7 @@ const internalBlockPage = {
 
 	/** the page of settings not saved yet */
 	preview: async (access, data) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		return { preview: render(data) };
 	},
 };

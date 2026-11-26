@@ -2,6 +2,8 @@ import express from "express";
 import internalProxyHost from "../../internal/proxy-host.js";
 import internalProxyHostAccessList from "../../internal/proxy-host-access-list.js";
 import jwtdecode from "../../lib/express/jwt-decode.js";
+// NginxionS: bound requests before session or service-token authorization.
+import { panelLimiter } from "../../nginxions/rate-limit.js";
 import apiValidator from "../../lib/validator/api.js";
 import validator from "../../lib/validator/index.js";
 import { debug, express as logger } from "../../logger.js";
@@ -21,7 +23,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/proxy-hosts
@@ -84,7 +86,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * GET /api/nginx/proxy-hosts/123
@@ -166,7 +168,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/proxy-hosts/123/enable
@@ -193,7 +195,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode({ serviceTokens: true })) // NginxionS: scoped service API
 
 	/**
 	 * POST /api/nginx/proxy-hosts/123/disable

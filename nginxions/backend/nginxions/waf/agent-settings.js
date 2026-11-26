@@ -8,6 +8,7 @@
 // kept, and going back to it (here, or on every node through the next package) is one button.
 // The role of this server in the learning of several servers (step 15.4, docs/adr/0012-nodes.md 5c) goes in the same
 // file: it is not a setting, it follows the nodes (applyLearningRole).
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { createWriteStream } from "node:fs";
 import { link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -239,7 +240,7 @@ const internalWafAgent = {
 	 * @param {Access} access
 	 */
 	get: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		return state(await getSetting("waf.agent"));
 	},
 
@@ -249,7 +250,7 @@ const internalWafAgent = {
 	 * @param {boolean} [apply]  restart the agent now
 	 */
 	set: async (access, data, apply = true) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const settings = await setSetting("waf.agent", {
 			failOpen: { enabled: data.fail_open.enabled, timeoutMs: data.fail_open.timeout_ms },
 		});
@@ -272,7 +273,7 @@ const internalWafAgent = {
 	 * @param {boolean}         [apply]  restart the agent now
 	 */
 	uploadModel: async (access, req, apply = true) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		if (await managedByManager()) {
 			throw new errs.ValidationError("The model of this node is given by its manager: upload it there");
 		}
@@ -315,7 +316,7 @@ const internalWafAgent = {
 	 * @param {boolean} [apply]  restart the agent now
 	 */
 	removeModel: async (access, apply = true) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		if (await managedByManager()) {
 			throw new errs.ValidationError("The model of this node is given by its manager: change it there");
 		}
@@ -346,7 +347,7 @@ const internalWafAgent = {
  * @param {boolean} [apply]  restart the agent now
  */
 internalWafAgent.previousModel = async (access, apply = true) => {
-	await access.can("waf_policy:manage");
+	await assertGlobalAccess(access, "waf_policy:manage");
 	if (await managedByManager()) {
 		throw new errs.ValidationError("The model of this node is given by its manager: change it there");
 	}

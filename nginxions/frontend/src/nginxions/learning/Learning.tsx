@@ -14,7 +14,7 @@ import { showConfirmModal } from "../modals/ConfirmModal";
 import hostStyles from "../pages/Hosts/Hosts.module.css";
 import eventStyles from "../pages/WafEvents/Events.module.css";
 import { SimulationNote } from "../policy/Review";
-import { useCan } from "../rbac/hooks";
+import { useCan, useRbacMe } from "../rbac/hooks";
 import { SearchField } from "../ui/SearchField";
 import { dateTime, timeAgo } from "../ui/time";
 import {
@@ -73,12 +73,14 @@ function Hosts({
 	label,
 	restore,
 	nodes,
+	allHosts,
 }: {
 	manage: boolean;
 	label: boolean;
 	restore: boolean;
 	/** the profile for new nodes (waf_learning:sync) */
 	nodes: boolean;
+	allHosts: boolean;
 }) {
 	const refresh = useRefresh();
 	const { data, isLoading, isError, error } = useQuery({
@@ -87,7 +89,12 @@ function Hosts({
 		refetchInterval: 60000,
 	});
 	// a sharp shift of what the agent learned between its last two snapshots (snapshots of learning)
-	const snapshots = useQuery({ queryKey: [SNAPSHOTS_KEY], queryFn: getLearningSnapshots, refetchInterval: 300000 });
+	const snapshots = useQuery({
+		queryKey: [SNAPSHOTS_KEY],
+		queryFn: getLearningSnapshots,
+		refetchInterval: 300000,
+		enabled: allHosts,
+	});
 	const shifted = snapshots.data ? recentShift(snapshots.data.snapshots) : null;
 	const [busy, setBusy] = useState<number | null>(null);
 
@@ -129,22 +136,24 @@ function Hosts({
 						<T id="nginxions.learning.hosts.text" />
 					</p>
 				</div>
-				<div className="d-flex gap-2">
-					<button
-						type="button"
-						className="btn btn-sm"
-						onClick={() => showProfilesModal({ label, manage: restore, nodes })}
-					>
-						<T id="nginxions.learning.profiles.open" />
-					</button>
-					<button
-						type="button"
-						className="btn btn-sm"
-						onClick={() => showSnapshotsModal({ label, manage: restore })}
-					>
-						<T id="nginxions.learning.snapshots.open" />
-					</button>
-				</div>
+				{allHosts && (
+					<div className="d-flex gap-2">
+						<button
+							type="button"
+							className="btn btn-sm"
+							onClick={() => showProfilesModal({ label, manage: restore, nodes })}
+						>
+							<T id="nginxions.learning.profiles.open" />
+						</button>
+						<button
+							type="button"
+							className="btn btn-sm"
+							onClick={() => showSnapshotsModal({ label, manage: restore })}
+						>
+							<T id="nginxions.learning.snapshots.open" />
+						</button>
+					</div>
+				)}
 			</div>
 			{shifted && (
 				<Alert variant="warning">
@@ -842,6 +851,7 @@ function History({ label }: { label: boolean }) {
 
 export function LearningTab() {
 	const can = useCan();
+	const { data: me } = useRbacMe();
 	const label = can("waf_learning", "label");
 	return (
 		<div>
@@ -850,7 +860,8 @@ export function LearningTab() {
 			</p>
 			<Queue label={label} />
 			<Hosts
-				manage={can("proxy_hosts", "manage")}
+				allHosts={me?.scope === "all"}
+				manage={can("waf_policy") && (can("proxy_hosts", "manage") || can("waf_policy", "manage"))}
 				label={label}
 				restore={label && can("waf_policy", "manage")}
 				nodes={can("waf_learning", "sync")}

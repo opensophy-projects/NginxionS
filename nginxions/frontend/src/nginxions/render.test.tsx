@@ -1,14 +1,19 @@
 // Every component and every window of the interface of NginxionS renders, in both languages, with the data the API
 // answers (test/fixtures.ts): a page that throws on the data of a real stack, a window that does not open, a missing
 // provider or prop fail here, not in the browser of an administrator.
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import EasyModal from "ez-modal-react";
 import { changeLocale } from "src/locale";
+import Users from "src/pages/Users";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { toWafForm } from "./components/WafFields";
+import AgentOpenappsec from "./pages/AgentOpenappsec";
 import { type HostRow, recommendations, toRows } from "./pages/Hosts/rows";
+import Roles from "./pages/Roles";
+import { showRoleModal } from "./rbac/RoleModal";
+import { showUserRolesModal } from "./rbac/UserRolesModal";
 import * as f from "./test/fixtures";
-import { mockApi, renderApp, settle } from "./test/harness";
+import { answer, mockApi, renderApp, settle } from "./test/harness";
 
 beforeAll(mockApi);
 afterEach(cleanup);
@@ -166,6 +171,7 @@ const PROPS: Record<string, Record<string, unknown>> = {
 	BarList: { items: [{ label: "DE", value: 3 }], emptyText: "none" },
 	Label: { id: "nginxions.hosts.add" },
 	HostPicker: { value: [], onChange: noop, hosts: [] },
+	ServiceTokens: { roles: [f.role] },
 	StackedBars: { data: [{ label: "a", values: [1, 2] }], series: ["x", "y"] },
 	CodeDiff: { diff },
 	Diff: { diff },
@@ -321,5 +327,276 @@ describe("pages, used", () => {
 		const reported = errors.mock.calls.map((c) => String(c[0])).filter((m) => /The above error|Uncaught/.test(m));
 		errors.mockRestore();
 		expect(reported).toEqual([]);
+	});
+});
+
+describe("Phase 3 permissions", () => {
+	const delegate = { ...f.user, id: 2, name: "Delegate", roles: [] };
+	const other = { ...f.user, id: 3, name: "Other user", roles: [] };
+	const signIn = (permissions: string[]) =>
+		vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			const path = url.split("?")[0];
+			const body = path.endsWith("/rbac/me")
+				? { admin: false, scope: "own", permissions, roles: [] }
+				: path.endsWith("/users/me")
+					? delegate
+					: path.endsWith("/api/users")
+						? [f.user, delegate, other]
+						: answer(url);
+			return new Response(JSON.stringify(body), {
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+	const actionsOf = (name: string) => {
+		const row = screen.getByText(name).closest("tr");
+		if (!row) throw new Error(`Missing row for ${name}`);
+		return within(row);
+	};
+
+	afterEach(() => {
+		mockApi();
+	});
+
+	it("keeps the user directory read-only except for the current profile", async () => {
+		signIn(["users:view"]);
+		await changeLocale("en");
+		await renderApp(<Users />);
+		await screen.findByText("Delegate");
+		expect(screen.queryByText(/add user/i)).toBeNull();
+		expect(actionsOf("Delegate").getByRole("button", { name: "User #2" })).toBeTruthy();
+		expect(actionsOf("Other user").queryByRole("button")).toBeNull();
+	});
+
+	it("shows user management without administrator-only controls", async () => {
+		signIn(["users:view", "users:manage"]);
+		await changeLocale("en");
+		await renderApp(<Users />);
+		expect(await screen.findByText(/add user/i)).toBeTruthy();
+		expect(actionsOf("Admin").queryByRole("button")).toBeNull();
+		const otherActions = actionsOf("Other user");
+		expect(otherActions.getByRole("button", { name: "User #3" })).toBeTruthy();
+		expect(otherActions.queryByText(/log in as/i)).toBeNull();
+		expect(otherActions.queryByText("Permissions")).toBeNull();
+	});
+
+	it("creates a role from a template and saves the chosen hosts", async () => {
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal();
+		});
+		const template = await screen.findByRole("combobox", { name: "Start from" });
+		fireEvent.click(screen.getByRole("button", { name: "All" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" }).every((el) => el.checked)).toBe(
+			true,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "View only" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" }).some((el) => el.checked)).toBe(
+			false,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "None" }));
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox", { name: "View" }).some((el) => el.checked)).toBe(
+			false,
+		);
+		fireEvent.change(template, { target: { value: "builtin:viewer" } });
+		fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "App reviewers" } });
+		fireEvent.click(screen.getByRole("radio", { name: "Own and chosen hosts" }));
+		const host = await screen.findByRole<HTMLInputElement>("checkbox", { name: f.proxyHost.domainNames[0] });
+		fireEvent.click(host);
+		expect(host.checked).toBe(true);
+		fireEvent.click(host);
+		expect(host.checked).toBe(false);
+		fireEvent.click(host);
+		fireEvent.click(screen.getByRole("button", { name: "Create" }));
+		await settle();
+		const request = vi
+			.mocked(fetch)
+			.mock.calls.find(([url, options]) => String(url).endsWith("/rbac/roles") && options?.method === "POST");
+		expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+			name: "App reviewers",
+			scope: "hosts",
+			permissions: f.role.permissions,
+			hosts: [{ host_type: "proxy_host", host_id: f.proxyHost.id }],
+		});
+	});
+
+	it("disables the scope and permissions a delegated role editor cannot grant", async () => {
+		signIn(["roles:view", "roles:manage", "proxy_hosts:view"]);
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal();
+		});
+		expect((await screen.findByRole<HTMLInputElement>("radio", { name: "Own hosts" })).checked).toBe(true);
+		expect(screen.getByRole<HTMLInputElement>("radio", { name: "All hosts" }).disabled).toBe(true);
+		const [manageHosts, manageRoles] = screen.getAllByRole<HTMLInputElement>("checkbox", { name: "Manage" });
+		expect(manageHosts.disabled).toBe(true);
+		expect(manageRoles.disabled).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: "All" }));
+		expect(manageHosts.checked).toBe(false);
+		expect(manageRoles.checked).toBe(true);
+	});
+
+	it("edits the OIDC groups of a built-in role with its permissions locked", async () => {
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showRoleModal({ role: { ...f.role, builtin: "viewer", scope: "all" } });
+		});
+		const groups = await screen.findByRole<HTMLInputElement>("textbox", { name: /OIDC groups/ });
+		expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Name" }).disabled).toBe(true);
+		expect(screen.getAllByRole<HTMLInputElement>("checkbox").every((el) => el.disabled)).toBe(true);
+		fireEvent.change(groups, { target: { value: "editors, auditors" } });
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await settle();
+		const target = `/rbac/roles/${f.role.id}`;
+		const request = vi
+			.mocked(fetch)
+			.mock.calls.find(([url, options]) => String(url).endsWith(target) && options?.method === "PUT");
+		expect(JSON.parse(String(request?.[1]?.body)).oidc_groups).toEqual(["editors", "auditors"]);
+	});
+
+	it("distinguishes OIDC assignments from roles selected manually", async () => {
+		const requests = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			const data = url.endsWith("/rbac/users")
+				? { 1: [{ id: f.role.id, name: f.role.name, builtin: null, oidcGrant: true, manualGrant: false }] }
+				: answer(url);
+			return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+		});
+		await changeLocale("en");
+		await renderApp(<div />);
+		act(() => {
+			void showUserRolesModal(1, f.user.name);
+		});
+		const role = (await screen.findByRole("checkbox", { name: /Analyst.*OIDC/ })) as HTMLInputElement;
+		expect(role.checked).toBe(false);
+		fireEvent.click(role);
+		fireEvent.click(screen.getByRole("button", { name: "Save" }));
+		await settle();
+		const request = requests.mock.calls.find(([input]) => String(input).endsWith("/rbac/users/1"));
+		expect(JSON.parse(String(request?.[1]?.body))).toEqual({ roles: [f.role.id] });
+	});
+
+	it("issues, edits and revokes a service token in the Roles panel", async () => {
+		const urlPath = "/rbac/service-tokens";
+		const viewer = { ...f.role, id: 3, builtin: "viewer", name: "Viewer" };
+		const admin = { ...f.role, id: 1, builtin: "administrator", name: "Administrator" };
+		const secret = "one-time-fixture-value";
+		const issued = {
+			id: 7,
+			name: "Deployment job",
+			roles: [viewer.id],
+			expiresOn: "2099-01-01T00:00:00Z",
+			status: "active",
+			revokedOn: null as string | null,
+		};
+		let exists = false;
+		let rejectFirstIssue = true;
+		const api = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			let data = answer(url);
+			if (url.endsWith("/rbac/roles")) data = [admin, viewer, f.role];
+			if (url.endsWith(urlPath)) {
+				if (options?.method === "POST") {
+					if (rejectFirstIssue) {
+						rejectFirstIssue = false;
+						return Response.json({ error: { message: "Please retry issuance" } }, { status: 400 });
+					}
+					exists = true;
+					data = { ...issued, secret };
+				} else {
+					data = exists ? [issued] : [];
+				}
+			}
+			if (url.endsWith(`${urlPath}/${issued.id}`)) {
+				if (options?.method === "PUT") issued.roles = [f.role.id];
+				if (options?.method === "DELETE") {
+					issued.revokedOn = "2026-11-25T00:00:00Z";
+					issued.status = "revoked";
+				}
+				data = { ...issued };
+			}
+			return Response.json(data);
+		});
+		await changeLocale("en");
+		await renderApp(<Roles />);
+		fireEvent.click(await screen.findByRole("button", { name: "Create token" }));
+		const editor = await screen.findByRole("dialog");
+		const dialog = within(editor);
+		expect(dialog.queryByRole("checkbox", { name: "Administrator" })).toBeNull();
+		fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), { target: { value: issued.name } });
+		fireEvent.click(dialog.getByRole("checkbox", { name: "Viewer" }));
+		const days = dialog.getByRole("spinbutton", { name: "Valid for, days" });
+		const create = dialog.getByRole<HTMLButtonElement>("button", { name: "Create" });
+		fireEvent.change(days, { target: { value: "" } });
+		expect(create.disabled).toBe(true);
+		fireEvent.change(days, { target: { value: "366" } });
+		expect(create.disabled).toBe(true);
+		fireEvent.change(days, { target: { value: "14" } });
+		fireEvent.click(create);
+		expect(await dialog.findByText("Please retry issuance")).toBeTruthy();
+		fireEvent.click(create);
+		const value = await dialog.findByRole<HTMLInputElement>("textbox", { name: "Token value" });
+		expect(value.value).toBe(secret);
+		fireEvent.focus(value);
+		expect(value.selectionEnd).toBe(secret.length);
+		const clipboard = vi
+			.spyOn(navigator.clipboard, "writeText")
+			.mockRejectedValueOnce(new Error("Clipboard denied"))
+			.mockResolvedValueOnce(undefined);
+		fireEvent.click(dialog.getByRole("button", { name: "Copy token" }));
+		expect(await dialog.findByText(/clipboard unavailable/i)).toBeTruthy();
+		fireEvent.click(dialog.getByRole("button", { name: "Copy token" }));
+		expect(await dialog.findByRole("button", { name: "Copied" })).toBeTruthy();
+		expect(clipboard).toHaveBeenLastCalledWith(secret);
+		clipboard.mockRestore();
+		fireEvent.click(dialog.getByText("Close"));
+		await settle();
+		expect(screen.queryByDisplayValue(secret)).toBeNull();
+		fireEvent.click(await screen.findByRole("button", { name: "Permissions" }));
+		const edit = within(await screen.findByRole("dialog"));
+		expect(edit.getByRole<HTMLInputElement>("checkbox", { name: "Viewer" }).checked).toBe(true);
+		fireEvent.click(edit.getByRole("checkbox", { name: "Viewer" }));
+		fireEvent.click(edit.getByRole("checkbox", { name: "Analyst" }));
+		fireEvent.click(edit.getByRole("button", { name: "Save" }));
+		await settle();
+		fireEvent.click(await screen.findByRole("button", { name: "Revoke token" }));
+		fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Revoke token" }));
+		expect(await screen.findByText("Revoked")).toBeTruthy();
+		const requests = api.mock.calls.filter(([url]) => String(url).includes(urlPath));
+		expect(requests.filter(([, opt]) => opt?.method !== "GET").map(([, opt]) => opt?.method)).toEqual([
+			"POST",
+			"POST",
+			"PUT",
+			"DELETE",
+		]);
+		expect(JSON.parse(String(requests.find(([, opt]) => opt?.method === "POST")?.[1]?.body))).toEqual({
+			name: issued.name,
+			roles: [viewer.id],
+			expires_in_days: 14,
+		});
+	});
+
+	it("hides the service token panel for delegated role editors", async () => {
+		const requests = signIn(["roles:view", "roles:manage"]);
+		await changeLocale("en");
+		await renderApp(<Roles />);
+		await screen.findByRole("heading", { name: "Roles", level: 1 });
+		expect(screen.queryByRole("heading", { name: "Service API tokens" })).toBeNull();
+		expect(requests.mock.calls.some(([url]) => String(url).endsWith("/rbac/service-tokens"))).toBe(false);
+	});
+
+	it("keeps scoped WAF navigation on host policies and learning", async () => {
+		const requests = signIn(["waf_policy:view", "waf_learning:view"]);
+		await changeLocale("en");
+		await renderApp(<AgentOpenappsec />);
+		expect(await screen.findByRole("button", { name: /app\.example\.com/ })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Agent" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Versions" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Learning" }));
+		await settle();
+		expect(requests.mock.calls.some(([url]) => /learning\/(snapshots|profiles)/.test(String(url)))).toBe(false);
 	});
 });

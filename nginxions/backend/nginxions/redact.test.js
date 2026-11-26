@@ -14,6 +14,7 @@ test("redact: key=value, JSON, Authorization, JWT, private key", () => {
 	assert.equal(redact("password=hunter22 user=bob"), `password=${MASK} user=bob`);
 	assert.equal(redact('{"api_key": "abcdef123"}'), `{"api_key": "${MASK}"}`);
 	assert.equal(redact("DB_PASSWORD: xyz987"), `DB_PASSWORD: ${MASK}`);
+	assert.equal(redact(`service credential nxs_svc_${"Z".repeat(43)}`), `service credential ${MASK}`);
 	assert.equal(redact("Authorization: Bearer abc.def-123456"), `Authorization: Bearer ${MASK}`);
 	assert.equal(redact("t=eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl"), `t=${MASK}`);
 	const pem = "-----BEGIN EC PRIVATE KEY-----\nMHcC\n-----END EC PRIVATE KEY-----";

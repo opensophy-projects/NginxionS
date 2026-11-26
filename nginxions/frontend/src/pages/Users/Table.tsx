@@ -1,3 +1,4 @@
+// NginxionS: account actions follow the current role and the target account.
 import {
 	IconDotsVertical,
 	IconEdit,
@@ -26,6 +27,9 @@ interface Props {
 	isFiltered?: boolean;
 	isFetching?: boolean;
 	currentUserId?: number;
+	admin?: boolean;
+	manageUsers?: boolean;
+	manageRoles?: boolean;
 	onEditUser?: (id: number) => void;
 	onEditPermissions?: (id: number) => void;
 	onSetPassword?: (id: number) => void;
@@ -39,6 +43,9 @@ export default function Table({
 	isFiltered,
 	isFetching,
 	currentUserId,
+	admin,
+	manageUsers,
+	manageRoles,
 	onEditUser,
 	onEditPermissions,
 	onSetPassword,
@@ -107,11 +114,19 @@ export default function Table({
 			}),
 			columnHelper.display({
 				id: "actions",
-				cell: (info: any) => {
+				cell: ({ row: { original: user } }) => {
+					const own = currentUserId === user.id;
+					const canManage = admin || (manageUsers && !user.roles.includes("admin"));
+					const canAssign = !own && manageRoles && (admin || !user.roles.includes("admin"));
+					if (!own && !canManage && !canAssign) return null;
 					return (
 						<span className="dropdown">
 							<button
 								type="button"
+								aria-label={intl.formatMessage(
+									{ id: "object.actions-title" },
+									{ object: intl.formatMessage({ id: "user" }), id: user.id },
+								)}
 								className="btn dropdown-toggle btn-action btn-sm px-1"
 								data-bs-boundary="viewport"
 								data-bs-toggle="dropdown"
@@ -119,91 +134,66 @@ export default function Table({
 								<IconDotsVertical />
 							</button>
 							<div className="dropdown-menu dropdown-menu-end">
-								<span className="dropdown-header">
-									<T
-										id="object.actions-title"
-										tData={{ object: "user" }}
-										data={{ id: info.row.original.id }}
-									/>
-								</span>
-								<a
-									className="dropdown-item"
-									href="#"
-									onClick={(e) => {
-										e.preventDefault();
-										onEditUser?.(info.row.original.id);
-									}}
-								>
-									<IconEdit size={16} />
-									<T id="action.edit" />
-								</a>
-								{currentUserId !== info.row.original.id ? (
+								{(own || canManage) && (
+									<button
+										type="button"
+										className="dropdown-item"
+										onClick={() => onEditUser?.(user.id)}
+									>
+										<IconEdit size={16} />
+										<T id="action.edit" />
+									</button>
+								)}
+								{canAssign && (
+									<button
+										type="button"
+										className="dropdown-item"
+										onClick={() => onEditPermissions?.(user.id)}
+									>
+										<IconShield size={16} />
+										<T id="action.permissions" />
+									</button>
+								)}
+								{!own && canManage && (
 									<>
-										<a
+										<button
+											type="button"
 											className="dropdown-item"
-											href="#"
-											onClick={(e) => {
-												e.preventDefault();
-												onEditPermissions?.(info.row.original.id);
-											}}
-										>
-											<IconShield size={16} />
-											<T id="action.permissions" />
-										</a>
-										<a
-											className="dropdown-item"
-											href="#"
-											onClick={(e) => {
-												e.preventDefault();
-												onSetPassword?.(info.row.original.id);
-											}}
+											onClick={() => onSetPassword?.(user.id)}
 										>
 											<IconLock size={16} />
 											<T id="user.set-password" />
-										</a>
-										<a
+										</button>
+										<button
+											type="button"
 											className="dropdown-item"
-											href="#"
-											onClick={(e) => {
-												e.preventDefault();
-												onDisableToggle?.(info.row.original.id, info.row.original.isDisabled);
-											}}
+											onClick={() => onDisableToggle?.(user.id, user.isDisabled)}
 										>
 											<IconPower size={16} />
-											<T id={info.row.original.isDisabled ? "action.enable" : "action.disable"} />
-										</a>
-										{info.row.original.isDisabled ? (
-											<div className="dropdown-item text-muted">
-												<IconLogin2 size={16} />
-												<T id="user.login-as" data={{ name: info.row.original.name }} />
-											</div>
-										) : (
-											<a
+											<T id={user.isDisabled ? "action.enable" : "action.disable"} />
+										</button>
+										{admin && (
+											<button
+												type="button"
 												className="dropdown-item"
-												href="#"
-												onClick={(e) => {
-													e.preventDefault();
-													onLoginAs?.(info.row.original.id);
-												}}
+												disabled={user.isDisabled}
+												onClick={() => onLoginAs?.(user.id)}
 											>
 												<IconLogin2 size={16} />
-												<T id="user.login-as" data={{ name: info.row.original.name }} />
-											</a>
+												<T id="user.login-as" data={{ name: user.name }} />
+											</button>
 										)}
 										<div className="dropdown-divider" />
-										<a
+										<button
+											type="button"
 											className="dropdown-item"
-											href="#"
-											onClick={(e) => {
-												e.preventDefault();
-												onDeleteUser?.(info.row.original.id);
-											}}
+											onClick={() => onDeleteUser?.(user.id)}
 										>
 											<IconTrash size={16} />
 											<T id="action.delete" />
-										</a>
+										</button>
 									</>
-								) : null}
+								)}
 							</div>
 						</span>
 					);
@@ -216,6 +206,9 @@ export default function Table({
 		[
 			columnHelper,
 			currentUserId,
+			admin,
+			manageUsers,
+			manageRoles,
 			onEditUser,
 			onDisableToggle,
 			onDeleteUser,
@@ -245,7 +238,7 @@ export default function Table({
 					object="user"
 					objects="users"
 					tableInstance={tableInstance}
-					onNew={onNewUser}
+					onNew={manageUsers ? onNewUser : undefined}
 					isFiltered={isFiltered}
 					color="orange"
 				/>

@@ -14,7 +14,7 @@ const KEY = "nginxions-waf-files";
 
 export function FileSecurityCard() {
 	const can = useCan();
-	const manage = can("waf_policy:manage");
+	const manage = can("waf_policy", "manage");
 	const queryClient = useQueryClient();
 	const { data, isLoading, error } = useQuery({ queryKey: [KEY], queryFn: getWafFiles, refetchInterval: 30000 });
 	const [failure, setFailure] = useState<string | null>(null);

@@ -7,7 +7,7 @@ import jwtdecode from "../lib/express/jwt-decode.js";
 import userIdFromMe from "../lib/express/user-id-from-me.js";
 import apiValidator from "../lib/validator/api.js";
 import validator from "../lib/validator/index.js";
-import { sensitiveLimiter } from "../nginxions/rate-limit.js"; // NginxionS: limit of the login as another user
+import { panelLimiter, sensitiveLimiter } from "../nginxions/rate-limit.js"; // NginxionS: limit of the login as another user
 import { debug, express as logger } from "../logger.js";
 import { getValidationSchema } from "../schema/index.js";
 import { isSetup } from "../setup.js";
@@ -26,7 +26,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /api/users
@@ -66,10 +66,10 @@ router
 	 * Create a new User
 	 */
 	.post(async (req, res, next) => {
-		const body = req.body;
+		const body = req.body ?? {};
 
 		try {
-			// If we are in setup mode, we don't check access for current user
+			// NginxionS: the write rechecks that setup is still available under the database lock.
 			const setup = await isSetup();
 			if (!setup) {
 				logger.info("Creating a new user in setup mode");
@@ -77,19 +77,13 @@ router
 				await access.load(true);
 				res.locals.access = access;
 
-				// We are in setup mode, set some defaults for this first new user, such as making
-				// them an admin.
+				// NginxionS: the setup account gets the same flags as the transactional bootstrap.
 				body.is_disabled = false;
-				if (typeof body.roles !== "object" || body.roles === null) {
-					body.roles = [];
-				}
-				if (body.roles.indexOf("admin") === -1) {
-					body.roles.push("admin");
-				}
+				body.roles = ["admin"];
 			}
 
 			const payload = await apiValidator(getValidationSchema("/users", "post"), body);
-			const user = await internalUser.create(res.locals.access, payload);
+			const user = await internalUser.create(res.locals.access, payload, { bootstrap: !setup });
 			res.status(201).send(user);
 		} catch (err) {
 			debug(logger, `${req.method.toUpperCase()} ${req.originalUrl}: ${err}`);
@@ -107,7 +101,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -192,7 +186,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -222,7 +216,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -252,7 +246,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * POST /api/users/123/login
@@ -293,7 +287,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -355,7 +349,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**
@@ -384,7 +378,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 	.all(userIdFromMe)
 
 	/**

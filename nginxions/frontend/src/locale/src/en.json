@@ -7208,11 +7208,71 @@
 	"nginxions.rbac.template.empty": {
 		"defaultMessage": "Empty role"
 	},
+	"nginxions.rbac.tokens.copied": {
+		"defaultMessage": "Copied"
+	},
+	"nginxions.rbac.tokens.copy": {
+		"defaultMessage": "Copy token"
+	},
+	"nginxions.rbac.tokens.copy-error": {
+		"defaultMessage": "Clipboard unavailable. Select and copy the token manually."
+	},
+	"nginxions.rbac.tokens.created": {
+		"defaultMessage": "Token created"
+	},
+	"nginxions.rbac.tokens.days": {
+		"defaultMessage": "Valid for, days"
+	},
+	"nginxions.rbac.tokens.edit": {
+		"defaultMessage": "Edit token roles"
+	},
+	"nginxions.rbac.tokens.empty": {
+		"defaultMessage": "No service tokens have been created."
+	},
+	"nginxions.rbac.tokens.error": {
+		"defaultMessage": "Service tokens are temporarily unavailable."
+	},
+	"nginxions.rbac.tokens.expires": {
+		"defaultMessage": "Expires"
+	},
+	"nginxions.rbac.tokens.hint": {
+		"defaultMessage": "Use tokens to give automated services access to the API. A token inherits the permissions of its assigned roles. For selected-host roles, only the explicitly selected hosts are available."
+	},
+	"nginxions.rbac.tokens.new": {
+		"defaultMessage": "Create token"
+	},
+	"nginxions.rbac.tokens.once": {
+		"defaultMessage": "Copy the token now and store it securely. Its value is shown only once."
+	},
+	"nginxions.rbac.tokens.revoke": {
+		"defaultMessage": "Revoke token"
+	},
+	"nginxions.rbac.tokens.revoke-hint": {
+		"defaultMessage": "Services using {name} will lose access immediately."
+	},
+	"nginxions.rbac.tokens.secret": {
+		"defaultMessage": "Token value"
+	},
+	"nginxions.rbac.tokens.status.active": {
+		"defaultMessage": "Active"
+	},
+	"nginxions.rbac.tokens.status.expired": {
+		"defaultMessage": "Expired"
+	},
+	"nginxions.rbac.tokens.status.issuer_inactive": {
+		"defaultMessage": "Issuer inactive"
+	},
+	"nginxions.rbac.tokens.status.revoked": {
+		"defaultMessage": "Revoked"
+	},
+	"nginxions.rbac.tokens.title": {
+		"defaultMessage": "Service API tokens"
+	},
 	"nginxions.rbac.user-roles": {
 		"defaultMessage": "Roles"
 	},
 	"nginxions.rbac.user-roles.note": {
-		"defaultMessage": "Permissions of several roles add up. Without a role the user can log in but sees nothing."
+		"defaultMessage": "Select the roles assigned manually. Roles marked OIDC also come from your identity provider and remain active while that assignment is supported by a group."
 	},
 	"nginxions.rbac.user-saved": {
 		"defaultMessage": "Roles of {name} saved"
@@ -9082,6 +9142,9 @@
 	},
 	"service": {
 		"defaultMessage": "Service"
+	},
+	"service_token": {
+		"defaultMessage": "Service token"
 	},
 	"setting": {
 		"defaultMessage": "Setting"

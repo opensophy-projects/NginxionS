@@ -7,6 +7,7 @@ import path from "node:path";
 import internalAuditLog from "../../internal/audit-log.js";
 import errs from "../../lib/error.js";
 import { global as logger } from "../../logger.js";
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { getSetting, setSetting } from "../settings.js";
 
 const LOCALCONFIG_DIR = path.dirname(process.env.NGINXIONS_APPSEC_POLICY_FILE || "/ext/appsec/local_policy.yaml");
@@ -41,7 +42,7 @@ const internalClusterSettings = {
 	 * @param {{minSources: number, minSourcesTypes: number, minIntervals: number, ratioThreshold: number}} data
 	 */
 	set: async (access, data) => {
-		await access.can("waf_learning:sync");
+		await assertGlobalAccess(access, "waf_learning:sync");
 		const value = {
 			minSources: Number(data?.minSources),
 			minSourcesTypes: Number(data?.minSourcesTypes),

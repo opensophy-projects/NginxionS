@@ -46,6 +46,25 @@ expect "$(as_analyst -X PUT -H 'Content-Type: application/json' "$ADMIN/api/ngin
   -d '{"enabled": true, "mode": "detect-learn", "minimum_confidence": "high"}')" 404 "WAF respects the host scope on writes"
 expect "$(as_analyst -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/mtls/proxy_host/$other_id" \
   -d '{"enabled": false}')" 404 "mTLS respects the host scope on writes"
+step "RBAC: a service token is scoped, can change roles and stops after revocation"
+service_tokens="$ADMIN/api/nginxions/rbac/service-tokens"
+issued=$($CURL -H 'Content-Type: application/json' "$service_tokens" \
+  -d "{\"name\": \"Smoke automation\", \"roles\": [$scoped_role], \"expires_in_days\": 1}")
+service_id=$(echo "$issued" | grep -o '"id": *[0-9]*' | head -1 | grep -o '[0-9]*')
+service_secret=$(echo "$issued" | grep -o 'nxs_svc_[a-zA-Z0-9_-]*')
+[ -n "$service_id" ] && [ -n "$service_secret" ] || fail "the service token was not issued"
+as_service() { curl -sS -k -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $service_secret" "$@"; }
+expect "$(as_service "$ADMIN/api/nginx/proxy-hosts/1")" 200 "service token reads its selected host"
+expect "$(as_service "$ADMIN/api/nginx/proxy-hosts/$other_id")" 404 "service token stays within selected hosts"
+expect "$(as_service "$ADMIN/api/nginxions/waf/policy")" 403 "service token cannot read deployment-wide policy"
+expect "$(as_service "$service_tokens")" 403 "service token cannot manage credentials"
+$CURL -X PUT -H 'Content-Type: application/json' "$service_tokens/$service_id" \
+  -d "{\"roles\": [$analyst_role]}" > /dev/null
+expect "$(as_service "$ADMIN/api/nginx/proxy-hosts/$other_id")" 200 "service token follows a role change"
+$CURL -X DELETE "$service_tokens/$service_id" > /dev/null
+expect "$(as_service "$ADMIN/api/nginx/proxy-hosts/1")" 401 "revoked service token cannot authenticate"
+unset issued service_secret
+
 $CURL -X PUT -H 'Content-Type: application/json' "$ADMIN/api/nginxions/rbac/users/$analyst_id" \
   -d "{\"roles\": [$analyst_role]}" > /dev/null
 $CURL -X DELETE "$ADMIN/api/nginx/proxy-hosts/$other_id" > /dev/null
