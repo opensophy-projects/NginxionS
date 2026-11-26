@@ -1,7 +1,8 @@
  
 
-#ifndef __SHMEM_IPC_H__
-#define __SHMEM_IPC_H__
+// NginxionS: use a distinct guard for each IPC interface header.
+#ifndef NGINXIONS_ATTACHMENT_SHMEM_IPC_2_H
+#define NGINXIONS_ATTACHMENT_SHMEM_IPC_2_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -64,4 +65,4 @@ int isCorruptedShmem(SharedMemoryIPC *ipc, int is_owner);
 }
 #endif // __cplusplus
 
-#endif // __SHMEM_IPC_H__
+#endif // NGINXIONS_ATTACHMENT_SHMEM_IPC_2_H

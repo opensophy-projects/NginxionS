@@ -58,6 +58,8 @@ verify)
   PASSWORD=$(sed -n 2p /state/admin)
   step "verify: the admin of the release before logs in"
   api "$ADMIN/api/tokens" -d "{\"identity\": \"$EMAIL\", \"secret\": \"$PASSWORD\"}" > /dev/null || fail "the admin cannot log in"
+  step "verify: the backend still reaches the control service after the update"
+  $CURL "$ADMIN/api/nginxions/services" | grep -q '"service": *"openappsec"' || fail "control does not list the agent after the update"
   step "verify: the proxy host answers, its WAF blocks SQLi"
   for i in $(seq 1 30); do
     curl -sS --max-time 10 -H 'Host: test.local' "$HTTP/" 2> /dev/null | grep -q '^Hostname:' && break

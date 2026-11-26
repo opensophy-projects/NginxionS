@@ -552,7 +552,12 @@ export function exportData(rows: HostRow[]) {
 	};
 }
 
-const csvCell = (value: string) => (/[",\n;]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+const csvCell = (value: string | number) => {
+	if (typeof value === "number") return String(value);
+	// Keep user-supplied text as text when a spreadsheet opens the CSV.
+	const text = /^[\s\p{Cf}]*[=+\-@＝＋－＠]|^[\t\r\n]/u.test(value) ? `'${value}` : value;
+	return /[",\r\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
 
 export function exportCsv(rows: HostRow[]): string {
 	const head = ["name", "type", "target", "tls", "expires_in_days", "waf", "mtls", "access", "group", "status"];
@@ -562,7 +567,7 @@ export function exportCsv(rows: HostRow[]): string {
 			r.type,
 			r.target,
 			r.tls,
-			r.expiresInDays === null ? "" : String(r.expiresInDays),
+			r.expiresInDays ?? "",
 			r.waf ?? "",
 			r.mtls,
 			r.accessPublic === null ? "" : r.accessPublic ? "public" : r.accessListIds.join(" "),

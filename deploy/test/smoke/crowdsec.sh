@@ -36,6 +36,21 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
+before_settings=$($CURL "$ADMIN/api/nginxions/crowdsec/settings") || fail "could not snapshot CrowdSec settings"
+restore_crowdsec() {
+  result=$?
+  trap - EXIT
+  # The browser scenarios exercise WAF modes and manual bans on the same stack. Restore the settings that preceded
+  # this group so automatic bans from its three-event profile cannot block a different scenario or a reused client IP.
+  step "CrowdSec: restore incoming settings and clear the smoke client decision"
+  api_json --max-time 300 -X PUT "$ADMIN/api/nginxions/crowdsec/settings" -d "$before_settings" \
+    | grep -q '"applied": *true' || fail "could not restore CrowdSec settings"
+  api_json "$ADMIN/api/nginxions/crowdsec/decisions/delete" -d "{\"values\": [\"$client_ip\"]}" > /dev/null \
+    || fail "could not clear CrowdSec decisions for the smoke client"
+  exit "$result"
+}
+trap restore_crowdsec EXIT
+
 # the closed network has private addresses only: they are not allowlisted here
 step "CrowdSec: settings from the GUI are applied (bouncer and AppSec on)"
 cs_settings true "" | tr -d ' \n' | grep -q '"\(restarted\|reloaded\)":true' || fail "the settings were not applied"

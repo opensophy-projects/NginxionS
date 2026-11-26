@@ -1,7 +1,8 @@
  
 
-#ifndef __SHMEM_IPC_H__
-#define __SHMEM_IPC_H__
+// NginxionS: use a distinct guard for each IPC interface header.
+#ifndef NGINXIONS_AGENT_SHMEM_IPC_H
+#define NGINXIONS_AGENT_SHMEM_IPC_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -53,4 +54,4 @@ uint16_t getSegmentEntrySize();
 }
 #endif // __cplusplus
 
-#endif // __SHMEM_IPC_H__
+#endif // NGINXIONS_AGENT_SHMEM_IPC_H

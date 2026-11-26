@@ -35,7 +35,8 @@ const STACK = [
 	/^nginxions\/Dockerfile$/,
 	/^nginxions\/rootfs\//,
 	/^nginxions\/crowdsec-seed\//,
-	/^scripts\/(test-[^/]+\.sh|ci-stack\.sh)$/,
+	/^scripts\/(test-[^/]+\.sh|ci-stack\.sh|offline-bundle\.sh)$/,
+	/^\.github\/workflows\/offline-bundle\.yml$/,
 ];
 /** text only: no build, no test of code */
 const DOCS = [/\.md$/i, /^docs\//, /^readme\//, /^LICENSE/, /\.txt$/];
@@ -86,7 +87,7 @@ export const decide = (e) => {
 		reason = "only documentation changed";
 	} else if (stack) {
 		level = "full";
-		reason = changed === null ? "the changed files are unknown" : "the agent, deploy/ or a Dockerfile changed";
+		reason = changed === null ? "the changed files are unknown" : "a file used by the stack tests changed";
 	} else {
 		level = "fast";
 		reason = "the code of the backend or the frontend only (the images are built with [full])";

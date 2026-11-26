@@ -30,6 +30,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 	let managerUrl;
 	let managerFingerprint;
 	let registrationRequests = 0;
+	let heartbeatRequests = 0;
+	let waitForHeartbeat = null;
 	let modelAgent;
 	const dir = mkdtempSync(path.join(tmpdir(), "nginxions-nodes-"));
 	const agentEnv = path.join(dir, "appsec", "nginxions-agent.env");
@@ -235,6 +237,8 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 						return res.end();
 					}
 					if (req.url === "/api/nginxions/nodes/heartbeat") {
+						heartbeatRequests++;
+						await waitForHeartbeat?.();
 						answer = await nodes.heartbeat(token(), body.info, "198.51.100.7");
 					}
 					res.writeHead(answer ? 200 : 401, { "Content-Type": "application/json" });
@@ -885,17 +889,13 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.equal(removed, 1);
 	});
 
-	test("another certificate on the address of the manager: the node sends nothing", async () => {
-		const state = await member.readState();
-		await assert.rejects(
-			() =>
-				member.managerRequest(managerUrl, "/api/nginxions/nodes/heartbeat", {
-					pin: "00:11",
-					body: { info: {} },
-				}),
-			/certificate of the manager changed/,
-		);
-		assert.ok(state.fingerprint);
+	test("a missing or mismatched Manager fingerprint sends no HTTP request", async () => {
+		const before = heartbeatRequests;
+		const request = (pin) =>
+			member.managerRequest(managerUrl, "/api/nginxions/nodes/heartbeat", { pin, body: { info: {} } });
+		await assert.rejects(() => request(), /verified SHA-256 fingerprint/);
+		await assert.rejects(() => request(Array(32).fill("00").join(":")), /certificate of the manager changed/);
+		assert.equal(heartbeatRequests, before);
 	});
 
 	test("a code with the CN of another node is refused, and the code is spent", async () => {
@@ -933,5 +933,33 @@ describe("nodes on PostgreSQL", { skip: !postgres && "no PostgreSQL for tests" }
 		assert.equal(left.joined, false);
 		assert.equal(await nodes.remove(ADMIN, row.id), true);
 		assert.deepEqual(await nodes.list(ADMIN), []);
+	});
+
+	test("leaving waits for an in-flight heartbeat and competing heartbeats are skipped", async () => {
+		const { code } = await nodes.add(ADMIN, { name: "edge-leaving" });
+		await member.default.join(ADMIN, { manager_url: managerUrl, code, manager_fingerprint: managerFingerprint });
+		const started = Promise.withResolvers();
+		const resume = Promise.withResolvers();
+		waitForHeartbeat = () => {
+			started.resolve();
+			return resume.promise;
+		};
+		const before = heartbeatRequests;
+		const current = member.beat();
+		const competing = member.beat();
+		try {
+			await Promise.race([
+				started.promise,
+				current.then(() => assert.fail("heartbeat finished before reaching Manager")),
+			]);
+			const leaving = member.default.leave(ADMIN);
+			resume.resolve();
+			await Promise.all([current, competing, leaving]);
+			assert.equal(heartbeatRequests, before + 1);
+			assert.equal(await member.readState(), null);
+		} finally {
+			resume.resolve();
+			waitForHeartbeat = null;
+		}
 	});
 });

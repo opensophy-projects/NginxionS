@@ -16,6 +16,7 @@ CURL_VERSION=$(grep -m1 '^CURL_VERSION=' deploy/.env | cut -d= -f2)
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-nginxions-upgrade}"
 compose=(docker compose -f deploy/compose.yaml -f deploy/test/compose.airgap.yaml)
+seed_compose=("${compose[@]}")
 net="${COMPOSE_PROJECT_NAME}_edge"
 services=(nginxions openappsec crowdsec test-upstream)
 state="${COMPOSE_PROJECT_NAME}-state"
@@ -31,7 +32,7 @@ cleanup() {
     echo "--- logs (failure) ---"
     "${compose[@]}" logs --no-color --tail 60 || true
   fi
-  [ "${KEEP:-}" = 1 ] || { "${compose[@]}" down -v --remove-orphans > /dev/null 2>&1 || true; docker volume rm "$state" > /dev/null 2>&1 || true; }
+  [ "${KEEP:-}" = 1 ] || { "${seed_compose[@]}" down -v --remove-orphans > /dev/null 2>&1 || true; docker volume rm "$state" > /dev/null 2>&1 || true; }
   exit $status
 }
 trap cleanup EXIT
@@ -54,8 +55,17 @@ if ! NGINXIONS_REGISTRY="$FROM_REGISTRY" NGINXIONS_VERSION="$FROM_VERSION" "${co
   echo "SKIP: the images of the release before cannot be pulled"
   exit 0
 fi
+# The seed needs the transport of the published images. The updated stack always uses the current Compose config.
+previous_agent="$FROM_REGISTRY/nginxions-openappsec:$FROM_VERSION"
+if docker run --rm --network none --entrypoint grep "$previous_agent" -q NGINXIONS_CONTROL_RPC_SOCKET /opt/nginxions-control/server.js; then
+  :
+else
+  status=$?
+  [ "$status" = 1 ] || exit "$status"
+  seed_compose+=(-f deploy/test/compose.upgrade-legacy-control.yaml)
+fi
 docker volume create "$state" > /dev/null
-NGINXIONS_REGISTRY="$FROM_REGISTRY" NGINXIONS_VERSION="$FROM_VERSION" "${compose[@]}" up -d --no-build "${services[@]}"
+NGINXIONS_REGISTRY="$FROM_REGISTRY" NGINXIONS_VERSION="$FROM_VERSION" "${seed_compose[@]}" up -d --no-build "${services[@]}"
 wait_healthy
 check seed
 

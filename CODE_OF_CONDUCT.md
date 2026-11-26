@@ -95,7 +95,7 @@ flowchart TB
         end
     end
 
-    control["контейнер control: nginxions-control<br/>:7080 в сети control<br/>Docker API по белому списку"]
+    control["контейнер control: nginxions-control<br/>без сети, Unix-сокет<br/>Docker API по белому списку"]
     crowdsec["crowdsec — официальный образ<br/>LAPI :8080, AppSec :7422"]
     postgres[("postgres — официальный образ<br/>базы nginxions и appsec")]
     init["nginxions-init — разовый при старте<br/>секреты, тома, снимок hub CrowdSec"]
@@ -105,7 +105,7 @@ flowchart TB
     nginx -- "IPC /dev/shm/check-point" --> agent
     bouncer --> crowdsec
     backend --> postgres
-    backend --> control
+    backend -- "Unix-сокет в томе control-rpc" --> control
     backend --> storage
     backend --> tuning
     tuning --> postgres
@@ -120,8 +120,8 @@ flowchart TB
 - **Секреты.** Их создаёт `nginxions-init` в томе `secrets`; каждый сервис монтирует только свой подкаталог.
 - **Доступ к Docker** есть только у `nginxions-control` — отдельного контейнера `control` (образ агента со своей
   командой): список, логи и перезапуск контейнеров стека, с токеном и аудитом; корень только для чтения, без
-  capabilities, в сети `control` только с `openappsec`. Контейнеры `nginxions` и `openappsec`, которые принимают трафик
-  из интернета, сокета не получают: ошибка в nginx или агенте не даёт доступа к Docker.
+  capabilities и без сети. Backend обращается к нему через Unix-сокет в томе, который монтирует только для чтения.
+  `openappsec` не монтирует этот том. `/var/run/docker.sock` есть только у `control`.
 
 ### Путь запроса
 
@@ -210,6 +210,7 @@ flowchart LR
   - `compose.airgap.yaml` — стек без выхода в интернет
   - `airgap-network.sh` — проверка TCP-изоляции внутренних сервисов из внешней сети стека
   - `compose.cluster.yaml` — несколько стеков на одной машине (`scripts/test-cluster.sh`): имена контейнеров с именем стека, без опубликованных портов, общая внутренняя сеть `cluster` с постоянными адресами
+  - `compose.upgrade-legacy-control.yaml` — запуск старых образов с TCP-интерфейсом `control` на первом шаге теста обновления
   - `smoke.sh` — сценарии проверки всех функций на этом стеке: общая часть (администратор, хост `test.local`), помощники `ensure_*` и запуск групп; каждая группа — в своём подпроцессе (упавшая не останавливает следующие), время и итог каждого шага — в `/state/smoke-steps.tsv`
   - `smoke/` — группы smoke (`SMOKE_GROUPS`): `services.sh` (System → Services), `waf.sh` (WAF и обучение), `hosts.sh` (хосты, перенаправления, ACME, потоки, списки доступа), `rbac.sh`, `events.sh` (события, аналитика, уведомления, настройки), `pki.sh` (PKI и mTLS: отзыв, OCSP, короткоживущие, потоки), `certs.sh` (все операции раздела «Сертификаты»: ACME-серверы, свои сертификаты, ЦС, шаблоны, сертификаты PKI, ссылки, mTLS хоста, отказы mTLS одним событием), `crowdsec.sh` (CrowdSec и движки политики в AppSec, syslog), `migration.sh` (перенос из NPM)
   - `ui-e2e.mjs` — интерфейс в настоящем браузере (Playwright) после smoke: каждая страница отрисовывается, без ошибок JavaScript и 5xx API, скриншоты в `reports/ui`
@@ -290,7 +291,7 @@ flowchart LR
   в расширенном прогоне ещё фаззинг API (Schemathesis) и проверка контейнеров
 - `check-runtime.sh` — проверка работающих контейнеров стека (расширенный прогон): привилегии, capabilities,
   пространства имён хоста, сокет Docker, root, запись в корень
-- `security-report.mjs` — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
+- `security-report.mjs` (+ `security-report.test.mjs`) — сводный отчёт безопасности, политика блокировки, читаемые страницы SBOM
 - `coverage-report.mjs` (+ `coverage-report.test.mjs`) — покрытие кода тестами: unit-тесты и то, что backend выполнил в тестах стека (V8 coverage), вместе; «храповик» по `.github/coverage-baseline.json`
 - `seccomp-profile.mjs` — `deploy/seccomp/nginxions.json` из штатного профиля seccomp Docker: `socket()` IPv4/IPv6 без SCTP и seqpacket
 - `upstream-issues.mjs` — копии issue репозиториев агента (openappsec/openappsec, attachment, smartsync-shared-files, smartsync-tuning, smartsync) в issue этого репозитория с меткой `upstream`; копия закрывается и открывается вместе с исходной
@@ -359,12 +360,12 @@ flowchart LR
     - `routes.js` — все маршруты `/api/nginxions/*`
     - `settings.js` — настройки NginxionS в таблице `nginxions_setting`
     - `rename.js` — перевод базы времён названия NPMOS (таблицы `npmos_*`, имена миграций и встроенных объектов) на имена NginxionS при запуске
-    - **`test/`** — `postgres.js`: тесты SQL на PostgreSQL (`events/postgres.test.js`, `waf/postgres.test.js`): у каждого файла тестов своя база рядом с базой `DB_POSTGRES_NAME`, мигрированная как при запуске; идут при `NGINXIONS_TEST_POSTGRES=1` (в CI — сервис postgres), без базы пропускаются
+    - **`test/`** — `postgres.js`: тесты SQL на PostgreSQL (`events/postgres.test.js`, `waf/postgres.test.js`): у каждого файла тестов своя база рядом с базой `DB_POSTGRES_NAME`, мигрированная как при запуске; идут при `NGINXIONS_TEST_POSTGRES=1` (в CI — сервис postgres), без базы пропускаются. `access-list-schema.test.js` проверяет схемы запросов создания и изменения списков доступа.
     - `rate-limit.js` — ограничение частоты запросов на маршрутах, которые отдают секреты или входят от имени другого пользователя (скачивание сертификата, вход за пользователя)
     - `secrets.js` — шифрование секретов в базе (пароли SMTP, ключи webhook, токены ботов)
     - `redact.js` — маскировка секретов в тексте, который уходит наружу (диагностический архив)
     - `services.js` — Обзор → Сервисы: контейнеры стека через `nginxions-control`
-    - `hosts.js` — таблица Хостов: кто и когда менял хост, состояние upstream
+    - `hosts.js`, `hosts.test.js` — таблица Хостов: история изменений, видимость и состояние upstream
     - `certificates.js` — Сертификаты → реестр всех сертификатов системы с серверными страницами
     - `cert-terms.js` — сроки TLS-сертификатов хостов и когда пора обновлять
     - `cert-pair.js` — загруженный сертификат и ключ должны подходить друг к другу
@@ -377,7 +378,7 @@ flowchart LR
     - `stream-ports.js` — один входящий порт (диапазон) на протокол у потоков
     - **`acme/`** — `servers.js` (ACME-серверы: пресеты и свои, EAB), `lego.js` (второй ACME-клиент), `certs.js` (сертификаты NPMplus с сервером из настроек)
     - **`audit/`** — `index.js`: журнал аудита со страницами и фильтрами
-    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (что выучил агент: чтение его файлов обучения по asset, снимок всех файлов и подготовка отката к снимку), `tar.js` (файл из архива Docker API: политика, которую применяет агент, читается из его контейнера)
+    - **`control/`** — `server.js` (сервис `nginxions-control`: доступ к Docker по белому списку), `server.test.js` (HTTP-проверки с подставным сокетом Docker), `client.js` (клиент backend), `watchdog.js` (чинит контейнеры, делящие сеть с другим), `learning.js` (чтение файлов обучения, снимок и подготовка отката), `tar.js` (чтение политики агента из архива Docker API)
     - **`crowdsec/`**
       - `index.js` — CrowdSec в GUI: обзор, решения, алерты, машины, баунсеры, метрики
       - `cluster-bans.js` — общие баны кластера (шаг 15.3): свои баны сервера, баны остальных через manager, решения CrowdSec с origin `nginxions-cluster`; `cluster-bans.test.js` — их тесты
@@ -473,7 +474,7 @@ flowchart LR
     - **`test/`** — каркас тестов интерфейса: `harness.tsx` (провайдеры App.tsx и API, отвечающий из фикстур), `fixtures.ts` (по одному правдоподобному объекту каждого ответа API); `render.test.tsx` рядом рендерит каждый компонент на двух языках, открывает каждое окно и нажимает вкладки и кнопки каждой страницы
     - `hooks.ts` — общие хуки данных (react-query)
     - **`ui/`** — оболочка и общие компоненты
-      - `Shell.tsx`, `Sidebar.tsx`, `menu.ts`, `SectionTabs.tsx` — каркас: боковое меню, разделы, вкладки
+      - `Shell.tsx`, `Sidebar.tsx`, `menu.ts` (+ `menu.test.ts`), `SectionTabs.tsx` — каркас: боковое меню, разделы, вкладки
       - `Controls.tsx` — тема, язык и меню пользователя
       - `AuthLayout.tsx` — вход и первая настройка
       - `Lists.tsx` — части длинных списков (События, Запросы, Аудит): меню экспорта, пагинация, свой период
@@ -482,7 +483,7 @@ flowchart LR
       - `Admonition.tsx` — блок предупреждения или подсказки
       - `InfoTip.tsx` — кнопка «?» с пояснением колонки, графика или числа
       - `Popover.tsx` — панель под кнопкой (фильтры, вид таблиц)
-      - `Dropdown.tsx`, `SearchField.tsx`, `DateTimePicker.tsx` — меню, поиск, выбор даты
+      - `Dropdown.tsx`, `SearchField.tsx`, `DateTimePicker.tsx` — меню, поиск, выбор даты. `Interactions.test.tsx` проверяет навигацию, язык и тему, клавиатуру и фокус в меню и панелях
       - `CodeDiff.tsx` — разница двух текстов, как в ревью кода
       - `Charts.tsx` — простые SVG-графики (столбцы, списки с полосами)
       - `charts/` — графики Аналитики: `AreaChart.tsx`, `Kpi.tsx`, `WorldMap.tsx`, `curves.ts`, `format.ts`
@@ -492,7 +493,7 @@ flowchart LR
       - `HiddenUsername.tsx` — скрытое поле имени для форм с паролем (предупреждение Chrome)
     - **`pages/`** — страницы
       - `Overview/` — Обзор: что требует внимания (`notices.ts`), хосты, трафик, сервисы
-      - `Hosts/` — Хосты: одна таблица всех типов (`index.tsx`), ячейки (`Cells.tsx`), панель поиска и фильтров (`Toolbar.tsx`), строки (`rows.ts`), рекомендации (`Recommendations.tsx`), API (`api.ts`)
+      - `Hosts/` — Хосты: одна таблица всех типов (`index.tsx`), ячейки (`Cells.tsx`), панель поиска и фильтров (`Toolbar.tsx`), строки (`rows.ts`), рекомендации (`Recommendations.tsx`), API (`api.ts`), сценарии работы с таблицей (`Hosts.test.tsx`)
       - `Access/Intro.tsx` — пояснение над Списками доступа
       - `WafAnalytics/` — Аналитика: вкладки (`tabs.tsx`), общие части (`common.tsx`), «Сейчас» (`Live.tsx`)
       - `WafEvents/` — События: лента, фильтры (`filters.ts`), значки (`badges.tsx`), срок хранения (`Retention.tsx`)

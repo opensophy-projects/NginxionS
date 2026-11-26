@@ -123,6 +123,30 @@ func TestGetFilesList(t *testing.T) {
 	}
 }
 
+func TestGetFilesListRejectsIncompleteResults(t *testing.T) {
+	root := t.TempDir() + "/"
+	denied := filepath.Join(root, "locked")
+	if err := os.Mkdir(denied, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(denied, 0700); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := os.ReadDir(denied); err == nil {
+		t.Skip("permission bits do not restrict this test user")
+	}
+	if err := os.WriteFile(filepath.Join(root, "available"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := &Adapter{root: root, ttl: time.Minute}
+	files, err := a.GetFilesList(context.Background(), "")
+	if err == nil || len(files) != 0 {
+		t.Fatalf("listing incomplete files must fail: %v, %v", files, err)
+	}
+}
+
 func TestGetFileNotFoundAndTemporaryFiles(t *testing.T) {
 	root := t.TempDir() + "/"
 	a := &Adapter{root: root, ttl: 10 * time.Millisecond}

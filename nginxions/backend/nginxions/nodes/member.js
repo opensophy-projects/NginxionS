@@ -7,7 +7,7 @@
 //   - disabled on the manager (403): the node says so in its GUI and stops calling.
 // The state (token and key encrypted with the secrets of NginxionS) is a file of the data volume.
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { isIP } from "node:net";
 import { hostname } from "node:os";
@@ -187,9 +187,14 @@ export const readState = async () => {
 };
 const writeState = async (state) => {
 	await mkdir(path.dirname(MEMBER_FILE), { recursive: true, mode: 0o700 });
-	const tmp = `${MEMBER_FILE}.tmp`;
-	await writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-	await rename(tmp, MEMBER_FILE);
+	const scratch = await mkdtemp(`${MEMBER_FILE}.`);
+	try {
+		const tmp = path.join(scratch, "state.json");
+		await writeFile(tmp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+		await rename(tmp, MEMBER_FILE);
+	} finally {
+		await rm(scratch, { recursive: true, force: true });
+	}
 };
 
 const statusOf = (state) =>
@@ -581,13 +586,22 @@ export const sync = async (state) => {
 };
 
 let timer = null;
-let running = false;
+let changes = Promise.resolve();
+let pendingChanges = 0;
 
-export const beat = async () => {
-	if (running) return;
+// A heartbeat must finish before leaving or joining another manager, including its changes to the local agent.
+const changeState = (operation) => {
+	pendingChanges++;
+	const result = changes.then(operation).finally(() => {
+		pendingChanges--;
+	});
+	changes = result.catch(() => {});
+	return result;
+};
+
+const heartbeat = async () => {
 	const state = await readState();
 	if (!state || state.disabled) return;
-	running = true;
 	try {
 		const answer = await managerRequest(state.manager_url, "/api/nginxions/nodes/heartbeat", {
 			token: decrypt(state.token_enc),
@@ -643,9 +657,11 @@ export const beat = async () => {
 		}
 	} catch (err) {
 		await writeState({ ...state, last_error: String(err.message).slice(0, 300) });
-	} finally {
-		running = false;
 	}
+};
+
+export const beat = async () => {
+	if (pendingChanges === 0) await changeState(heartbeat);
 };
 
 export const start = () => {
@@ -671,6 +687,13 @@ export const start = () => {
 };
 
 // ------------------------------------------------------------------------------------------------------- API
+const changeMembership =
+	(operation) =>
+	async (access, ...args) => {
+		await access.can("settings:manage");
+		return changeState(() => operation(access, ...args));
+	};
+
 const internalMember = {
 	/** @param {Access} access */
 	status: async (access) => {
@@ -687,9 +710,9 @@ const internalMember = {
 	 * @param {Access} access
 	 * @param {{manager_url: string, code: string, manager_fingerprint: string}} data
 	 */
-	join: async (access, data) => {
-		await access.can("settings:manage");
-		if ((await readState()) && !(await readState()).disabled) {
+	join: changeMembership(async (access, data) => {
+		const state = await readState();
+		if (state && !state.disabled) {
 			throw new errs.ValidationError("This server is a node of a manager already: disconnect it first");
 		}
 		const managerUrl = normalizeManagerUrl(data.manager_url);
@@ -742,18 +765,17 @@ const internalMember = {
 		// the agent learns together with the other servers, through the manager (step 15.4)
 		await applyLearningRole(access.token.getUserId(1));
 		return statusOf(await readState());
-	},
+	}),
 
 	/** this server stops being a node (disable it on the manager too) */
-	leave: async (access) => {
-		await access.can("settings:manage");
+	leave: changeMembership(async (access) => {
 		const state = await readState();
 		if (!state) return statusOf(null);
 		await rm(MEMBER_FILE, { force: true });
 		await audit(access, "deleted", { manager_url: state.manager_url, uid: state.uid });
 		await applyLearningRole(access.token.getUserId(1));
 		return statusOf(null);
-	},
+	}),
 };
 
 export default internalMember;

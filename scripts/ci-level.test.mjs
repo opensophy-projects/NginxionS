@@ -26,6 +26,12 @@ test("a change of the agent or deploy/ is full without [full]", () => {
 	assert.equal(push(["openappsec/smartsync-tuning/main.go"]).go, true);
 });
 
+test("offline packaging changes build and test the same checkout", () => {
+	for (const path of [".github/workflows/offline-bundle.yml", "scripts/offline-bundle.sh"]) {
+		assert.equal(push([path]).level, "full");
+	}
+});
+
 test("documentation only is fast even when it is under deploy/", () => {
 	const d = push(["docs/DEVSECOPS.md", "deploy/README.md"]);
 	assert.equal(d.level, "fast");

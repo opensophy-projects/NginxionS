@@ -23,6 +23,12 @@ read -r -a services <<< "${SERVICES:-nginxions openappsec crowdsec clamav}"
 export SMOKE_GROUPS="${SMOKE_GROUPS:-all}"
 smoke_has() { [ "$SMOKE_GROUPS" = all ] || [[ " ${SMOKE_GROUPS//,/ } " == *" $1 "* ]]; }
 
+# The learning-profile browser test waits four minutes for real learning data to reach disk. Use the same
+# one-minute learning window for every GUI run, including Nightly. Standalone smoke keeps the normal window.
+if [ "${GUI_E2E:-0}" = 1 ]; then
+  export NGINXIONS_LEARNING_INTERVAL_MINUTES="${NGINXIONS_LEARNING_INTERVAL_MINUTES:-1}"
+fi
+
 # every error and warning of the stack, compared with deploy/test/log-allowlist.tsv (scripts/audit-logs.mjs): the
 # report is in reports/logs and in the summary of the run; LOG_AUDIT=gate fails the test on a new one
 audit_logs() {
@@ -50,13 +56,16 @@ collect_coverage() {
   sleep 3
   mkdir -p reports/coverage-stack
   docker cp "$("${compose[@]}" ps -q nginxions):/tmp/coverage-backend" reports/coverage-stack/backend > /dev/null 2>&1 || true
-  # nginxions-control (node is its process 1); its coverage is on a volume, copied by a container of the same service
-  if [ -n "$("${compose[@]}" ps -q control 2> /dev/null)" ]; then
+  # Node is PID 1 in nginxions-control and writes to its coverage volume. Use Docker to copy it because a container
+  # with all capabilities dropped cannot write to the CI runner's directory through a bind mount.
+  local control_id
+  control_id=$("${compose[@]}" ps -q control 2> /dev/null)
+  if [ -n "$control_id" ]; then
     "${compose[@]}" exec -T control sh -c 'kill -USR2 1' || true
     sleep 2
     mkdir -p reports/coverage-stack/control
-    "${compose[@]}" run --pull never --rm --no-deps -T --entrypoint sh -v "$PWD/reports/coverage-stack/control:/out" control \
-      -c 'cp /coverage/*.json /out/ 2> /dev/null; true' > /dev/null 2>&1 || true
+    docker cp "$control_id:/coverage/." reports/coverage-stack/control > /dev/null \
+      || echo "WARNING: could not collect nginxions-control coverage" >&2
   fi
   command -v node > /dev/null && node scripts/coverage-report.mjs --trim reports/coverage-stack
   echo "coverage: $(find reports/coverage-stack -name '*.json' 2> /dev/null | wc -l) files"
@@ -148,11 +157,19 @@ echo "==> restart nginxions"
 wait_healthy
 "${compose[@]}" run --pull never --rm -T tester after-restart
 
+read_fail_open() {
+  "${compose[@]}" exec -T openappsec sh -c 'cat /etc/cp/conf/settings.json' \
+    | sed -n 's/.*"agent.failOpenState.nginxModule", *"value": *"\([a-z]*\)".*/\1/p'
+}
+
 # the interface in a real browser with the session of smoke: every page renders, no error of JavaScript, no 5xx of the
 # API, screenshots in reports/ui (deploy/test/ui-e2e.mjs, UI_E2E=1); the interface driven like a user, each action
 # checked by its effect on the sites (deploy/test/gui-e2e.mjs, GUI_E2E=1, reports/gui). The container installs the
 # package of Playwright on the default network, then is moved into the closed network of the stack.
 if [ "${UI_E2E:-1}" = 1 ] || [ "${GUI_E2E:-0}" = 1 ]; then
+  if smoke_has waf && [ "$smoke_status" = 0 ]; then
+    [ "$(read_fail_open)" = true ] || { echo "FAIL: smoke must leave the agent in fail-open for browser tests"; exit 1; }
+  fi
   pw_image=$(grep -m1 '^PLAYWRIGHT_IMAGE=' .github/security/tools.env | cut -d= -f2-)
   pw_version=$(grep -m1 '^PLAYWRIGHT_VERSION=' .github/security/tools.env | cut -d= -f2-)
   pw="${COMPOSE_PROJECT_NAME}-ui"
@@ -194,6 +211,11 @@ done <<< "$networks"
 # Test the actual boundary from the edge. Also check numeric addresses so a missing DNS alias
 # cannot hide a routing regression, and use nginx as a reachable control for the probe.
 echo "==> networks: from the edge, internal services and the local ports of openappsec are out of reach"
+control_container=$("${compose[@]}" ps -q control)
+if [ -n "$control_container" ] && [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$control_container")" != none ]; then
+  echo "FAIL: nginxions-control must run without a network" >&2
+  exit 1
+fi
 blocked=(postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080
   nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813 nginxions:7815)
 for endpoint in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 control:7080; do
@@ -343,23 +365,11 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-if smoke_has waf; then
+if smoke_has waf && [ "$smoke_status" = 0 ]; then
   echo "==> fail-close: a request the agent does not answer gets the 403 page, not a closed connection (issue 149)"
-  # smoke leaves the host blocking and fail-close on. The response filters of the attachment returned an error on the 403
-  # page of the request they had refused themselves: nginx logged 403 and closed the connection with nothing sent
-  # ("Empty reply from server"). The agent is stopped (SIGSTOP) longer than the timeouts of the attachment.
-  # smoke switches fail-close on in its last step; a smoke failure before it leaves fail-open, where a request the agent
-  # does not answer passes by design: that is the failure of smoke (reported below), not a second one here
-  fail_open=$("${compose[@]}" exec -T openappsec sh -c 'cat /etc/cp/conf/settings.json' \
-    | grep -o '"agent.failOpenState.nginxModule", *"value": *"[a-z]*"' | grep -o '[a-z]*"$' | tr -d '"')
-  if [ "$fail_open" != false ]; then
-    if [ "$smoke_status" != 0 ]; then
-      echo "    skipped: smoke failed before it switched fail-close on (fail-open: ${fail_open:-unknown})"
-    else
-      echo "FAIL: smoke passed but left fail-open ${fail_open:-unknown}, not fail-close"
-      exit 1
-    fi
-  else
+  # Use the blocking host created by smoke and enable fail-close only for this fault test.
+  "${compose[@]}" run --pull never --rm -T tester fail-close
+  [ "$(read_fail_open)" = false ] || { echo "FAIL: the agent did not apply fail-close"; exit 1; }
   xss='http://127.0.0.1/fail-close?q=%3Cscript%3Ealert(document.cookie)%3C/script%3E'
   waf_get() { "${compose[@]}" exec -T nginxions curl -s -o /dev/null -w '%{http_code} %{size_download}' --max-time 10 -H 'Host: test.local' "$1" || true; }
   for i in $(seq 1 30); do
@@ -378,7 +388,8 @@ if smoke_has waf; then
     "403 "*) ;;
     *) echo "FAIL: fail-close let a request through while the agent did not answer: \"$normal\""; exit 1 ;;
   esac
-  fi
+elif smoke_has waf; then
+  echo "==> fail-close skipped because smoke failed"
 fi
 
 echo "==> no nginx worker crashed (signal, failed allocation)"

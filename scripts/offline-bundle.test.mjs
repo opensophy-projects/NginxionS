@@ -25,7 +25,11 @@ case "$1/$2" in
     printf '%s\\n' docker.io/library/postgres:18.7-alpine
     ;;
   pull/*) ;;
-  image/inspect) printenv DOCKER_TEST_PLATFORM || echo linux/amd64 ;;
+  image/inspect)
+    for image; do :; done
+    [ "$image" != "\${DOCKER_TEST_MISSING_IMAGE:-}" ] || exit 1
+    printenv DOCKER_TEST_PLATFORM || echo linux/amd64
+    ;;
   image/save) printf 'saved images fixture' ;;
   *) exit 2 ;;
 esac
@@ -38,6 +42,7 @@ esac
 		NGINXIONS_VERSION: "test-commit",
 		NGINXIONS_REGISTRY: "docker.io/example",
 		DOCKER_TEST_CALLS: calls,
+		OFFLINE_BUNDLE_USE_LOCAL_IMAGES: "0",
 	};
 	const run = (file, extraEnv) =>
 		execFileSync("bash", [script, file], { cwd: dir, env: { ...env, ...extraEnv }, stdio: "pipe" });
@@ -63,4 +68,20 @@ esac
 	assert.equal(log.filter((line) => line.startsWith("pull ")).length, 3);
 	assert.throws(() => run("bundle.tar"), /Bundle already exists/);
 	assert.throws(() => run("wrong-platform.tar", { DOCKER_TEST_PLATFORM: "linux/arm64" }), /Unexpected platform/);
+
+	writeFileSync(calls, "");
+	run("ci-bundle.tar", { OFFLINE_BUNDLE_USE_LOCAL_IMAGES: "1" });
+	const ciCalls = readFileSync(calls, "utf8").trim().split("\n");
+	assert.deepEqual(ciCalls.filter((line) => line.startsWith("pull ")), [
+		"pull --platform=linux/amd64 docker.io/library/postgres:18.7-alpine",
+	]);
+	assert.ok(ciCalls.includes(log.find((line) => line.startsWith("image save "))));
+	assert.throws(
+		() =>
+			run("missing-ci-image.tar", {
+				OFFLINE_BUNDLE_USE_LOCAL_IMAGES: "1",
+				DOCKER_TEST_MISSING_IMAGE: "docker.io/example/nginxions:test-commit",
+			}),
+		/CI image must be loaded before packing/,
+	);
 });
