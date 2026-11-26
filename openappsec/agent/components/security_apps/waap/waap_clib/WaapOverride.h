@@ -103,8 +103,7 @@ public:
                 m_isOverrideResponse = m_operand1->m_isOverrideResponse || m_operand2->m_isOverrideResponse;
                 m_isValid = m_operand1->m_isValid && m_operand2->m_isValid;
             }
-            else if (m_op == "not") {
-                // If op is "NOT" get one operand
+            else if (m_op == "not" || m_op == "same-header") {
                 m_operand1 = std::make_shared<Match>();
                 ar(cereal::make_nvp("operand1", *m_operand1));
                 m_isOverrideResponse = m_operand1->m_isOverrideResponse;
@@ -147,6 +146,9 @@ public:
             bool result = !m_operand1->match(testFunctor);
             dbgTrace(D_WAAP_OVERRIDE) << "Override matching logical NOT result: " << result;
             return result;
+        }
+        if (m_op == "same-header") {
+            return testFunctor.matchSameHeader(*m_operand1);
         }
 
         // unknown operator. this should not occur

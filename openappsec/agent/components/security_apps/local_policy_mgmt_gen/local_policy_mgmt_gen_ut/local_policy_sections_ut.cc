@@ -282,6 +282,22 @@ TEST(LocalPolicySections, exceptionOverrideOfExistMatchesAnyValue)
     EXPECT_THAT(json, HasSubstr("\"value\": \".*\""));
 }
 
+TEST(LocalPolicySections, exceptionOverrideKeepsHeaderNameAndValueTogether)
+{
+    const string json = overrideOf(
+        "[{\"key\": \"headerName\", \"value\": \"x-client\"},"
+        " {\"key\": \"method\", \"value\": \"POST\"},"
+        " {\"key\": \"headerValue\", \"value\": \"alpha\"},"
+        " {\"key\": \"headerValue\", \"value\": \"beta\"}]"
+    );
+    EXPECT_EQ(countOf(json, "\"operator\": \"same-header\""), 1u);
+    EXPECT_LT(json.find("\"method\""), json.find("\"same-header\""));
+    EXPECT_LT(json.find("\"same-header\""), json.find("\"headerName\""));
+    EXPECT_LT(json.find("\"same-header\""), json.find("\"headerValue\""));
+    EXPECT_THAT(json, HasSubstr("\"beta\""));
+    EXPECT_THAT(overrideOf("[{\"key\": \"headerName\", \"value\": \"x-client\"}]"), Not(HasSubstr("same-header")));
+}
+
 TEST(LocalPolicySections, exceptionOverrideNestsMoreThanTwoOperands)
 {
     // three values of a key: or(a, or(b, c)), every one of them read (the WAF reads operand1 and operand2 only)
