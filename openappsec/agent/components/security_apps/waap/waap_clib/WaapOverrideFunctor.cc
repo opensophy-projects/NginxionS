@@ -1,9 +1,11 @@
  
 
+#include <algorithm>
 #include <string>
 #include <cctype>
 #include <boost/regex.hpp>
 #include "WaapOverrideFunctor.h"
+#include "WaapOverride.h"
 #include "Waf2Engine.h"
 #include "CidrMatch.h"
 #include "RegexComparator.h"
@@ -19,6 +21,18 @@ USE_DEBUG_FLAG(D_WAAP_OVERRIDE);
 
 WaapOverrideFunctor::WaapOverrideFunctor(Waf2Transaction& waf2Transaction) :waf2Transaction(waf2Transaction)
 {
+}
+
+bool WaapOverrideFunctor::matchSameHeader(const Waap::Override::Match &conditions) const
+{
+    if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) return false;
+
+    auto header_matcher = *this;
+    for (const auto &header : waf2Transaction.getHdrPairs()) {
+        header_matcher.current_header = &header;
+        if (conditions.match(header_matcher)) return true;
+    }
+    return false;
 }
 
 bool WaapOverrideFunctor::operator()(const std::string& tag, const std::vector<Waap::Util::CIDRData> &values) {
@@ -153,36 +167,22 @@ bool WaapOverrideFunctor::operator()(
             } else {
                 return false;
             }
-        } else if (tagLower == "headername") {
+        } else if (tagLower == "headername" || tagLower == "headervalue") {
             if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) {
-                dbgDebug(D_WAAP_OVERRIDE) << "Header name override scan is not required";
+                dbgDebug(D_WAAP_OVERRIDE) << "Header override scan is not required";
                 return false;
             }
-            for (const auto &rx : rxes) {
-                for (auto& hdr_pair : waf2Transaction.getHdrPairs()) {
-                    std::string value = hdr_pair.first;
-                    std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-                    if (REGX_MATCH(value)) {
-                        return true;
-                    }
+            const auto matches_header = [&](const std::pair<std::string, std::string> &header) {
+                std::string value = tagLower == "headername" ? header.first : header.second;
+                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                for (const auto &rx : rxes) {
+                    if (REGX_MATCH(value)) return true;
                 }
-            }
-            return false;
-        } else if (tagLower == "headervalue") {
-            if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) {
-                dbgDebug(D_WAAP_OVERRIDE) << "Header value override scan is not required";
                 return false;
-            }
-            for (const auto &rx : rxes) {
-                for (auto& hdr_pair : waf2Transaction.getHdrPairs()) {
-                    std::string value = hdr_pair.second;
-                    std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-                    if (REGX_MATCH(value)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            };
+            if (current_header) return matches_header(*current_header);
+            const auto headers = waf2Transaction.getHdrPairs();
+            return std::any_of(headers.begin(), headers.end(), matches_header);
         }
     }
     catch (std::runtime_error & e) {

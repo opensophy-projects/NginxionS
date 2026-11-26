@@ -358,21 +358,46 @@ ParsedMatch::ParsedMatch(const ExceptionMatch &exceptions)
         }
         return;
     }
-    *this = ParsedMatch(op, exceptions.getMatch(), 0);
+    vector<ParsedMatch> conditions;
+    vector<ParsedMatch> header_conditions;
+    bool has_header_name = false;
+    bool has_header_value = false;
+    for (const auto &condition : exceptions.getMatch()) {
+        // A list of alternatives for one key is emitted as an OR of that key's conditions.
+        const auto &operands = condition.getMatch();
+        const auto &key = condition.getOperator() == "or" && !operands.empty() ?
+            operands.front().getKey() : condition.getKey();
+        if (op == "and" && (key == "headerName" || key == "headerValue")) {
+            has_header_name |= key == "headerName";
+            has_header_value |= key == "headerValue";
+            header_conditions.emplace_back(condition);
+        } else {
+            conditions.emplace_back(condition);
+        }
+    }
+    if (has_header_name && has_header_value) {
+        ParsedMatch same_header;
+        same_header.operator_type = "same-header";
+        same_header.parsed_match.push_back(ParsedMatch("and", header_conditions, 0));
+        conditions.push_back(std::move(same_header));
+    } else {
+        conditions.insert(conditions.end(), header_conditions.begin(), header_conditions.end());
+    }
+    *this = ParsedMatch(op, conditions, 0);
 }
 
-ParsedMatch::ParsedMatch(const string &_operator, const vector<ExceptionMatch> &matches, size_t first)
+ParsedMatch::ParsedMatch(const string &_operator, const vector<ParsedMatch> &matches, size_t first)
         :
     operator_type(_operator)
 {
     if (matches.size() <= first) return;
     if (matches.size() - first == 1) {
-        *this = ParsedMatch(matches[first]);
+        *this = matches[first];
         return;
     }
-    parsed_match.push_back(ParsedMatch(matches[first]));
+    parsed_match.push_back(matches[first]);
     if (matches.size() - first == 2) {
-        parsed_match.push_back(ParsedMatch(matches[first + 1]));
+        parsed_match.push_back(matches[first + 1]);
     } else {
         parsed_match.push_back(ParsedMatch(_operator, matches, first + 1));
     }
