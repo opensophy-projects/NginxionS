@@ -1,6 +1,8 @@
 import express from "express";
 import internalReport from "../internal/report.js";
 import jwtdecode from "../lib/express/jwt-decode.js";
+// NginxionS: bound requests before session or service-token authorization.
+import { panelLimiter } from "../nginxions/rate-limit.js";
 import { debug, express as logger } from "../logger.js";
 
 const router = express.Router({
@@ -14,7 +16,7 @@ router
 	.options((_, res) => {
 		res.sendStatus(204);
 	})
-	.all(jwtdecode())
+	.all(panelLimiter, jwtdecode())
 
 	/**
 	 * GET /reports/hosts

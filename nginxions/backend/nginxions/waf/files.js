@@ -9,6 +9,7 @@
 //   - signatures: those of the image, files uploaded in WAF -> Agent (offline), or freshclam when online updates
 //     are allowed there;
 //   - the findings (nginx: /data/nginx/logs/nginxions-files.log) become security events.
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -255,7 +256,7 @@ const audit = async (access, action, meta) => {
 const internalWafFiles = {
 	/** @param {Access} access */
 	status: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const state = await load();
 		const version = state.enabled ? await clamdCommand("VERSION") : null;
 		let uploaded = [];
@@ -280,7 +281,7 @@ const internalWafFiles = {
 	 * @param {Buffer} content
 	 */
 	uploadSignatures: async (access, name, content) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		if (typeof name !== "string" || !SIGNATURE_FILE.test(name)) {
 			throw new errs.ValidationError(
 				"a signature file of ClamAV is named like main.cvd, daily.cld or bytecode.cvd",
@@ -306,7 +307,7 @@ const internalWafFiles = {
 	 * @param {{online_updates: boolean}} data
 	 */
 	setSettings: async (access, data) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		const settings = { online_updates: data?.online_updates === true };
 		await setSetting("waf.files", settings);
 		await mkdir(CONTROL_DIR, { recursive: true });

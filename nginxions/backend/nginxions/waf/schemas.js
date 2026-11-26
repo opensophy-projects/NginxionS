@@ -1,6 +1,7 @@
 // OpenAPI files of the WAF policy (schemaValidation of a practice, docs/WAF-POLICY.md): uploaded in WAF -> Policy, kept
 // in the data volume of NginxionS and copied into the data of CrowdSec (its "schemas" folder), where AppSec loads them
 // (waf/engines.js). A practice names them in schemaValidation.files.
+import { assertGlobalAccess } from "../rbac/scope.js";
 import { createHash } from "node:crypto";
 import { mkdir, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -168,7 +169,7 @@ const reapply = () =>
 const internalWafSchemas = {
 	/** @param {Access} access */
 	list: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		const used = await usage();
 		return (await listSchemas()).map((s) => ({ ...s, usedBy: used[s.name] ?? [] }));
 	},
@@ -179,7 +180,7 @@ const internalWafSchemas = {
 	 * @param {Buffer} content
 	 */
 	upload: async (access, name, content) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		checkName(name);
 		const meta = describe(content);
 		await mkdir(STORE, { recursive: true, mode: 0o700 });
@@ -196,7 +197,7 @@ const internalWafSchemas = {
 	 * @param {string} name
 	 */
 	download: async (access, name) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		checkName(name);
 		try {
 			return await readFile(path.join(STORE, name));
@@ -210,7 +211,7 @@ const internalWafSchemas = {
 	 * @param {string} name  not used by a practice
 	 */
 	remove: async (access, name) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		checkName(name);
 		const used = (await usage())[name] ?? [];
 		if (used.length) throw new errs.ValidationError(`${name} is used by ${used.join(", ")}`);

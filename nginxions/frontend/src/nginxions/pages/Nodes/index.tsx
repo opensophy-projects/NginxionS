@@ -44,7 +44,7 @@ import {
 import { showConfirmModal } from "../../modals/ConfirmModal";
 import { showNodeLogs } from "../../nodes/NodeView";
 import { HostsPicker, RolloutPlanCard, showPackages } from "../../nodes/RolloutPlan";
-import { useCan } from "../../rbac/hooks";
+import { useCan, useRbacMe } from "../../rbac/hooks";
 
 const t = (id: string, values?: Record<string, string | number>) => intl.formatMessage({ id }, values);
 
@@ -720,7 +720,8 @@ const LEARNING_FIELDS: { key: keyof ClusterLearning; min: number; max: number; s
 /** the thresholds of the learning of the nodes put together by smartsync (a manager with nodes) */
 function LearningCard() {
 	const can = useCan();
-	const manage = can("waf_learning", "sync");
+	const { data: me } = useRbacMe();
+	const manage = me?.scope === "all" && can("waf_learning", "sync");
 	const queryClient = useQueryClient();
 	const { data } = useQuery({ queryKey: ["nginxions-cluster-learning"], queryFn: getClusterLearning });
 	const [form, setForm] = useState<ClusterLearning | null>(null);

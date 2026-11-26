@@ -8,8 +8,13 @@ import authModel from "../models/auth.js";
 import userModel from "../models/user.js";
 import userPermissionModel from "../models/user_permission.js";
 // NginxionS: disabling, deleting and changing administrator flags use the same lock as role changes.
-import { assertUserMutation, resolve as resolveRoles } from "../nginxions/rbac/index.js";
-import { assertActiveAdministrator, withRbacWrite } from "../nginxions/rbac/write.js";
+import {
+	assertUserCreation,
+	assertUserMutation,
+	resolve as resolveRoles,
+	updateManualAdministrator,
+} from "../nginxions/rbac/index.js";
+import { assertActiveAdministrator, hasUsers, withRbacWrite } from "../nginxions/rbac/write.js";
 import internalAuditLog from "./audit-log.js";
 import internalToken from "./token.js";
 import pjson from "../package.json" with { type: "json" };
@@ -24,6 +29,7 @@ const withAccountChange = (access, id, changes, change) =>
 		const user = await userModel.query(trx).where({ id, is_deleted: 0 }).withGraphFetched("permissions").first();
 		if (!user) throw new errs.ItemNotFoundError(id);
 		await assertUserMutation(access, user, trx, changes);
+		if (changes.roles !== undefined) changes.roles = await updateManualAdministrator(trx, user, changes.roles);
 		await assertActiveAdministrator(trx, user, changes);
 		return change(trx, user);
 	});
@@ -37,12 +43,16 @@ const internalUser = {
 	 * @param   {Object}  data
 	 * @returns {Promise}
 	 */
-	create: async (access, data) => {
+	create: async (access, data, { bootstrap = false } = {}) => {
 		const auth = data.auth || null;
 		delete data.auth;
 
 		data.avatar = data.avatar || "";
 		data.roles = data.roles || [];
+		if (bootstrap) {
+			data.is_disabled = 0;
+			data.roles = ["admin"];
+		}
 
 		data.email = data.email.toLowerCase().trim();
 		if (typeof data.is_disabled !== "undefined") {
@@ -50,12 +60,6 @@ const internalUser = {
 		}
 
 		await access.can("users:create", data);
-
-		// NginxionS: awaited (an un-awaited rejection crashed the backend and let duplicates through)
-		// and checked after the permission check, so it does not reveal registered emails
-		if (!(await internalUser.isEmailAvailable(data.email))) {
-			throw new errs.ValidationError(`Email address already in use - ${data.email}`);
-		}
 
 		if (process.env.DISABLE_GRAVATAR === "true") {
 			data.avatar = "/images/default-avatar.jpg";
@@ -105,6 +109,17 @@ const internalUser = {
 
 		// NginxionS: creation and the projection of the initial roles use the new user ID.
 		const id = await withRbacWrite(async (trx) => {
+			if (bootstrap) {
+				if (await hasUsers(trx)) throw new errs.PermissionError();
+				if (auth?.type !== "password" || typeof auth.secret !== "string" || !auth.secret.trim()) {
+					throw new errs.ValidationError("The first administrator needs a password");
+				}
+			} else {
+				await assertUserCreation(access, data.roles, trx);
+			}
+			if (!(await internalUser.isEmailAvailable(data.email, undefined, trx))) {
+				throw new errs.ValidationError(`Email address already in use - ${data.email}`);
+			}
 			const created = await userModel.query(trx).insertAndFetch(data);
 			if (auth) {
 				await authModel.query(trx).insert({
@@ -123,6 +138,7 @@ const internalUser = {
 			action: "created",
 			object_type: "user",
 			object_id: id,
+			user_id: bootstrap ? id : undefined,
 			meta: user,
 		});
 
@@ -151,26 +167,8 @@ const internalUser = {
 				return access.can("users:update", data.id);
 			})
 			.then(() => {
-				// Make sure that the user being updated doesn't change their email to another user that is already using it
-				// 1. get user we want to update
-				return internalUser.get(access, { id: data.id }).then((user) => {
-					// 2. if email is to be changed, find other users with that email
-					if (typeof data.email !== "undefined") {
-						data.email = data.email.toLowerCase().trim();
-
-						if (user.email !== data.email) {
-							return internalUser.isEmailAvailable(data.email, data.id).then((available) => {
-								if (!available) {
-									throw new errs.ValidationError(`Email address already in use - ${data.email}`);
-								}
-								return user;
-							});
-						}
-					}
-
-					// No change to email:
-					return user;
-				});
+				if (typeof data.email !== "undefined") data.email = data.email.toLowerCase().trim();
+				return internalUser.get(access, { id: data.id });
 			})
 			.then(async (user) => {
 				if (user.id !== data.id) {
@@ -231,6 +229,12 @@ const internalUser = {
 
 				// NginxionS: guard the final write after profile validation and avatar loading.
 				return withAccountChange(access, user.id, data, async (trx, current) => {
+					if (
+						data.email !== undefined &&
+						!(await internalUser.isEmailAvailable(data.email, current.id, trx))
+					) {
+						throw new errs.ValidationError(`Email address already in use - ${data.email}`);
+					}
 					await userModel.query(trx).patch(data).where("id", current.id);
 					if (data.roles !== undefined) await resolveRoles({ ...current, roles: data.roles }, trx);
 					await internalAuditLog.add(
@@ -303,8 +307,12 @@ const internalUser = {
 	 * @param email
 	 * @param user_id
 	 */
-	isEmailAvailable: (email, user_id) => {
-		const query = userModel.query().where("email", "=", email.toLowerCase().trim()).where("is_deleted", 0).first();
+	isEmailAvailable: (email, user_id, connection) => {
+		const query = userModel
+			.query(connection)
+			.where("email", "=", email.toLowerCase().trim())
+			.where("is_deleted", 0)
+			.first();
 
 		if (typeof user_id !== "undefined") {
 			query.where("id", "!=", user_id);

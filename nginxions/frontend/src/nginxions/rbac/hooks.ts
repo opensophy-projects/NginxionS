@@ -39,7 +39,14 @@ export const canDelegateRole = (actor: RbacMe | undefined, role: Pick<Role, "bui
 export function useRbacRefresh() {
 	const queryClient = useQueryClient();
 	return useCallback(() => {
-		for (const key of ["nginxions-roles", "nginxions-role-assignments", "nginxions-rbac-me", "users", "user"]) {
+		for (const key of [
+			"nginxions-roles",
+			"nginxions-role-assignments",
+			"nginxions-rbac-me",
+			"nginxions-service-tokens",
+			"users",
+			"user",
+		]) {
 			queryClient.invalidateQueries({ queryKey: [key] });
 		}
 	}, [queryClient]);

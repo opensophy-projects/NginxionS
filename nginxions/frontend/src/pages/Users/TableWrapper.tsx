@@ -9,6 +9,7 @@ import { useUser, useUsers } from "src/hooks";
 import { intl, T } from "src/locale";
 import { showDeleteConfirmModal, showSetPasswordModal, showUserModal } from "src/modals";
 // NginxionS: permissions of a user are its roles (phase 3)
+import { useCan, useRbacMe } from "src/nginxions/rbac/hooks";
 import { showUserRolesModal } from "src/nginxions/rbac/UserRolesModal";
 import { showError, showObjectSuccess } from "src/notifications";
 import Table from "./Table";
@@ -22,6 +23,9 @@ export default function TableWrapper() {
 	const [text, setText] = useState("");
 	const { isFetching, isLoading, isError, error, data } = useUsers(["permissions"]);
 	const { data: currentUser } = useUser("me");
+	const can = useCan();
+	const { data: me } = useRbacMe();
+	const manageUsers = can("users", "manage");
 
 	if (isLoading) {
 		return <LoadingPage />;
@@ -92,9 +96,11 @@ export default function TableWrapper() {
 										placeholder={intl.formatMessage({ id: "nginxions.users.search" })}
 									/>
 
-									<Button size="sm" className="btn-orange" onClick={() => showUserModal("new")}>
-										<T id="object.add" tData={{ object: "user" }} />
-									</Button>
+									{manageUsers && (
+										<Button size="sm" className="btn-orange" onClick={() => showUserModal("new")}>
+											<T id="object.add" tData={{ object: "user" }} />
+										</Button>
+									)}
 								</div>
 							</div>
 						) : null}
@@ -105,6 +111,9 @@ export default function TableWrapper() {
 					isFiltered={!!search}
 					isFetching={isFetching}
 					currentUserId={currentUser?.id}
+					admin={me?.admin}
+					manageUsers={manageUsers}
+					manageRoles={can("roles", "manage")}
 					onEditUser={(id: number) => showUserModal(id)}
 					onEditPermissions={(id: number) =>
 						showUserRolesModal(id, (data ?? []).find((u) => u.id === id)?.name ?? "")

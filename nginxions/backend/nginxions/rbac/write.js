@@ -14,6 +14,9 @@ export const withRbacWrite = (change) =>
 		return change(trx);
 	});
 
+export const hasUsers = async (connection = db()) =>
+	!!(await userModel.query(connection).select("id").where("is_deleted", 0).first());
+
 export const hasOtherActiveAdministrator = async (trx, id) => {
 	const remaining = await userModel
 		.query(trx)

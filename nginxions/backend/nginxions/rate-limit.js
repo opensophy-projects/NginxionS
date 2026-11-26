@@ -13,6 +13,9 @@ const perClient = {
 	validate: { trustProxy: false },
 };
 
+// Panel and service API routes share a ceiling before reaching session or token authorization.
+export const panelLimiter = rateLimit({ ...perClient, limit: 1200 });
+
 export const sensitiveLimiter = rateLimit({ ...perClient, limit: 30 });
 
 // A node can send multiple batches of requests and events per heartbeat. Its agent also reads and writes

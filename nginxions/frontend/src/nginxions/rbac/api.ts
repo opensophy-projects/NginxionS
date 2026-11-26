@@ -54,10 +54,34 @@ export const updateRole = (id: number, data: RoleInput): Promise<Role> =>
 	api.put({ url: `/nginxions/rbac/roles/${id}`, data });
 export const deleteRole = (id: number) => api.del({ url: `/nginxions/rbac/roles/${id}` });
 type RoleRef = { id: number; name: string; builtin: BuiltinRole | null };
+type RoleAssignment = RoleRef & { manualGrant: boolean; oidcGrant: boolean };
 /** {user id: roles}; the Administrator role for admins */
-export const getRoleAssignments = (): Promise<Record<string, RoleRef[]>> => api.get({ url: "/nginxions/rbac/users" });
+export const getRoleAssignments = (): Promise<Record<string, RoleAssignment[]>> =>
+	api.get({ url: "/nginxions/rbac/users" });
 export const setUserRoles = (userId: number, roles: number[]): Promise<number[]> =>
 	api.put({ url: `/nginxions/rbac/users/${userId}`, data: { roles } });
 export const getOidcMapping = (): Promise<OidcMapping> => api.get({ url: "/nginxions/rbac/oidc" });
 export const setOidcMapping = (data: OidcMapping): Promise<OidcMapping> =>
 	api.put({ url: "/nginxions/rbac/oidc", data });
+
+export interface ServiceToken {
+	id: number;
+	name: string;
+	roles: number[];
+	createdBy: number;
+	createdOn: string;
+	expiresOn: string;
+	revokedOn: string | null;
+	status: "active" | "expired" | "revoked" | "issuer_inactive";
+}
+
+const serviceTokensUrl = "/nginxions/rbac/service-tokens";
+export const getServiceTokens = (): Promise<ServiceToken[]> => api.get({ url: serviceTokensUrl });
+export const createServiceToken = (data: {
+	name: string;
+	roles: number[];
+	expiresInDays: number;
+}): Promise<{ secret: string }> => api.post({ url: serviceTokensUrl, data });
+export const updateServiceTokenRoles = (id: number, roles: number[]) =>
+	api.put({ url: `${serviceTokensUrl}/${id}`, data: { roles } });
+export const revokeServiceToken = (id: number) => api.del({ url: `${serviceTokensUrl}/${id}` });

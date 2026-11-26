@@ -2,6 +2,7 @@
 // The attachment is a dynamic nginx module loaded at container start (start.sh, env
 // NGINX_LOAD_OPENAPPSEC_ATTACHMENT_MODULE). The switch is stored as setting "waf.enabled"
 // and applied by restarting the nginxions container through nginxions-control.
+import { allHosts, assertGlobalAccess } from "../rbac/scope.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import control from "../control/client.js";
 import { getRunningValue, getSetting, setSetting } from "../settings.js";
@@ -14,7 +15,7 @@ const internalWaf = {
 	 * @param {Access} access
 	 */
 	getStatus: async (access) => {
-		await access.can("waf_policy:view");
+		const scope = await access.can("waf_policy:view");
 		const enabled = await getSetting("waf.enabled");
 		const active = getRunningValue("waf.enabled");
 		return {
@@ -22,7 +23,7 @@ const internalWaf = {
 			active,
 			restartRequired: enabled !== active,
 			agent: await getAgentStatus(),
-			policy: { ...getPolicyState(), check: await checkApplied() },
+			policy: allHosts(scope) ? { ...getPolicyState(), check: await checkApplied() } : {},
 		};
 	},
 
@@ -34,7 +35,7 @@ const internalWaf = {
 	 * @param {boolean} [apply]  restart now
 	 */
 	setEnabled: async (access, enabled, apply = true) => {
-		await access.can("waf_policy:manage");
+		await assertGlobalAccess(access, "waf_policy:manage");
 		await setSetting("waf.enabled", enabled);
 		await internalAuditLog.add(access, {
 			action: enabled ? "enabled" : "disabled",
@@ -53,7 +54,7 @@ const internalWaf = {
 	 * @param {Access} access
 	 */
 	getPolicy: async (access) => {
-		await access.can("waf_policy:view");
+		await assertGlobalAccess(access, "waf_policy:view");
 		return { ...getPolicyState(), content: await readPolicyFile() };
 	},
 
@@ -62,7 +63,7 @@ const internalWaf = {
 	 * @param {Access} access
 	 */
 	applyPolicy: async (access) => {
-		await access.can("waf_policy:apply");
+		await assertGlobalAccess(access, "waf_policy:apply");
 		const result = await regenerateNow({ force: true });
 		await internalAuditLog.add(access, {
 			action: "regenerated",

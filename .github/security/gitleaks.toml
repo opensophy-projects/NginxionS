@@ -3,6 +3,13 @@
 [extend]
 useDefault = true
 
+[[rules]]
+id = "nginxions-service-api-token"
+description = "NginxionS service API token"
+regex = '''(?:^|[^A-Za-z0-9_-])(nxs_svc_[A-Za-z0-9_-]{43})(?:[^A-Za-z0-9_-]|$)'''
+secretGroup = 1
+keywords = ["nxs_svc_"]
+
 [[allowlists]]
 description = "examples of upstream NPMplus: forms of the DNS plugins, the API schema, ech.sh, the 2FA strings of the locales"
 paths = [
