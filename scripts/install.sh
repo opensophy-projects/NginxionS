@@ -31,19 +31,29 @@ if [[ ! -e "$install_dir" ]]; then
   trap - EXIT
 fi
 
-if ! command -v docker >/dev/null; then
-  [[ -z "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}" ]] || fail "Unset the Docker endpoint overrides before installing Docker."
+install_engine() {
   (( EUID == 0 )) || fail "Run as root to install Docker packages."
   if [[ $(dpkg-query -W -f='${db:Status-Status}' containerd.io 2>/dev/null || true) != installed ]]; then
     touch "$install_dir/.installed-containerd"
   fi
   install_docker_packages "${apt_docker_packages[@]}"
   systemctl enable --now docker.service
+}
+
+if ! command -v docker >/dev/null; then
+  [[ -z "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}" ]] || fail "Unset the Docker endpoint overrides before installing Docker."
+  install_engine
 fi
 require_local_docker
 if ! engine=$(docker version --format '{{.Server.Version}}'); then
   (( EUID == 0 )) || fail "Start Docker and grant this user access, or run the installer with sudo."
-  systemctl start docker.service || fail "Could not start the local Docker Engine."
+  if ! systemctl start docker.service; then
+    state=$(systemctl show --property=LoadState --value docker.service 2>/dev/null || true)
+    if [[ "$state" != not-found || -S /var/run/docker.sock ]] || command -v dockerd >/dev/null; then
+      fail "Could not start the existing local Docker Engine."
+    fi
+    install_engine
+  fi
   engine=$(docker version --format '{{.Server.Version}}') || fail "Cannot access the local Docker Engine."
 fi
 docker_version_at_least "$engine" 28 0 || fail "Docker Engine 28 or newer is required. Update the existing engine first."
