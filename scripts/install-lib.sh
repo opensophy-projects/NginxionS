@@ -149,3 +149,28 @@ record_image() {
   printf '%s\t%s\n' "$image" "$id" >> "$install_dir/.images.next"
   mv -- "$install_dir/.images.next" "$install_dir/.images"
 }
+
+# Release identifiers are bounded so comparisons stay within shell integer limits.
+stable_release_tag() {
+  [[ "$1" =~ ^[Vv](0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]]
+}
+
+set_deployment_env() {
+  local file=$1 name=$2 value=$3 next
+  next=$(mktemp -- "${file}.XXXXXXXX") || return 1
+  if ! awk -v name="$name" -v value="$value" '
+    index($0, name "=") != 1 { print }
+    END { print name "=" value }
+  ' "$file" > "$next" || ! mv -fT -- "$next" "$file"; then
+    rm -- "$next"
+    return 1
+  fi
+}
+
+deployment_fingerprint() (
+  cd -- "$1" || exit 1
+  {
+    sha256sum -- compose.yaml init/nginxions-init.sh init/postgres-init.sh seccomp/nginxions.json clamav/nginxions-clamav.sh &&
+      grep -E '^(CROWDSEC_VERSION|POSTGRES_VERSION|CLAMAV_VERSION)=' .env | sort
+  } | sha256sum | cut -d ' ' -f1
+)

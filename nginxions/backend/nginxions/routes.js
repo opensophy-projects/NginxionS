@@ -41,6 +41,7 @@ import internalServiceTokens from "./rbac/service-tokens.js";
 import { assertGlobalAccess } from "./rbac/scope.js";
 import internalServices from "./services.js";
 import internalSystem from "./system/index.js";
+import { releaseService } from "./system/releases.js";
 import internalWafAgent from "./waf/agent-settings.js";
 import internalWafExpert from "./waf/expert.js";
 import internalWafFiles, { MAX_SIGNATURE_BYTES } from "./waf/files.js";
@@ -924,6 +925,53 @@ router
 		),
 	)
 	.delete(handle((req, res) => internalNotifications.deleteRule(res.locals.access, req.params.rule_id)));
+
+// A version check contacts GitHub only when requested. Changes apply to the whole deployment.
+router
+	.route("/system/release")
+	.options((_, res) => res.sendStatus(204))
+	.all(panelLimiter, jwtdecode())
+	.get(
+		handle(async (_, res) => {
+			await assertGlobalAccess(res.locals.access, "settings:view");
+			return releaseService.status();
+		}),
+	)
+	.put(
+		handle(async (req, res) => {
+			const access = res.locals.access;
+			await assertGlobalAccess(access, "settings:manage");
+			const { enabled } = await validator(
+				{
+					type: "object",
+					additionalProperties: false,
+					required: ["enabled"],
+					properties: { enabled: { type: "boolean" } },
+				},
+				req.body,
+			);
+			if (!(await releaseService.status()).canAutoUpdate)
+				throw new errs.ValidationError("Host updater unavailable");
+			const result = await releaseService.setAutoUpdate(enabled);
+			await internalAuditLog.add(access, {
+				action: "updated",
+				object_type: "setting",
+				meta: { name: "release.auto_update", enabled },
+			});
+			return result;
+		}),
+	);
+
+router
+	.route("/system/release/check")
+	.options((_, res) => res.sendStatus(204))
+	.all(sensitiveLimiter, jwtdecode())
+	.post(
+		handle(async (_, res) => {
+			await assertGlobalAccess(res.locals.access, "settings:view");
+			return releaseService.check();
+		}),
+	);
 
 /**
  * GET /api/nginxions/system/settings — env settings of NPMplus: value saved, value running

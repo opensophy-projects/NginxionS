@@ -184,6 +184,13 @@ echo "$body" | grep -qiE "^X-(Real-Ip|Forwarded-For): .*$client_ip" || fail "cli
 
 step "update check stays off"
 $CURL "$ADMIN/api/version/check" | grep -q '"latest": *"unknown"' || fail "update check is not disabled"
+$CURL "$ADMIN/api/nginxions/system/release" | json | grep -q '"canAutoUpdate":false,"autoUpdate":false' \
+  || fail "automatic updates must stay off on a direct Compose deployment"
+expect "$(curl -ksS --max-time 5 -o /dev/null -w '%{http_code}' -X POST \
+  "$ADMIN/api/nginxions/system/release/check")" 403 "an anonymous version check"
+expect "$(curl -ksS --max-time 5 -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT \
+  -H 'Content-Type: application/json' -d '{"enabled":true}' "$ADMIN/api/nginxions/system/release")" 400 \
+  "enabling automatic updates without the host updater"
 
 printf 'base\tok\t%s\n' "$(($(date +%s) - base_start))" >> /state/smoke-groups.tsv 2> /dev/null || true
 
