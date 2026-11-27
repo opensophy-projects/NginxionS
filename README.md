@@ -117,5 +117,4 @@ NginxionS построен на [NPMplus](https://github.com/ZoeyVid/NPMplus) и
 [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager), использует
 [open-appsec](https://github.com/openappsec/openappsec) и [CrowdSec](https://www.crowdsec.net).
 
-Условия NginxionS описаны в [LICENSE](LICENSE). Лицензии включённого кода находятся рядом с исходниками.
-См. [NPMplus](nginxions/COPYING), [Nginx Proxy Manager](nginxions/LICENSE.MIT) и [компоненты open-appsec](CODE_OF_CONDUCT.md#openappsec--исходники-агента-nginxions-open-appsec).
+Условия NginxionS описаны в [LICENSE](LICENSE).
