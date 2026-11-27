@@ -1,8 +1,9 @@
 # Обучение агента open-appsec без ложных срабатываний и обмен знаниями между установками
 
-Исследование перед фазой 8. Источники — код в `reference/` (open-appsec `634f840`, smartsync `8e4d8b6`,
-smartsync-tuning `f349745`), пути указаны относительно `reference/openappsec/components/security_apps/waap/waap_clib/`
-и `reference/smartsync*/`. Что ещё нужно проверить на стенде — в разделе 8.
+Исследование перед фазой 8 на основе upstream-коммитов open-appsec `634f840`, smartsync `8e4d8b6` и
+smartsync-tuning `f349745`. Исходники NginxionS находятся в [`openappsec/agent/components/security_apps/waap/waap_clib/`](../openappsec/agent/components/security_apps/waap/waap_clib/),
+[`openappsec/smartsync/`](../openappsec/smartsync/) и [`openappsec/smartsync-tuning/`](../openappsec/smartsync-tuning/).
+Что ещё нужно проверить на стенде — в разделе 8.
 
 ## 1. Что на самом деле «учится»
 

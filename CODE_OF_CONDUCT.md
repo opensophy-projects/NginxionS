@@ -97,6 +97,7 @@ flowchart TB
 
     control["контейнер control: nginxions-control<br/>без сети, Unix-сокет<br/>Docker API по белому списку"]
     crowdsec["crowdsec — официальный образ<br/>LAPI :8080, AppSec :7422"]
+    clamav["clamav — официальный образ<br/>File Security :3310"]
     postgres[("postgres — официальный образ<br/>базы nginxions и appsec")]
     init["nginxions-init — разовый при старте<br/>секреты, тома, снимок hub CrowdSec"]
     docker[["/var/run/docker.sock"]]
@@ -104,6 +105,7 @@ flowchart TB
     internet --> nginx
     nginx -- "IPC /dev/shm/check-point" --> agent
     bouncer --> crowdsec
+    nginx -- "проверка загружаемых файлов" --> clamav
     backend --> postgres
     backend -- "Unix-сокет в томе control-rpc" --> control
     backend --> storage
@@ -115,8 +117,8 @@ flowchart TB
     init -. "до остальных сервисов" .-> postgres
 ```
 
-- **Сети.** `edge` — порты наружу; выход в интернет только для того, что включил администратор (ACME). `internal` —
-  без выхода наружу: там `crowdsec` и `postgres`.
+- **Сети.** `edge` — порты наружу, выход в интернет для включённых администратором функций (например, ACME).
+  В сети `internal` без выхода наружу работают `crowdsec`, `clamav` и `postgres`.
 - **Секреты.** Их создаёт `nginxions-init` в томе `secrets`; каждый сервис монтирует только свой подкаталог.
 - **Доступ к Docker** есть только у `nginxions-control` — отдельного контейнера `control` (образ агента со своей
   командой): список, логи и перезапуск контейнеров стека, с токеном и аудитом; корень только для чтения, без
@@ -151,20 +153,26 @@ flowchart LR
 
 ## 4. Дерево файлов
 
-Что лежит в репозитории и зачем. Код NginxionS расписан по файлам, код NPMplus (upstream, `git subtree`) — по
-каталогам: в его файлах наши правки помечены комментарием `NginxionS:`. Тесты (`*.test.js`, `*.test.ts`) лежат рядом
-с тем, что проверяют, и в дереве не перечислены. Добавили, переименовали или удалили файл — поправьте дерево: CI (`scripts/check-tree.mjs`) проверяет, что каждый
-файл кода NginxionS в нём упомянут.
+Продакшен собирается из [`nginxions/`](#nginxions--образ-nginxions-npmplus--nginxions) и
+[`openappsec/`](#openappsec--исходники-агента-nginxions-open-appsec), а разворачивается по `deploy/compose.yaml`.
+В дереве перечислены файлы NginxionS и основные каталоги включённых upstream-компонентов. Правки в их коде помечены
+`NginxionS:`. Тесты, стили компонентов, миграции, патчи и фикстуры можно искать рядом с кодом по указанным каталогам.
+При изменении структуры обновляйте этот раздел. `scripts/check-tree.mjs` сверяет имена файлов в `deploy/`, `scripts/`,
+`.github/`, `docs/`, `model/`, `readme/` и в модулях NginxionS в backend и frontend.
+
+Снимки исходных репозиториев для справки находятся в [ветке `rfrns`](https://github.com/opensophy-projects/NginxionS/tree/rfrns).
+Сборка использует код из текущего checkout. Версии исходников open-appsec записаны в [`deploy/openappsec/sources.env`](deploy/openappsec/sources.env).
 
 ### Корень
 
 - `README.md` — что такое NginxionS, установка, ссылки на документацию
-- `LICENSE` — лицензия NginxionS: GNU AGPL-3.0, как у NPMplus, из которого он сделан (`nginxions/COPYING`)
+- `LICENSE` — NginxionS Source-Available License
 - `CODE_OF_CONDUCT.md` — этот файл: правила общения, issue, архитектура, дерево файлов
 - `CONTRIBUTING.md` — как вносить изменения: ветки, коммиты, проверки
 - `CLAUDE.md` — правила разработки (для людей и ИИ-агентов): структура, проверки, правки upstream
 - `SECURITY.md` — политика безопасности: как сообщить об уязвимости, какие версии поддерживаются
 - `renovate.json` — автообновление версий образов и зависимостей (Renovate)
+- `.gitignore` — локальные артефакты модели, отчёты, кэши и окружения разработчика
 - `.semgrepignore` — что Semgrep не проверяет (зависимости, сборка, переводы, тесты)
 - **`.github/`**
   - `workflows/ci.yml` — CI: быстрые проверки на каждый push; полный прогон (сборка образов, закрытый контур, скан
@@ -177,6 +185,7 @@ flowchart LR
     её карточка и сравнение со штатной — в артефакте `waf-model` (`docs/MODEL.md`)
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
     в еженедельном прогоне — ещё и опубликованные образы (`docs/DEVSECOPS.md`)
+  - `workflows/offline-bundle.yml` — сборка офлайн-бандла, установка и проверка на отдельном раннере
   - `actionlint.yaml` — настройки actionlint (метки раннеров)
   - `coverage-baseline.json` — покрытие кода тестами, ниже которого CI не опускается (`scripts/coverage-report.mjs`)
   - **`security/`** — настройки сканеров
@@ -190,9 +199,15 @@ flowchart LR
     - `accepted-risks.json` — принятые риски: находки, которые не блокируют, с причиной и сроком
   - `ISSUE_TEMPLATE/` — шаблоны issue: `bug.yml`, `feature.yml`, `question.yml`, `config.yml`
 
+### `readme/` — изображения документации
+
+- `logo.svg`, `overview.webp`, `overview-dark.webp` — логотип и обзор панели для светлой и тёмной темы
+- `hosts.webp`, `waf-policy.webp`, `waf-agent.webp`, `crowdsec.webp`, `events.webp`, `analytics.webp` — скриншоты хостов, защиты и аналитики
+- `certificates.webp`, `pki.webp`, `mtls.webp`, `roles.webp`, `login.webp` — скриншоты сертификатов, управления доступом и входа
+
 ### `deploy/` — запуск стека
 
-- `compose.yaml` — прод-стек: `nginxions`, `openappsec`, `crowdsec`, `clamav`, `postgres` и разовый `nginxions-init`
+- `compose.yaml` — прод-стек: `nginxions`, `openappsec`, `control`, `crowdsec`, `clamav`, `postgres` и разовый `nginxions-init`
 - `compose.dev.yaml` — надстройка для разработки: dev-образ, синхронизация backend, генератор атак
 - `seccomp/` — `nginxions.json`: профиль seccomp всех сервисов стека — штатный профиль Docker без сокетов SCTP (NGINX2Root: ошибка ядра SCTP даёт root на хосте из контейнера); `README.md` — зачем, что сделать на хосте, как обновить
 - `.env` — закреплённые версии образов и реестр
@@ -202,8 +217,8 @@ flowchart LR
 - **`clamav/`**
   - `nginxions-clamav.sh` — запуск контейнера `clamav` (от пользователя clamav, корень только для чтения): clamd только пока File Security включён в практике (флаг NginxionS), загруженные сигнатуры, freshclam по разрешению; конфигурация clamd из `CLAMD_CONF_*` в /tmp
 - **`openappsec/`** — образ `nginxions-openappsec`
-  - `Dockerfile` — агент open-appsec (C++), shared storage и tuning (Go) из исходников корневого `openappsec/`, `nginxions-control`
-  - `nginxions-openappsec.sh` — запуск процессов контейнера: агент, shared storage, tuning
+  - `Dockerfile` — агент open-appsec (C++), shared storage, tuning и SmartSync (Go), `nginxions-control` (Node.js)
+  - `nginxions-openappsec.sh` — запуск агента, shared storage, tuning и SmartSync на управляющем сервере
   - `sources.env` — коммиты upstream open-appsec, от которых взяты исходники в `openappsec/` (для их обновления)
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
@@ -233,6 +248,10 @@ flowchart LR
 свой: изменения NginxionS помечены `NginxionS:` в коде. Из него собираются образы; его проверяют все сканеры
 исходников, как остальной код (`docs/DEVSECOPS.md`). Агент не обращается к облаку open-appsec ни при какой настройке.
 
+Лицензии исходных компонентов доступны в снимках upstream, версии указаны в `deploy/openappsec/sources.env`.
+В `attachment/` есть `LICENSE` и `NOTICE`. Лицензия продвинутой модели находится в `waap.data`, уведомления
+установщика агента — в `agent/nodes/orchestration/package/Licenses-for-Third-Party-Components.txt`.
+
 - **`agent/`** — агент (C++): без облака вовсе (не регистрируется, не подключается к Fog, отказывается слать
   сообщения и скачивать файлы с хостов open-appsec, ходит к локальным tuning и shared storage без
   токена); политика из GUI (`apply-policy`) применяется за секунды, а не на следующей проверке обновлений; лимиты для хостов без схемы и с портом, правила лимитов локальной политики (без `action` и `match`);
@@ -248,8 +267,12 @@ flowchart LR
   сигнатуры NginxionS — `nginxions/ips-protections.json` (правила виртуальных патчей хаба CrowdSec, MIT, перевод
   `scripts/update-ips-signatures.mjs`; ctest `ips_ut` проверяет, что каждая загружается); генератор локальной
   политики кладёт их в секцию IPS, когда практика включает `intrusionPrevention`
+  - `CMakeLists.txt`, `cmake/`, `build_system/` — сборка и упаковка. `core/` — SDK, конфигурация, IPC, журналы и метрики.
+  - `attachments/`, `components/`, `nodes/`, `events/` — взаимодействие с attachment, механизмы защиты, процессы агента и события.
+  - `config/`, `examples/` — конфигурации агента и пример локальной политики. `external/` — библиотеки и упаковщик агента.
 - **`attachment/`** — модуль nginx для связи с агентом (`libngx_module.so` образа `nginxions`, контекст сборки
   `attachment`; изменения бывшего патча NPMplus `attachment.patch`: только модуль nginx, zlib-ng)
+  - `attachments/nginx/` — модуль nginx. `core/` — общие библиотеки IPC и компрессии. `nodes/`, `config/`, `build_system/`, `cmake/`, `external/` — вспомогательный код, конфигурации, сборка и зависимости.
 - **`smartsync-shared-files/`** — shared storage (Go): файлы обучения и `decisions.data`; пути REST API не выходят
   за корень хранилища (`fileSystemDB_nginxions_test.go`)
 - **`smartsync-tuning/`** — tuning (Go): события WAF, статистика и предложения обучения; пароль базы не пишется в
@@ -259,8 +282,12 @@ flowchart LR
   узлами (standalone: REST `/api/sync`, блокировка файлом, без Kafka и Redis); tenant `local` — корень хранилища, как
   у агента без облака (`internal/pkg/db/s3/s3_test.go`); ADR-0012, п. 5c
 
-Не используемое NginxionS удалено из upstream (`CLAUDE.md`, «Удалено из upstream»): примеры деплоя, плагины шлюзов
-(kong, apisix, envoy), webhook, Dockerfile upstream, Helm-чарты, готовые бинарники без исходников.
+У Go-сервисов `cmd/server/` запускает процесс, `configs/` задаёт конфигурацию, `internal/` содержит реализацию,
+а `dependencies/openappsec.io/` — локальные Go-модули, подключённые через `replace` в `go.mod`. Файлы `go.sum`
+содержат контрольные суммы зависимостей. У tuning есть `api/tuningAPISchema.json` для схемы API.
+
+Список убранных материалов upstream и порядок обновления компонентов есть в [CLAUDE.md](CLAUDE.md#удалено-из-upstream).
+[Отчёт аудита open-appsec от Lexfo](https://github.com/openappsec/openappsec/blob/634f840534e07952b1a449079a0d1b2e885c6aec/LEXFO-CHP20221014-Report-Code_audit-OPEN-APPSEC-v1.2.pdf) доступен в исходном репозитории.
 
 ### `scripts/` — инструменты разработчика
 
@@ -289,7 +316,7 @@ flowchart LR
 - `check-i18n.mjs` — проверка CI: у каждой строки `en` есть `ru`, в разметке нет текста мимо переводов
 - `crowdsec-hub-snapshot.sh` — снимок hub CrowdSec для серверов без интернета
 - `gen-world-map.mjs` — генерация `worldMap.json` (контуры стран для карты Аналитики)
-- `check-tree.mjs` — проверка CI: каждый файл кода NginxionS упомянут в этом дереве
+- `check-tree.mjs` — проверка CI, что файлы в перечисленных выше каталогах указаны в разделе 4
 - `scan-images.sh` — скан образов: уязвимости и секреты (Trivy), SBOM (Syft), второе мнение (Grype), CIS (Dockle)
 - `test-dast.sh` — DAST: поднимает стек и атакует его (OWASP ZAP, Nuclei, testssl.sh), проверяет nginx (gixy);
   в расширенном прогоне ещё фаззинг API (Schemathesis) и проверка контейнеров
@@ -320,6 +347,7 @@ flowchart LR
 ### `docs/` — документация
 
 - `MIGRATION.md` — перенос с Nginx Proxy Manager, NPMplus и open-appsec-npm
+- `OFFLINE.md` — скачивание, проверка и установка офлайн-бандла
 - `TROUBLESHOOTING.md` — решение проблем
 - `UNINSTALL.md` — полное удаление NginxionS
 - `ENV-INVENTORY.md` — какие env-настройки остались и когда уходят в GUI
@@ -332,16 +360,19 @@ flowchart LR
 - `ROADMAP.md` — план разработки по фазам
 - `LEARNING-RESEARCH.md` — исследование обучения агента open-appsec (перед фазой 8)
 - `tutor.md` — черновик статьи об open-appsec
-- `adr/` — архитектурные решения: сеть (0001), RBAC (0007), политика WAF (0008), PKI и mTLS (0009), CrowdSec (0010), обучение (0011), несколько серверов (0012)
+- `adr/` — архитектурные решения: `0001-network.md`, `0007-rbac.md`, `0008-waf-policy.md`, `0009-pki-mtls.md`,
+  `0010-crowdsec.md`, `0011-learning.md`, `0012-nodes.md`
 
 ### `nginxions/` — образ nginxions (NPMplus + NginxionS)
 
 - `Dockerfile` — образ nginxions: nginx, attachment open-appsec и модули из исходников, lego, офлайн-сид CrowdSec
 - `README.md` — что лежит в каталоге
+- `.dockerignore`, `.gitattributes`, `.gitignore`, `.version` — контекст сборки, правила Git и версия исходного проекта
 - `certbot-requirements.txt` — certbot образа и его зависимости с версиями и хешами (`pip --require-hashes`)
 - `crowdsec-seed/` — сборка офлайн-снимка hub CrowdSec, который кладётся в образ
 - `patches/` — патчи nginx и его модулей
 - **`rootfs/`** — файлы, которые копируются в образ как есть
+  - `etc/certbot.ini`, `etc/logrotate/`, `etc/crowdsec.conf.example`, `etc/crowdsec.conf.original` — настройки certbot, ротации журналов и баунсера CrowdSec
   - `usr/local/bin/` — `start.sh` (настройка и запуск при старте контейнера), `launch.sh`, `entrypoint.sh`, `healthcheck.sh` и другие скрипты NPMplus
   - `usr/local/nginx/conf/nginx.conf` — главный конфиг nginx, в том числе формат лога запросов `nginxions_requests`
   - `usr/local/nginx/conf/conf.d/nginxions-block-page.conf` — страница блокировки NginxionS для отказов 403
@@ -359,6 +390,9 @@ flowchart LR
   - `etc/nginxions/crowdsec-ban.html`, `crowdsec-captcha.html` — страницы бана и капчи баунсера CrowdSec
 - **`backend/`** — API на Node.js
   - `index.js` — запуск: миграции, затем `bootstrap` модулей NginxionS (ACME, WAF, PKI, CrowdSec, GeoIP…), фоновые задачи
+  - `app.js`, `db.js`, `knexfile.js`, `setup.js` — HTTP-приложение, база и начальная настройка
+  - `certbot/`, `migrations/`, `schema/` — провайдеры DNS, миграции NPMplus и схемы API
+  - `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `biome.json` — зависимости и настройки инструментов
   - `internal/`, `routes/`, `lib/`, `models/`, `templates/` — код NPMplus: логика хостов, маршруты API, шаблоны конфигов nginx; наши крючки помечены `NginxionS:`
   - **`nginxions/`** — модули NginxionS
     - `routes.js` — все маршруты `/api/nginxions/*`
@@ -470,6 +504,9 @@ flowchart LR
       - **`objects/`** — `model.js` (объекты политики в терминах v1beta2 и проверка «нет молчаливых полей»), `store.js` (хранение и сборка политики), `api.js` (объекты, политика по умолчанию, предпросмотр, импорт), `format.js` (v1beta2 для агента, v1beta1 для импорта и экспорта), `compare.js` (сравнение применённой агентом конфигурации с политикой), `simulate.js` (пробный прогон изменения на недавних событиях WAF), `contract.js` (политики контрактного теста с агентом: встроенные объекты, примеры, политика со всеми видами объектов), `schema-v1beta2.json` (схема политики), `examples/` (примеры политик open-appsec для тестов)
     - **`migrations/`** — миграции таблиц `nginxions_*` (по одной на изменение схемы, имя начинается с даты; `20261125000000_nginxions_role_grants.js` разделяет ручные назначения и назначения OIDC; `20261125000100_nginxions_service_token.js` добавляет сервисные токены и их роли)
 - **`frontend/`** — интерфейс на React + Vite
+  - `index.html`, `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `vitest-setup.js`, `check-locales.cjs` — сборка, типы, тесты и переводы
+  - `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `biome.json` — зависимости и настройки инструментов
+  - `public/` — статические ресурсы сайта. `src/main.tsx` — точка входа. `src/api/`, `src/context/`, `src/modules/`, `src/notifications/` — клиент старого API, контексты, авторизация и уведомления
   - `src/App.tsx`, `src/Router.tsx`, `src/pages/`, `src/modals/`, `src/components/`, `src/hooks/` — код NPMplus; наши правки помечены `NginxionS:`
   - `src/locale/src/en.json`, `ru.json` — все строки интерфейса (другие языки — от NPMplus)
   - **`src/nginxions/`** — интерфейс NginxionS

@@ -1,24 +1,34 @@
 #!/usr/bin/env node
-// CI: every file of the code of NginxionS is named in the file tree of CODE_OF_CONDUCT.md (section 4), so that the tree
-// says what each file is for and does not fall behind. Tests, styles of a component, index.tsx of a page (named by its
-// folder), migrations and patches are named by their folder only.
+// CI: files in the maintained directories are named in section 4 of CODE_OF_CONDUCT.md. Tests, component
+// styles, page entry points, migrations, patches and examples are described with their folders.
 // Usage: node scripts/check-tree.mjs   (from the root of the repository)
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-const ROOTS = ["nginxions/backend/nginxions", "nginxions/frontend/src/nginxions", "deploy", "scripts"];
-const SKIP_DIRS = new Set(["node_modules", "migrations", "patches", "examples"]);
+const ROOTS = [
+	".github",
+	"deploy",
+	"docs",
+	"model",
+	"nginxions/backend/nginxions",
+	"nginxions/frontend/src/nginxions",
+	"readme",
+	"scripts",
+];
+const SKIP_DIRS = new Set(["__pycache__", "node_modules", "migrations", "patches", "examples"]);
 const skipFile = (name) =>
 	name.includes(".test.") || name.endsWith(".module.css") || name === "index.tsx" || name.endsWith(".patch");
 
 const tree = readFileSync("CODE_OF_CONDUCT.md", "utf8");
+const inventory = tree.split(/^## 4\. Дерево файлов\s*$/m)[1] ?? "";
+const names = new Set([...inventory.matchAll(/`([^`\n]+)`/g)].map(([, entry]) => path.posix.basename(entry)));
 const missing = [];
 const walk = (dir) => {
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
 		const full = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
 			if (!SKIP_DIRS.has(entry.name)) walk(full);
-		} else if (!skipFile(entry.name) && !tree.includes(entry.name)) {
+		} else if (!skipFile(entry.name) && !names.has(entry.name)) {
 			missing.push(full);
 		}
 	}
