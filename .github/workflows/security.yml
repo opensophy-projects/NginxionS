@@ -77,7 +77,7 @@ jobs:
       - name: leave out accepted risks
         if: always() && hashFiles('out/semgrep.sarif') != ''
         run: mkdir -p upload && node scripts/sarif-accepted.mjs semgrep out/semgrep.sarif upload/semgrep.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/semgrep.sarif') != ''
         with:
           sarif_file: upload/semgrep.sarif
@@ -137,7 +137,7 @@ jobs:
         if: steps.need.outputs.run == 'true'
         with:
           persist-credentials: false
-      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: steps.need.outputs.run == 'true'
         with:
           languages: ${{ matrix.language }}
@@ -145,7 +145,7 @@ jobs:
           # the extended run: the quality queries too (reported, they do not block: scripts/security-report.mjs)
           queries: ${{ inputs.level == 'extended' && 'security-and-quality' || 'security-extended' }}
           config-file: .github/security/codeql.yml
-      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: steps.need.outputs.run == 'true'
         with:
           category: /language:${{ matrix.language }}
@@ -170,7 +170,7 @@ jobs:
             *) tool=codeql-js ;;
           esac
           mkdir -p upload && node scripts/sarif-accepted.mjs "$tool" "out/codeql-$LANGUAGE.sarif" "upload/codeql.sarif"
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: steps.need.outputs.run == 'true'
         with:
           sarif_file: upload/codeql.sarif
@@ -205,7 +205,7 @@ jobs:
           docker run --rm -v "$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
             -e GIT_CONFIG_VALUE_0='*' "$GITLEAKS_IMAGE" git "${all[@]}" --config .github/security/gitleaks.toml --redact \
             --report-format sarif --report-path out/gitleaks.sarif --exit-code 0 --log-level warn .
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('out/gitleaks.sarif') != ''
         with:
           sarif_file: out/gitleaks.sarif
@@ -258,7 +258,7 @@ jobs:
       - name: leave out accepted risks
         if: always() && hashFiles('out/osv.sarif') != ''
         run: mkdir -p upload && node scripts/sarif-accepted.mjs osv out/osv.sarif upload/osv.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/osv.sarif') != ''
         with:
           sarif_file: upload/osv.sarif
@@ -300,7 +300,7 @@ jobs:
       - name: leave out accepted risks
         if: always() && hashFiles('out/kics/results.sarif') != ''
         run: mkdir -p upload && node scripts/sarif-accepted.mjs kics out/kics/results.sarif upload/kics.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/kics.sarif') != ''
         with:
           sarif_file: upload/kics.sarif
@@ -338,7 +338,7 @@ jobs:
       - name: leave out accepted risks
         if: always() && hashFiles('out/zizmor.sarif') != ''
         run: mkdir -p upload && node scripts/sarif-accepted.mjs zizmor out/zizmor.sarif upload/zizmor.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/zizmor.sarif') != ''
         with:
           sarif_file: upload/zizmor.sarif
@@ -437,7 +437,7 @@ jobs:
       - name: leave out accepted risks
         if: always() && hashFiles('out/scorecard.sarif') != ''
         run: mkdir -p upload && node scripts/sarif-accepted.mjs scorecard out/scorecard.sarif upload/scorecard.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/scorecard.sarif') != ''
         with:
           sarif_file: upload/scorecard.sarif
