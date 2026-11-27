@@ -22,7 +22,7 @@ NginxionS — форк NPMplus с встроенными open-appsec (ML-WAF) и
 - Предпочитать новый код в `nginxions/`-каталогах и точечные «крючки» в upstream-файлах.
 - Каждое изменение upstream-файла помечается комментарием `NginxionS:` с причиной (`// NginxionS: …`, `# NginxionS: …`). По этим меткам разрешаются конфликты при обновлении.
 - Стиль — как в окружающем коде: биом-форматирование (табы, ширина 120), ESM, `async/await`.
-- Новый, переименованный или удалённый файл — поправьте дерево файлов в `CODE_OF_CONDUCT.md` (раздел 4, строка «что это и зачем»); `scripts/check-tree.mjs` (в CI) проверяет, что каждый файл там есть.
+- При добавлении, переименовании или удалении файла обновите раздел 4 в `CODE_OF_CONDUCT.md`. `scripts/check-tree.mjs` сверяет файлы в перечисленных там каталогах.
 - Новые строки интерфейса — только в `en.json` и `ru.json` (`nginxions/frontend/src/locale/src/`). Текст прямо в TSX запрещён: `scripts/check-i18n.mjs` (в CI) проверяет, что у каждого ключа `en` есть перевод `ru` и что в разметке нет английского текста.
 
 ## Удалено из upstream
@@ -30,6 +30,8 @@ NginxionS — форк NPMplus с встроенными open-appsec (ML-WAF) и
 Из `nginxions/` удалены файлы NPMplus, которые NginxionS не использует: `caddy/`, `compose.yaml`, `ech-cron-cloudflare-example.sh`, `renovate.json`, `.github/`; во frontend — страницы, которые заменили страницы NginxionS (`pages/Dashboard`, `pages/AuditLog`, `pages/Certificates`, `pages/Nginx/*`), окна `HTTPCertificateModal`, `DNSCertificateModal`, `PermissionsModal`, хуки `useAuditLogs`, `useHostReport` и функции API только для них. `nginxions/README.md` заменён описанием каталога; `patches/attachment.patch` внесён в код `openappsec/attachment`. Если при обновлении NPMplus они вернутся конфликтом «modify/delete», удаляйте их снова (`git rm`).
 
 Из `openappsec/` удалено то, что агент NginxionS не собирает и не запускает: `agent/deployment/` (примеры деплоя), `agent/examples/juiceshop/` (примеры шлюзов: nginx, swag, kong, envoy, apisix), `agent/build_system/apisix/`, `agent/build_system/charts/`, `agent/build_system/docker/Dockerfile` (образ — `deploy/openappsec/Dockerfile`), установщики без исходников (intelligence, CrowdSec auxiliary), готовые бинарники `agent/external/yajl` (примеры и тесты), `attachment/docker/` (kong, envoy, webhook), `attachment/attachments/{envoy,kong,nano_attachment}`, `smartsync*/build/` (их Dockerfile), `smartsync-tuning/internal/app/tuningdomain/v1` (не собирался). При `git subtree pull` они возвращаются конфликтом «modify/delete» — удаляйте снова.
+
+В ветке `rfrns` лежат справочные снимки исходных репозиториев. При обновлении `openappsec/` сохраняйте лицензии, уведомления и инструкции встроенных библиотек. Справочные материалы upstream (`README.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` в корне каждого из пяти компонентов и PDF аудита агента) доступны по коммитам из `deploy/openappsec/sources.env`. Кэш контрольных сумм в `smartsync-tuning/dependencies/openappsec.io/*/vendor/cache/` удалён. Версии локальных Go-модулей и их контрольные суммы заданы в `go.mod` и `go.sum`.
 
 ## Обновление NPMplus
 
