@@ -148,8 +148,13 @@
 
 .controls {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 0.5rem;
 	padding: 1rem;
+}
+
+.controls .field {
+	color: var(--foreground-muted);
 }
 
 .field {
@@ -404,14 +409,14 @@
 	justify-content: space-between;
 }
 .triggerLabel {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	user-select: none;
+}
+.triggerSeparator {
+	margin-inline: 0.5rem;
 }
 .menu {
 	position: absolute;
@@ -576,7 +581,7 @@
 	overflow: hidden;
 	border: 0;
 	border-right: 1px solid var(--border);
-	background: var(--background-inset);
+	background: var(--background);
 	color: var(--foreground);
 }
 .drawer::backdrop {
