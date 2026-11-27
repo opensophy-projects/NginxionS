@@ -98,7 +98,7 @@
 | CrowdSec bouncer (lua) + CrowdSec AppSec, настройка файлом | `rootfs/etc/crowdsec.conf.*` | GUI нет |
 | OIDC, 2FA, audit-log, Swagger | `routes/oidc.js` и др. | OIDC-группы → роли RBAC |
 | Права: роли `admin`/`user`, фиксированные колонки `hidden/view/manage` | `migrations/…initial.js`, `lib/access.js` | Для RBAC нужна новая модель |
-| Лицензии исходников | `nginxions/COPYING`, `nginxions/LICENSE.MIT` | Условия NginxionS описаны в корневом `LICENSE`, лицензии компонентов хранятся рядом с их исходниками |
+| Лицензия проекта | `LICENSE` | Условия NginxionS описаны в корневом `LICENSE`. Лицензии исходных компонентов доступны в их репозиториях |
 
 ### 2.2. open-appsec-npm (`open-appsec-npm-master/`) — что переносим
 Форк **старого** NPM 2.12 (Backbone/Marionette). UI не переносим — только логику:

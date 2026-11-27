@@ -166,7 +166,7 @@ flowchart LR
 ### Корень
 
 - `README.md` — что такое NginxionS, установка, ссылки на документацию
-- `LICENSE` — NginxionS Source-Available License. Лицензии и уведомления включённых компонентов находятся рядом с их исходниками
+- `LICENSE` — NginxionS Source-Available License
 - `CODE_OF_CONDUCT.md` — этот файл: правила общения, issue, архитектура, дерево файлов
 - `CONTRIBUTING.md` — как вносить изменения: ветки, коммиты, проверки
 - `CLAUDE.md` — правила разработки (для людей и ИИ-агентов): структура, проверки, правки upstream
@@ -248,9 +248,9 @@ flowchart LR
 свой: изменения NginxionS помечены `NginxionS:` в коде. Из него собираются образы; его проверяют все сканеры
 исходников, как остальной код (`docs/DEVSECOPS.md`). Агент не обращается к облаку open-appsec ни при какой настройке.
 
-У каждого из пяти компонентов свой `LICENSE`. У `attachment/` есть также `NOTICE`. Лицензии библиотек сохранены
-в соответствующих `external/`. Лицензия продвинутой модели находится в `waap.data`, уведомления установщика агента —
-в `agent/nodes/orchestration/package/Licenses-for-Third-Party-Components.txt`.
+Лицензии исходных компонентов доступны в снимках upstream, версии указаны в `deploy/openappsec/sources.env`.
+В `attachment/` есть `LICENSE` и `NOTICE`. Лицензия продвинутой модели находится в `waap.data`, уведомления
+установщика агента — в `agent/nodes/orchestration/package/Licenses-for-Third-Party-Components.txt`.
 
 - **`agent/`** — агент (C++): без облака вовсе (не регистрируется, не подключается к Fog, отказывается слать
   сообщения и скачивать файлы с хостов open-appsec, ходит к локальным tuning и shared storage без
@@ -367,7 +367,6 @@ flowchart LR
 
 - `Dockerfile` — образ nginxions: nginx, attachment open-appsec и модули из исходников, lego, офлайн-сид CrowdSec
 - `README.md` — что лежит в каталоге
-- `COPYING` и `LICENSE.MIT` — лицензии NPMplus и исходного Nginx Proxy Manager
 - `.dockerignore`, `.gitattributes`, `.gitignore`, `.version` — контекст сборки, правила Git и версия исходного проекта
 - `certbot-requirements.txt` — certbot образа и его зависимости с версиями и хешами (`pip --require-hashes`)
 - `crowdsec-seed/` — сборка офлайн-снимка hub CrowdSec, который кладётся в образ
