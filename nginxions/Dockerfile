@@ -270,6 +270,9 @@ FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6ee
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--use-openssl-ca
+ARG NGINXIONS_BUILD_VERSION=develop
+ENV NGINXIONS_BUILD_VERSION=$NGINXIONS_BUILD_VERSION
+LABEL org.opencontainers.image.version=$NGINXIONS_BUILD_VERSION
 ARG LRC_VER=6fec23e2149c88b33b39fec8a5ebdd67a3e0dd88 # v0.1.34rc3
 ARG LRL_VER=3ff6300e68b73ba20e909c7d16bd839aef2e5a4b # v0.15
 ARG LCSB_VER=ec94d512927cf70be865686e4eb928d128189633 # v1.0.19: the bot challenge of AppSec (NginxionS: antiBot)

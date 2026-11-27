@@ -72,7 +72,7 @@ export const decide = (e) => {
 	} else if (e.event === "workflow_dispatch") {
 		level = e.input === "fast" ? "fast" : "full";
 		reason = "Run workflow";
-	} else if (e.event !== "push" || e.ref === "refs/heads/work" || e.ref.startsWith("refs/tags/v")) {
+	} else if (e.event !== "push" || e.ref === "refs/heads/work" || e.ref.startsWith("refs/tags/")) {
 		level = "full";
 		reason = "work, a tag or a pull request";
 	} else if (message.includes("[full]")) {
@@ -103,11 +103,22 @@ export const decide = (e) => {
 	};
 };
 
+export const release = (ref) => {
+	if (!ref.startsWith("refs/tags/")) return { version: "", tags: "develop" };
+	const match = /^refs\/tags\/([vV])((?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8}))$/.exec(ref);
+	if (!match) throw new Error("Expected a stable Git tag in the form V1.0.0");
+	const [, prefix, number] = match;
+	const version = `V${number}`;
+	return { version, tags: [...new Set([version, `${prefix}${number}`, number, "latest"])].join(" ") };
+};
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const file = process.env.CHANGED;
 	const changed = file && existsSync(file) && readFileSync(file, "utf8").trim()
 		? readFileSync(file, "utf8").split("\n").filter(Boolean)
 		: null;
+	const ref = process.env.GITHUB_REF || process.env.REF || "";
+	const build = release(ref);
 	const d = decide({
 		event: process.env.EVENT,
 		action: process.env.ACTION,
@@ -115,7 +126,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		labels: process.env.LABELS,
 		input: process.env.INPUT,
 		message: process.env.MESSAGE,
-		ref: process.env.GITHUB_REF || process.env.REF || "",
+		ref,
 		changed,
 	});
 	const out = [
@@ -124,6 +135,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		`cpp=${d.cpp}`,
 		`go=${d.go}`,
 		`dast=${d.dast}`,
+		`release_version=${build.version}`,
+		`image_tags=${build.tags}`,
 	].join("\n");
 	if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, `${out}\n`, { flag: "a" });
 	const summary = [

@@ -1,6 +1,5 @@
 import express from "express";
 import errs from "../lib/error.js";
-import pjson from "../package.json" with { type: "json" };
 import { isSetup } from "../setup.js";
 import auditLogRoutes from "./audit-log.js";
 import accessListsRoutes from "./nginx/access_lists.js";
@@ -19,6 +18,7 @@ import usersRoutes from "./users.js";
 import versionRoutes from "./version.js";
 // NginxionS: our API lives in nginxions/routes.js
 import nginxionsRoutes from "../nginxions/routes.js";
+import { currentVersion } from "../nginxions/system/releases.js";
 
 const router = express.Router({
 	caseSensitive: true,
@@ -41,7 +41,7 @@ router.get(["/api", "/api/"], async (_, res /*, next*/) => {
 	res.status(200).send({
 		status: "OK",
 		setup: await isSetup(),
-		version: pjson.version,
+		version: currentVersion,
 		password: process.env.OIDC_DISABLE_PASSWORD === "false",
 		oidc: isOIDCenabled,
 	});

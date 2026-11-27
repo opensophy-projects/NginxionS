@@ -186,6 +186,7 @@ flowchart LR
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
     в еженедельном прогоне — ещё и опубликованные образы (`docs/DEVSECOPS.md`)
   - `workflows/offline-bundle.yml` — сборка офлайн-бандла, установка и проверка на отдельном раннере
+  - GitHub Release создаётся в `ci.yml` из стабильного Git-тега после проверки образов и офлайн-установки.
   - `actionlint.yaml` — настройки actionlint (метки раннеров)
   - `coverage-baseline.json` — покрытие кода тестами, ниже которого CI не опускается (`scripts/coverage-report.mjs`)
   - **`security/`** — настройки сканеров
@@ -221,6 +222,7 @@ flowchart LR
   - `nginxions-openappsec.sh` — запуск агента, shared storage, tuning и SmartSync на управляющем сервере
   - `sources.env` — коммиты upstream open-appsec, от которых взяты исходники в `openappsec/` (для их обновления)
   - `agent/nginxions-entry.sh` — настройки агента из GUI (WAF → Агент) при каждом его старте
+- **`update/`** — `nginxions-update.service` запускает хостовый обновлятор, `nginxions-update.timer` планирует ежедневную проверку
 - **`test/`** — закрытый контур, DAST, стенд обучения модели
   - `compose.airgap.yaml` — стек без выхода в интернет
   - `airgap-network.sh` — проверка TCP-изоляции внутренних сервисов из внешней сети стека
@@ -293,6 +295,7 @@ flowchart LR
 
 - `build-images.sh` — локальная сборка всех образов (тег `local/<имя>:dev`)
 - `install.sh` — установка NginxionS и Docker Engine при необходимости
+- `update.sh` — хостовый обновлятор стабильной установки по манифесту GitHub-релиза
 - `uninstall.sh` — удаление ресурсов установленного стека с отдельным подтверждением удаления Docker
 - `install-lib.sh` — общие функции установки, удаления и работы с пакетами Docker
 - `offline-bundle.sh` — архив для офлайн-установки с образами, Compose и инструкцией
@@ -348,6 +351,7 @@ flowchart LR
 
 - `MIGRATION.md` — перенос с Nginx Proxy Manager, NPMplus и open-appsec-npm
 - `OFFLINE.md` — скачивание, проверка и установка офлайн-бандла
+- `RELEASES.md` — выпуск стабильных версий, проверка обновлений и хостовый обновлятор
 - `TROUBLESHOOTING.md` — решение проблем
 - `UNINSTALL.md` — полное удаление NginxionS
 - `ENV-INVENTORY.md` — какие env-настройки остались и когда уходят в GUI
@@ -483,7 +487,7 @@ flowchart LR
       - `x509.js` — проверка субъектов и имён, конфиги openssl, серийные номера
       - `denials.js` — отказы mTLS → лента событий
     - **`rbac/`** — `model.js` (ресурсы, действия, встроенные роли), `index.js` (роли в базе, проверка прав, группы OIDC), `scope.js` (какие хосты видит пользователь), `write.js` (транзакции ролей и защита последнего администратора), `service-tokens.js` (выпуск и отзыв сервисных API-токенов, роли, проверка Bearer)
-    - **`system/`** — `env.js` (env-настройки NPMplus, перенесённые в GUI), `index.js` (их чтение и сохранение)
+    - **`system/`** — `env.js` (env-настройки NPMplus, перенесённые в GUI), `index.js` (их чтение и сохранение), `releases.js` (версия сборки, проверка GitHub-релиза и согласие на автообновление)
     - **`waf/`** — open-appsec
       - `index.js` — включение attachment в nginx
       - `agent.js` — состояние агента, `agent.test.js` — ответы службы оркестрации и ошибки HTTP
@@ -517,6 +521,7 @@ flowchart LR
     - **`ui/`** — оболочка и общие компоненты
       - `Shell.tsx`, `Sidebar.tsx`, `menu.ts` (+ `menu.test.ts`), `SectionTabs.tsx` — каркас: боковое меню, разделы, вкладки
       - `Controls.tsx` — тема, язык и меню пользователя
+      - `ReleaseInfo.tsx` — версия в боковом меню, проверка GitHub-релиза и настройка автообновления
       - `AuthLayout.tsx` — вход и первая настройка
       - `Lists.tsx` — части длинных списков (События, Запросы, Аудит): меню экспорта, пагинация, свой период
       - `FileButton.tsx` — кнопка выбора файла для загрузок (GeoIP, миграция)

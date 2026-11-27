@@ -99,6 +99,8 @@ RUN go build -ldflags="-w -s" -a -installsuffix cgo -o /out/app ./cmd/server/ &&
 
 # ---------------------------------------------------------------- the image
 FROM ${AGENT_RUNTIME}
+ARG NGINXIONS_BUILD_VERSION=develop
+LABEL org.opencontainers.image.version=$NGINXIONS_BUILD_VERSION
 # Node.js for nginxions-control (its own container, deploy/compose.yaml) and the Snort converter of the agent
 RUN apk add --no-cache nodejs
 COPY --from=shared-storage /out/ /opt/appsec-shared-storage/

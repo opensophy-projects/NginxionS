@@ -7370,6 +7370,42 @@
 	"nginxions.rbac.view-only": {
 		"defaultMessage": "Только просмотр"
 	},
+	"nginxions.release.auto-off": {
+		"defaultMessage": "Автообновление выключено."
+	},
+	"nginxions.release.auto-on": {
+		"defaultMessage": "Автообновление включено."
+	},
+	"nginxions.release.automatic": {
+		"defaultMessage": "Автоматически устанавливать совместимые обновления"
+	},
+	"nginxions.release.available": {
+		"defaultMessage": "Доступна версия {version}."
+	},
+	"nginxions.release.check": {
+		"defaultMessage": "Проверить обновления"
+	},
+	"nginxions.release.current": {
+		"defaultMessage": "Установлена актуальная версия."
+	},
+	"nginxions.release.host-required": {
+		"defaultMessage": "Для автообновления нужна стабильная версия и обновлятор на сервере Docker."
+	},
+	"nginxions.release.notes": {
+		"defaultMessage": "Описание релиза"
+	},
+	"nginxions.release.settings-error": {
+		"defaultMessage": "Не удалось прочитать или сохранить настройки обновлений."
+	},
+	"nginxions.release.unavailable": {
+		"defaultMessage": "GitHub недоступен. Попробуйте позже."
+	},
+	"nginxions.release.unpublished": {
+		"defaultMessage": "Стабильный релиз ещё не опубликован."
+	},
+	"nginxions.release.version": {
+		"defaultMessage": "Версия {version}"
+	},
 	"nginxions.services": {
 		"defaultMessage": "Сервисы"
 	},

@@ -1,66 +1,13 @@
-import { remoteVersion as logger } from "../logger.js";
-import pjson from "../package.json" with { type: "json" };
+// NginxionS: compatibility with the upstream version endpoint and the opt-in environment flag.
+import { currentVersion, releaseService } from "../nginxions/system/releases.js";
 
-const internalRemoteVersion = {
-	cache_timeout: 1000 * 60 * 60, // 1 hour
-	last_result: null,
-	last_fetch_time: null,
-
-	/**
-	 * Fetch the latest version info, using a cached result if within the cache timeout period.
-	 * @return {Promise<{current: string, latest: string, update_available: boolean}>} Version info
-	 */
+export default {
 	get: async () => {
-		// NginxionS: local-first — the update check is opt-in
-		if (process.env.NGINXIONS_CHECK_VERSION !== "true") {
-			return {
-				current: pjson.version,
-				latest: "unknown",
-				update_available: false,
-			};
-		}
-
-		try {
-			if (
-				!internalRemoteVersion.last_result ||
-				!internalRemoteVersion.last_fetch_time ||
-				Date.now() - internalRemoteVersion.last_fetch_time > internalRemoteVersion.cache_timeout
-			) {
-				// NginxionS: NginxionS releases instead of NPMplus
-				const response = await fetch("https://api.github.com/repos/opensophy-projects/NPMOS/releases/latest", {
-					headers: {
-						"User-Agent": `NPMplus/${pjson.version}`,
-					},
-				});
-
-				if (!response.ok) {
-					throw new Error(`Status code: ${response.status}`);
-				}
-
-				const data = await response.json();
-
-				internalRemoteVersion.last_result = data;
-				internalRemoteVersion.last_fetch_time = Date.now();
-			}
-		} catch (error) {
-			logger.error("Failed to fetch remote version:", error.message);
-			if (!internalRemoteVersion.last_result) {
-				return {
-					current: pjson.version,
-					latest: "unknown",
-					update_available: false,
-				};
-			}
-		}
-
-		const latestVersion = internalRemoteVersion.last_result?.tag_name || "unknown";
-		const currentVersion = pjson.version;
+		const release = process.env.NGINXIONS_CHECK_VERSION === "true" ? await releaseService.check() : null;
 		return {
 			current: currentVersion,
-			latest: latestVersion,
-			update_available: currentVersion < latestVersion && currentVersion.length >= 13,
+			latest: release?.tag ?? "unknown",
+			update_available: release?.status === "available",
 		};
 	},
 };
-
-export default internalRemoteVersion;

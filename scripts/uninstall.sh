@@ -31,6 +31,16 @@ if ! "$yes" && ! confirm "Permanently remove NginxionS from $install_dir, includ
   exit 0
 fi
 
+if [[ -f "$install_dir/.host-updater" ]]; then
+  systemctl disable --now nginxions-update.timer
+  systemctl stop nginxions-update.service
+  for unit in nginxions-update.service nginxions-update.timer; do
+    [[ ! -e "/etc/systemd/system/$unit" ]] || rm -- "/etc/systemd/system/$unit"
+  done
+  systemctl daemon-reload
+  rm -- "$install_dir/.host-updater"
+fi
+
 if [[ -f "$install_dir/.docker-id" ]]; then
   require_local_docker
   [[ $(docker_id) = "$(<"$install_dir/.docker-id")" ]] || fail "This installation belongs to another Docker Engine."
