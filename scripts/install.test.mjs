@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+	closeSync,
 	existsSync,
+	fstatSync,
+	ftruncateSync,
 	mkdirSync,
 	mkdtempSync,
+	openSync,
+	readSync,
 	readFileSync,
 	rmSync,
 	statSync,
@@ -145,7 +150,15 @@ test("installer preserves settings and downloads each missing image once", (t) =
 	const envFile = join(f.target, "deploy", ".env");
 	assert.match(readFileSync(envFile, "utf8"), /NGINXIONS_VERSION=develop/);
 	assert.equal(statSync(f.target).mode & 0o777, 0o700);
-	assert.equal(statSync(envFile).mode & 0o777, 0o600);
+	// Use an open descriptor so the permission check and the update refer to the same file.
+	const envFd = openSync(envFile, "r+");
+	try {
+		assert.equal(fstatSync(envFd).mode & 0o777, 0o600);
+		ftruncateSync(envFd, 0);
+		writeFileSync(envFd, "# keep existing settings\n");
+	} finally {
+		closeSync(envFd);
+	}
 	for (const file of [
 		"init/nginxions-init.sh",
 		"init/postgres-init.sh",
@@ -159,9 +172,18 @@ test("installer preserves settings and downloads each missing image once", (t) =
 	}
 	assert.ok(existsSync(join(f.target, "deploy", "seccomp", "nginxions.json")));
 	assert.ok(existsSync(join(f.target, "uninstall.sh")));
-	writeFileSync(envFile, "# keep existing settings\n");
 	ok(f.install());
-	assert.equal(readFileSync(envFile, "utf8"), "# keep existing settings\n");
+	const updatedFd = openSync(envFile, "r");
+	try {
+		const contents = Buffer.alloc(64);
+		const size = readSync(updatedFd, contents, 0, contents.length, 0);
+		assert.equal(
+			contents.toString("utf8", 0, size),
+			"# keep existing settings\n",
+		);
+	} finally {
+		closeSync(updatedFd);
+	}
 	assert.deepEqual(
 		f.calls().filter(([cmd]) => cmd === "pull"),
 		[
