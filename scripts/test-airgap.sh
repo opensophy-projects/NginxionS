@@ -217,7 +217,7 @@ if [ -n "$control_container" ] && [ "$(docker inspect -f '{{.HostConfig.NetworkM
   exit 1
 fi
 blocked=(postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 nginxions-control:7080 control:7080
-  nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813 nginxions:7815)
+  nginxions:7777 nginxions:7080 nginxions:7811 nginxions:7813 nginxions:7815 nginxions:7816)
 for endpoint in postgres:5432 crowdsec:8080 crowdsec:7422 clamav:3310 control:7080; do
   id=$("${compose[@]}" ps -q "${endpoint%:*}")
   [ -n "$id" ] || continue

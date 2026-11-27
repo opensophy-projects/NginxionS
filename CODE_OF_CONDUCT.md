@@ -490,7 +490,7 @@ flowchart LR
       - `Dropdown.tsx`, `SearchField.tsx`, `DateTimePicker.tsx` — меню, поиск, выбор даты. `Interactions.test.tsx` проверяет навигацию, язык и тему, клавиатуру и фокус в меню и панелях
       - `CodeDiff.tsx` — разница двух текстов, как в ревью кода
       - `Charts.tsx` — простые SVG-графики (столбцы, списки с полосами)
-      - `charts/` — графики Аналитики: `AreaChart.tsx`, `Kpi.tsx`, `WorldMap.tsx`, `curves.ts`, `format.ts`
+      - `charts/` — графики Аналитики: `AreaChart.tsx`, `Kpi.tsx`, `WorldMap.tsx`, `curves.ts`, `format.ts`; `CountryFlag.tsx` — флаг страны по её коду
       - `worldMap.json` — контуры стран для карты
       - `time.ts` — «5 минут назад» на языке интерфейса
       - `closeLabels.ts` — переведённые подписи кнопок закрытия react-bootstrap
@@ -503,7 +503,7 @@ flowchart LR
       - `WafEvents/` — События: лента, фильтры (`filters.ts`), значки (`badges.tsx`), срок хранения (`Retention.tsx`)
       - `RequestLog/` — События → Запросы: журнал запросов и его фильтры (`Filters.tsx`)
       - `AuditLog/` — журнал аудита
-      - `Crowdsec/` — Блокировки и CrowdSec: решения (`Decisions.tsx`), срабатывания (`Triggers.tsx`), hub (`Hub.tsx`), блок-листы (`Blocklists.tsx`), настройки (`Settings.tsx`)
+      - `Crowdsec/` — Блокировки и CrowdSec: решения (`Decisions.tsx`), срабатывания (`Triggers.tsx`), графики метрик (`Metrics.tsx`), hub (`Hub.tsx`), блок-листы (`Blocklists.tsx`), настройки (`Settings.tsx`)
       - `AgentOpenappsec/` — Агенты → open-appsec: политика, хосты, обучение
       - `WafAgent/` — состояние, метрики (`AgentMetrics.tsx`), настройки агента (`AgentSettings.tsx`), File Security / ClamAV (`FileSecurity.tsx`)
       - `WafPolicy/`, `WafExpert/` — политика из объектов и режим эксперта

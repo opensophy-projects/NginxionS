@@ -31,6 +31,7 @@ export interface QueueGroup {
 	reason: Reason;
 	new: boolean;
 	scopes: Scope[];
+	scopeRevision: string;
 }
 
 export interface Suggestion {
@@ -135,9 +136,11 @@ interface LabelInput {
 	key?: string;
 	/** an event of the group (the group of an event card may be out of the queue) */
 	eventId?: number;
-	suggestion?: Suggestion;
+	suggestion?: Pick<Suggestion, "id" | "asset" | "hostId">;
 	decision: Decision;
 	scopes?: Scope[];
+	scopeFields?: Exclude<ScopeType, "source">[];
+	scopeRevision?: string;
 	exception?: boolean;
 	ttlDays?: number;
 	ban?: boolean;

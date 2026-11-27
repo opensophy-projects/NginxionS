@@ -25,7 +25,7 @@ import styles from "./Learning.module.css";
 
 const t = (id: string, values?: Record<string, any>) => intl.formatMessage({ id }, values);
 const DECISIONS: Decision[] = ["benign", "malicious", "dismiss"];
-const ONE_VALUE: ScopeType[] = ["parameterValue", "parameterName", "url"];
+const ONE_VALUE = ["parameterValue", "parameterName", "url"] as const;
 
 interface Props extends InnerModalProps {
 	group?: QueueGroup;
@@ -43,11 +43,12 @@ const LabelModal = EasyModal.create(({ visible, remove, group, suggestion, decis
 		enabled: !!group,
 	});
 	const sources = details.data?.sourceList ?? [];
+	const current = details.data ?? group;
 	// one value per type (value, name, URL) and any number of sources
 	const values: Record<string, string> = {
-		parameterValue: group?.sample ?? "",
-		parameterName: group?.parameter ?? "",
-		url: group?.uri ?? "",
+		parameterValue: current?.sample ?? "",
+		parameterName: current?.parameter ?? "",
+		url: current?.uri ?? "",
 	};
 	const [types, setTypes] = useState<ScopeType[]>(() => (group?.scopes ?? []).map((s) => s.type));
 	const [ips, setIps] = useState<string[]>([]);
@@ -67,13 +68,8 @@ const LabelModal = EasyModal.create(({ visible, remove, group, suggestion, decis
 		if (decision === "benign") setBan(false);
 	}, [decision, sources.length]);
 
-	const scopes: Scope[] = [
-		...ONE_VALUE.filter((type) => types.includes(type) && values[type]).map((type) => ({
-			type,
-			value: values[type],
-		})),
-		...ips.map((ip) => ({ type: "source" as ScopeType, value: ip })),
-	];
+	const fields = ONE_VALUE.filter((type) => types.includes(type) && values[type]);
+	const sourceScopes: Scope[] = ips.map((ip) => ({ type: "source", value: ip }));
 	const canBan = can("crowdsec", "decide");
 
 	const submit = async () => {
@@ -81,13 +77,16 @@ const LabelModal = EasyModal.create(({ visible, remove, group, suggestion, decis
 		setError(null);
 		try {
 			if (suggestion) {
-				await createLabel({ suggestion, decision });
+				const { id, asset, hostId } = suggestion;
+				await createLabel({ suggestion: { id, asset, hostId }, decision });
 			} else if (group) {
 				await createLabel({
 					key: group.key,
-					eventId: group.eventId ?? undefined,
+					eventId: current?.eventId ?? undefined,
 					decision,
-					scopes: decision === "dismiss" ? [] : scopes,
+					scopes: decision === "dismiss" ? [] : sourceScopes,
+					scopeFields: decision === "dismiss" ? [] : fields,
+					scopeRevision: current?.scopeRevision,
 					exception: decision !== "dismiss" && exception,
 					ttlDays: ttl,
 					ban: decision === "malicious" && ban,
@@ -108,10 +107,10 @@ const LabelModal = EasyModal.create(({ visible, remove, group, suggestion, decis
 		setTypes((list) => (list.includes(type) ? list.filter((x) => x !== type) : [...list, type]));
 	const toggleIp = (ip: string) =>
 		setIps((list) => (list.includes(ip) ? list.filter((x) => x !== ip) : [...list, ip]));
-	const empty = decision !== "dismiss" && !suggestion && !scopes.length;
+	const empty = decision !== "dismiss" && !suggestion && !fields.length && !sourceScopes.length;
 
 	return (
-		<Modal show={visible} onHide={remove} size="lg">
+		<Modal show={visible} onHide={remove} size="lg" scrollable>
 			<Modal.Header closeButton>
 				<Modal.Title>
 					<T id="nginxions.learning.label.title" />
@@ -138,12 +137,12 @@ const LabelModal = EasyModal.create(({ visible, remove, group, suggestion, decis
 									<dd className={styles.mono}>{group.parameter}</dd>
 								</>
 							)}
-							{group.sample && (
+							{current?.sample && (
 								<>
 									<dt>
 										<T id="nginxions.learning.value" />
 									</dt>
-									<dd className={styles.mono}>{group.sample}</dd>
+									<dd className={styles.mono}>{current.sample}</dd>
 								</>
 							)}
 							{group.indicators && (

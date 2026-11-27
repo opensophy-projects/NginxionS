@@ -11,8 +11,11 @@ import { showDecisionModal } from "../../crowdsec/DecisionModal";
 import { originLabel, remaining, t } from "../../crowdsec/labels";
 import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
+import { CountryFlag } from "../../ui/charts/CountryFlag";
+import { eventCountry } from "../../ui/charts/format";
 import { SearchField } from "../../ui/SearchField";
 import { dateTime, timeAgo } from "../../ui/time";
+import crowdsecStyles from "./Crowdsec.module.css";
 
 const PAGE = 100;
 
@@ -300,7 +303,16 @@ export function AlertsTab({ initialQuery = "", refresh }: { initialQuery?: strin
 		return (alerts.data ?? []).filter(
 			(a) =>
 				!s ||
-				[a.scenario, a.source.ip, a.source.value, a.source.cn, meta(a, "target_fqdn"), a.message]
+				[
+					a.scenario,
+					a.source.ip,
+					a.source.value,
+					a.source.cn,
+					a.source.countryCode,
+					eventCountry(a.source.cn || a.source.countryCode || ""),
+					meta(a, "target_fqdn"),
+					a.message,
+				]
 					.join(" ")
 					.toLowerCase()
 					.includes(s),
@@ -345,7 +357,7 @@ export function AlertsTab({ initialQuery = "", refresh }: { initialQuery?: strin
 				</p>
 			) : (
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className={cn("table table-vcenter card-table nx-stack", crowdsecStyles.table)}>
 						<thead>
 							<tr>
 								<th>
@@ -375,10 +387,14 @@ export function AlertsTab({ initialQuery = "", refresh }: { initialQuery?: strin
 								const d = a.decisions[0];
 								return (
 									<tr key={a.id}>
-										<td className="text-nowrap" title={dateTime(a.createdAt)}>
+										<td
+											data-label={t("nginxions.crowdsec.time")}
+											className="text-nowrap"
+											title={dateTime(a.createdAt)}
+										>
 											{timeAgo(a.createdAt)}
 										</td>
-										<td>
+										<td data-label={t("nginxions.crowdsec.scenario")}>
 											<div>{a.scenario}</div>
 											{a.simulated && (
 												<span className="badge bg-secondary-lt">
@@ -386,13 +402,19 @@ export function AlertsTab({ initialQuery = "", refresh }: { initialQuery?: strin
 												</span>
 											)}
 										</td>
-										<td className="font-monospace">
-											{ip}
-											{a.source.cn && <span className="text-secondary ms-1">{a.source.cn}</span>}
+										<td data-label={t("nginxions.crowdsec.source")}>
+											<span className="font-monospace">
+												{ip && (
+													<CountryFlag code={a.source.cn} fallback={a.source.countryCode} />
+												)}
+												{ip || "—"}
+											</span>
 										</td>
-										<td className={styles.used}>{meta(a, "target_fqdn") || "—"}</td>
-										<td>{a.eventsCount}</td>
-										<td>
+										<td data-label={t("nginxions.crowdsec.host")} className={styles.used}>
+											{meta(a, "target_fqdn") || "—"}
+										</td>
+										<td data-label={t("nginxions.crowdsec.events")}>{a.eventsCount}</td>
+										<td data-label={t("nginxions.crowdsec.decision")}>
 											{d ? (
 												<span className={cn("badge", TYPE_TONE[d.type] || "bg-secondary-lt")}>
 													{["ban", "captcha"].includes(d.type)
@@ -405,7 +427,7 @@ export function AlertsTab({ initialQuery = "", refresh }: { initialQuery?: strin
 											)}
 										</td>
 										{decide && (
-											<td>
+											<td className="nx-actions-row">
 												{ip && a.source.scope !== "Range" && !d && (
 													<button
 														type="button"

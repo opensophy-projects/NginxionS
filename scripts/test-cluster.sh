@@ -309,6 +309,12 @@ step "learning: the agents of the nodes reach the shared storage of the manager"
 learns() { member "$1" | jq -e '.learning.last_ok_on // empty' > /dev/null; }
 for s in node1 node2; do until_ok "the agent of $s did not reach the storage of the manager: $(member "$s")" 60 3 learns "$s"; done
 
+step "learning: both SmartSync listeners work on the manager's loopback and are isolated from the cluster network"
+smartsync_live() { stack manager exec -T openappsec wget -q -T 5 -O /dev/null "http://127.0.0.1:$1/health/live"; }
+for port in 7815 7816; do until_ok "SmartSync is not ready on loopback port $port" 20 3 smartsync_live "$port"; done
+docker exec -i "$probe" sh -s -- "${IP[manager]}:81" "${IP[manager]}:7815" "${IP[manager]}:7816" \
+  < deploy/test/airgap-network.sh
+
 step "learning together: traffic of three sources through the three servers is learned, the same through one node is not"
 # Use a known parameter type (comma-delimited filters) with three sources in this isolated stack.
 # Keep the default thresholds for keywords, number of windows and ratio.

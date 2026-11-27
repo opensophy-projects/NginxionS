@@ -26,6 +26,7 @@ import { startFilesLog } from "./nginxions/waf/files.js";
 import { start as startNotifications } from "./nginxions/notifications/index.js";
 import { bootstrap as bootstrapPki } from "./nginxions/pki/index.js";
 import { bootstrap as bootstrapWafAgent } from "./nginxions/waf/agent-settings.js";
+import { startAgentMetrics } from "./nginxions/waf/metrics.js";
 import { bootstrap as bootstrapWafPolicy } from "./nginxions/waf/policy.js";
 import { start as startWafTrials } from "./nginxions/waf/trial.js";
 import { getCompiledSchema } from "./schema/index.js";
@@ -60,6 +61,7 @@ async function appStart() {
 			.then(startLearningSnapshots)
 			.then(startFilesLog)
 			.then(startWafTrials)
+			.then(startAgentMetrics)
 			.then(startNotifications)
 			.then(startClusterMember)
 			.then(getCompiledSchema)

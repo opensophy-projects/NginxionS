@@ -1,14 +1,11 @@
 // Parts of Analytics shared by its tabs: the period, tab and filters in the address (a link opens the same view),
 // panels, top lists whose rows add a filter (the filter button of the Cloudflare lists), labels of the axis.
 import cn from "classnames";
-import { hasFlag } from "country-flag-icons";
-// @ts-expect-error Creating a typing for a subfolder is not easily possible (as src/components/Flag.tsx)
-import Flags from "country-flag-icons/react/3x2";
 import { useSearchParams } from "react-router-dom";
 import { intl } from "src/locale";
 import type { AnalyticsPeriod, TopRow, TrafficFilters, TrafficTab } from "../../api";
 import { BarList } from "../../ui/Charts";
-import chartStyles from "../../ui/charts/charts.module.css";
+import { CountryFlag } from "../../ui/charts/CountryFlag";
 import { countryName, formatCount } from "../../ui/charts/format";
 import { InfoTip, infoOfNode } from "../../ui/InfoTip";
 import styles from "./Analytics.module.css";
@@ -116,16 +113,10 @@ export function Country({ code }: { code: string }) {
 	if (!code) return <>{t("nginxions.traffic.unknown")}</>;
 	return (
 		<span>
-			{hasFlag(code) && <CountryFlag code={code} />}
+			<CountryFlag code={code} />
 			{countryName(code)}
 		</span>
 	);
-}
-
-/** flags of country-flag-icons as inline SVG (bundled, offline) */
-function CountryFlag({ code }: { code: string }) {
-	const FlagElement = (Flags as Record<string, React.ComponentType<{ className?: string; title?: string }>>)[code];
-	return FlagElement ? <FlagElement className={chartStyles.flag} title={code} /> : null;
 }
 
 type Labeler = (value: string) => React.ReactNode;

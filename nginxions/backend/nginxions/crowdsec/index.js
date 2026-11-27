@@ -7,6 +7,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -21,6 +22,7 @@ import deadHostModel from "../../models/dead_host.js";
 import proxyHostModel from "../../models/proxy_host.js";
 import redirectionHostModel from "../../models/redirection_host.js";
 import { EVENT_TABLE } from "../events/store.js";
+import { countryCodes } from "../geoip/index.js";
 import { encrypt } from "../secrets.js";
 import { assertHostAccess, scopeHosts } from "../rbac/scope.js";
 import { getSetting, setSetting } from "../settings.js";
@@ -111,11 +113,13 @@ const sum = (rows, name, filter = () => true) =>
 	rows.filter((r) => r.name === name && filter(r.labels)).reduce((n, r) => n + r.value, 0);
 
 const groupSum = (rows, name, label) => {
-	const out = {};
-	for (const r of rows) if (r.name === name) out[r.labels[label] || ""] = (out[r.labels[label] || ""] || 0) + r.value;
-	return Object.entries(out)
-		.map(([key, value]) => ({ key, value }))
-		.sort((a, b) => b.value - a.value);
+	const groups = new Map();
+	for (const row of rows) {
+		if (row.name !== name) continue;
+		const key = row.labels[label] || "";
+		groups.set(key, (groups.get(key) ?? 0) + row.value);
+	}
+	return [...groups].map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
 };
 
 /** metrics of Prometheus that the GUI shows (cscli metrics) */
@@ -124,7 +128,7 @@ const summarizeMetrics = (rows) => ({
 	lines_read: groupSum(rows, "cs_filesource_hits_total", "source"),
 	lines_parsed: sum(rows, "cs_parser_hits_ok_total"),
 	lines_unparsed: sum(rows, "cs_parser_hits_ko_total"),
-	overflows: groupSum(rows, "cs_bucket_overflowed_total", "name").slice(0, 20),
+	overflows: groupSum(rows, "cs_bucket_overflowed_total", "name"),
 	bouncer_requests: groupSum(rows, "cs_lapi_bouncer_requests_total", "bouncer"),
 	machine_requests: groupSum(rows, "cs_lapi_machine_requests_total", "machine"),
 	decisions: groupSum(rows, "cs_active_decisions", "origin"),
@@ -399,7 +403,12 @@ const internalCrowdsec = {
 			const list = (await lapi.alerts(params))
 				.filter((a) => query.all || !OWN_SCENARIO.test(a.scenario || ""))
 				.slice(0, limit);
-			return list.map((a) => ({
+			const addresses = list.map((a) => a.source?.ip || a.source?.value || "");
+			const missing = addresses.filter(
+				(ip, i) => isIP(ip) && !/^(?!XX|ZZ)[A-Z]{2}$/i.test(list[i].source?.cn ?? ""),
+			);
+			const countries = missing.length ? await countryCodes(missing) : new Map();
+			return list.map((a, i) => ({
 				id: a.id,
 				created_at: a.created_at,
 				start_at: a.start_at,
@@ -409,7 +418,7 @@ const internalCrowdsec = {
 				machine_id: a.machine_id,
 				events_count: a.events_count,
 				simulated: !!a.simulated,
-				source: a.source || {},
+				source: { ...a.source, country_code: countries.get(addresses[i]) || undefined },
 				decisions: (a.decisions || []).map((d) => ({
 					id: d.id,
 					type: d.type,

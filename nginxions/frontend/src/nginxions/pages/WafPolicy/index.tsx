@@ -66,10 +66,12 @@ export function DefaultPolicyTab({
 	data,
 	manage,
 	refresh,
+	embedded = false,
 }: {
 	data: PolicyObjects;
 	manage: boolean;
 	refresh: () => void;
+	embedded?: boolean;
 }) {
 	const [policy, setPolicy] = useState<DefaultPolicy>(data.policy);
 	useEffect(() => setPolicy(data.policy), [data.policy]);
@@ -80,14 +82,16 @@ export function DefaultPolicyTab({
 	return (
 		<section className={cn("card", styles.card)}>
 			<div className={styles.cardHead}>
-				<div>
-					<h2 className={styles.cardTitle}>
-						<T id="nginxions.policy.default" />
-					</h2>
-					<p className="text-secondary small mb-0">
-						<T id="nginxions.policy.default.hint" />
-					</p>
-				</div>
+				{!embedded && (
+					<div>
+						<h2 className={styles.cardTitle}>
+							<T id="nginxions.policy.default" />
+						</h2>
+						<p className="text-secondary small mb-0">
+							<T id="nginxions.policy.default.hint" />
+						</p>
+					</div>
+				)}
 				{manage && (
 					<Dropdown
 						floating
@@ -133,7 +137,7 @@ export function DefaultPolicyTab({
 				disabled={!manage}
 			/>
 			{manage && (
-				<div className="d-flex gap-2 justify-content-end">
+				<div className="d-flex flex-wrap gap-2 justify-content-end mt-3">
 					<button
 						type="button"
 						className="btn btn-sm"

@@ -1,13 +1,29 @@
-/* Agents → open-appsec: the list of what the policy is made of on the left, the chosen item on the right */
+.policyLayout {
+	container-type: inline-size;
+	min-width: 0;
+}
+
 .editor {
 	display: grid;
-	grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+	grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
 	align-items: start;
 	gap: 1rem;
+	max-width: 77rem;
 }
-@media (max-width: 991px) {
+
+.mobilePicker {
+	display: none;
+}
+@container (max-width: 45rem) {
 	.editor {
 		grid-template-columns: minmax(0, 1fr);
+	}
+	.editor .nav {
+		display: none;
+	}
+	.mobilePicker {
+		display: block;
+		min-width: 0;
 	}
 }
 .nav {
@@ -19,12 +35,19 @@
 	padding: 0.75rem;
 	overflow: auto;
 }
-/* one column (phone, tablet): the list stays above the item, it does not stick and cover it while scrolling */
-@media (max-width: 991px) {
-	.nav {
-		position: static;
-		max-height: none;
-	}
+.navDetails {
+	margin-top: 0.5rem;
+	border-top: 1px solid var(--border);
+	padding-top: 0.375rem;
+}
+.navDetails summary {
+	padding: 0.375rem 0.5rem;
+	color: var(--foreground-muted);
+	cursor: pointer;
+	font-size: 0.8125rem;
+}
+.navDetails button {
+	padding-left: 0.875rem;
 }
 .navGroup {
 	margin: 0.75rem 0.5rem 0.25rem;
@@ -51,9 +74,13 @@
 	text-align: left;
 }
 /* like the menu of the sidebar: the chosen item is accent text, without a raised background */
-.navItem:hover,
-.navOn {
+.navItem:hover {
 	color: var(--accent);
+}
+.navOn {
+	background: color-mix(in oklab, var(--accent) 11%, transparent);
+	color: var(--accent);
+	font-weight: 500;
 }
 .navLabel {
 	flex: 1;
@@ -99,8 +126,9 @@
 }
 .paneTitle {
 	margin: 0;
-	font-size: 1.0625rem;
-	font-weight: 500;
+	font-size: 1.25rem;
+	font-weight: 600;
+	overflow-wrap: anywhere;
 }
 .paneHint {
 	max-width: 46rem;
@@ -110,6 +138,14 @@
 }
 .paneBody {
 	padding: 1rem 1.25rem 1.25rem;
+}
+@container (max-width: 31rem) {
+	.paneHead {
+		padding: 0.875rem 0.875rem 0;
+	}
+	.paneBody {
+		padding: 0.875rem;
+	}
 }
 .toggle {
 	display: inline-flex;

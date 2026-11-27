@@ -1,0 +1,67 @@
+.tabs {
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.metricsGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+	align-items: start;
+	gap: 1rem;
+}
+
+.metric {
+	min-width: 0;
+}
+
+.metricHeader {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem 0.75rem;
+}
+
+.metricHeader h3 {
+	margin: 0;
+}
+
+.metricHint {
+	margin: 0.5rem 0 1rem;
+	color: var(--foreground-muted);
+	font-size: 0.8125rem;
+}
+
+.metricScroll {
+	max-block-size: 24rem;
+	overflow: auto;
+}
+
+.metricScroll td:first-child {
+	overflow-wrap: anywhere;
+}
+
+.metricScroll td:last-child {
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.table {
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 575.98px) {
+	.tabs :global(.nav-link) {
+		min-height: 2.625rem;
+	}
+
+	.table td > div {
+		max-width: 100%;
+		white-space: normal;
+	}
+
+	.table td:first-child[data-label]::before {
+		margin-inline-end: 0.375rem;
+	}
+}

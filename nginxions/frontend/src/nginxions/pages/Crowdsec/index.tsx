@@ -3,7 +3,7 @@
 // blocklists, the hub, machines and bouncers, and every setting. Nothing here needs the internet.
 import { useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Alert from "react-bootstrap/Alert";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { HasPermission, LoadingPage } from "src/components";
@@ -30,6 +30,8 @@ import hostStyles from "../Hosts/Hosts.module.css";
 import { BlocklistsTab, RegistryTab } from "./Blocklists";
 import { AlertsTab, DecisionsTab } from "./Decisions";
 import { HubTab } from "./Hub";
+import { MetricsPanel } from "./Metrics";
+import crowdsecStyles from "./Crowdsec.module.css";
 import { SettingsTab } from "./Settings";
 import { AgentTriggersTab } from "./Triggers";
 
@@ -134,45 +136,16 @@ function Status({ on, label }: { on: boolean; label: string }) {
 	);
 }
 
-function Counters({
-	heading,
-	rows,
-	empty,
-}: {
-	heading: string;
-	rows: { key: string; value: number }[];
-	empty: string;
-}) {
-	return (
-		<section className={cn("card", styles.card)}>
-			<h3 className="card-title">
-				<T id={heading} />
-			</h3>
-			{rows.length ? (
-				<ul className={styles.list}>
-					{rows.map((r) => (
-						<li className={cn(styles.item, "justify-content-between")} key={r.key}>
-							<span className={cn(styles.sub, "font-monospace")} title={r.key}>
-								{r.key || "—"}
-							</span>
-							<span>{n(r.value)}</span>
-						</li>
-					))}
-				</ul>
-			) : (
-				<p className={styles.empty}>
-					<T id={empty} />
-				</p>
-			)}
-		</section>
-	);
-}
-
 function OverviewTab({ data, go }: { data: CrowdsecOverview; go: (tab: Tab) => void }) {
 	const m = data.metrics;
 	const s = data.settings;
 	return (
 		<>
+			<Summary data={data} />
+			<div className={crowdsecStyles.metricsGrid}>
+				<MetricsPanel kind="sources" rows={m?.linesRead} />
+				<MetricsPanel kind="overflows" rows={m?.overflows} />
+			</div>
 			<div className="row g-3">
 				<div className="col-lg-6">
 					<section className={cn("card h-100", styles.card)}>
@@ -252,22 +225,6 @@ function OverviewTab({ data, go }: { data: CrowdsecOverview; go: (tab: Tab) => v
 					</section>
 				</div>
 			</div>
-			<div className="row g-3">
-				<div className="col-lg-6">
-					<Counters
-						heading="nginxions.crowdsec.metrics.sources"
-						rows={m?.linesRead ?? []}
-						empty="nginxions.crowdsec.metrics.sources.none"
-					/>
-				</div>
-				<div className="col-lg-6">
-					<Counters
-						heading="nginxions.crowdsec.metrics.overflows"
-						rows={m?.overflows ?? []}
-						empty="nginxions.crowdsec.metrics.overflows.none"
-					/>
-				</div>
-			</div>
 		</>
 	);
 }
@@ -282,6 +239,8 @@ function CrowdsecPage({ place }: { place: Place }) {
 	const askedTab = params.get("tab") === "openappsec" ? "triggers" : params.get("tab");
 	const asked = TABS.find((x) => x === askedTab);
 	const tab = (asked && tabs.includes(asked) ? asked : tabs[0]) as Tab;
+	const tabList = useRef<HTMLUListElement>(null);
+	const activeTab = useRef<HTMLButtonElement>(null);
 	// a tab of the other place (links of before) opens there
 	const go = (x: Tab) => {
 		if (tabs.includes(x)) setParams(x === tabs[0] ? {} : { tab: x }, { replace: true });
@@ -291,6 +250,16 @@ function CrowdsecPage({ place }: { place: Place }) {
 	const [nodeId, setNodeId] = useState(0);
 	const overview = useCrowdsec({ refetchInterval: 30000 });
 	const settings = useCrowdsecSettings();
+	const tabsVisible = !!overview.data && !nodeId && (!asked || tabs.includes(asked));
+	useLayoutEffect(() => {
+		const list = tabList.current;
+		const active = activeTab.current;
+		if (!tab || !tabsVisible || !list || !active || list.scrollWidth <= list.clientWidth) return;
+		const bounds = list.getBoundingClientRect();
+		const target = active.getBoundingClientRect();
+		if (target.left < bounds.left) list.scrollLeft += target.left - bounds.left;
+		else if (target.right > bounds.right) list.scrollLeft += target.right - bounds.right;
+	}, [tab, tabsVisible]);
 	const refresh = () => {
 		for (const key of [
 			"nginxions-crowdsec",
@@ -308,7 +277,7 @@ function CrowdsecPage({ place }: { place: Place }) {
 			<Navigate to={`${place === "agent" ? "/analytics/blocks" : "/crowdsec"}?${params.toString()}`} replace />
 		);
 	}
-	if (overview.isLoading || settings.isLoading) return <LoadingPage noLogo />;
+	if (overview.isLoading) return <LoadingPage noLogo />;
 	if (overview.isError || !overview.data)
 		return <Alert variant="danger">{overview.error?.message || <T id="nginxions.common.unknown-error" />}</Alert>;
 	const data = overview.data;
@@ -379,14 +348,14 @@ function CrowdsecPage({ place }: { place: Place }) {
 						</Alert>
 					)}
 
-					{place === "agent" && <Summary data={data} />}
-
-					<ul className="nav nav-tabs flex-nowrap overflow-auto">
+					<ul ref={tabList} className={cn("nav nav-tabs", crowdsecStyles.tabs)}>
 						{tabs.map((x) => (
 							<li className="nav-item" key={x}>
 								<button
 									type="button"
+									ref={tab === x ? activeTab : undefined}
 									className={cn("nav-link text-nowrap", { active: tab === x })}
+									aria-pressed={tab === x}
 									onClick={() => go(x)}
 								>
 									<T id={`nginxions.crowdsec.tab.${x}`} />
@@ -403,9 +372,16 @@ function CrowdsecPage({ place }: { place: Place }) {
 						<BlocklistsTab shareEnabled={!!settings.data?.shareEnabled} refresh={refresh} />
 					)}
 					{tab === "hub" && <HubTab onlineHub={!!settings.data?.onlineHub} refresh={refresh} />}
-					{tab === "settings" && settings.data && (
-						<SettingsView data={settings.data} refresh={refresh} manage={can("crowdsec", "manage")} />
-					)}
+					{tab === "settings" &&
+						(settings.isLoading ? (
+							<LoadingPage noLogo />
+						) : settings.data ? (
+							<SettingsView data={settings.data} refresh={refresh} manage={can("crowdsec", "manage")} />
+						) : (
+							<Alert variant="danger">
+								{settings.error?.message || <T id="nginxions.common.unknown-error" />}
+							</Alert>
+						))}
 					{tab === "registry" && <RegistryTab />}
 				</>
 			)}

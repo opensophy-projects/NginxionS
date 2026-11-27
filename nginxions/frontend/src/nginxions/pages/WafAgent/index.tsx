@@ -14,6 +14,7 @@ import { showWafPolicyModal } from "../../modals/WafPolicyModal";
 import { AppliedCheckNote } from "../../policy/Review";
 import { useCan } from "../../rbac/hooks";
 import { AgentMetricsCard } from "./AgentMetrics";
+import styles from "./AgentMetrics.module.css";
 import { AgentSettingsCard } from "./AgentSettings";
 import { FileSecurityCard } from "./FileSecurity";
 
@@ -30,7 +31,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function AgentCard({ agent }: { agent?: AgentStatus }) {
 	return (
-		<div className="card mt-4">
+		<div className="card">
 			<div className="card-header">
 				<h3 className="card-title">
 					<T id="nginxions.waf.agent" />
@@ -80,17 +81,17 @@ function PolicyCard({ policy }: { policy?: WafPolicyState }) {
 		}
 	};
 	return (
-		<div className="card mt-4">
-			<div className="card-header">
+		<div className="card">
+			<div className="card-header flex-wrap gap-2">
 				<h3 className="card-title">
 					<T id="nginxions.waf.policy" />
 				</h3>
-				<div className="card-actions btn-actions">
+				<div className="d-flex flex-wrap gap-2">
 					<Button size="sm" onClick={showWafPolicyModal}>
 						<T id="nginxions.waf.policy-show" />
 					</Button>
 					<HasPermission rbac="waf_policy:apply" permission={MANAGE} hideError>
-						<Button size="sm" actionType="primary" className="ms-2" isLoading={applying} onClick={apply}>
+						<Button size="sm" actionType="primary" isLoading={applying} onClick={apply}>
 							<T id="nginxions.waf.policy-apply" />
 						</Button>
 					</HasPermission>
@@ -169,7 +170,7 @@ function WafCard({ status }: { status: WafStatus }) {
 		});
 
 	return (
-		<div className="card mt-4">
+		<div className="card">
 			<div className="card-status-top bg-red" />
 			<div className="card-header">
 				<div className="row w-full align-items-center">
@@ -229,14 +230,14 @@ function WafAgentPage() {
 	// a failed refetch (nginxions restarting to apply the WAF switch) keeps the last known state
 	if (!data) return <Alert variant="danger">{error?.message || <T id="nginxions.common.unknown-error" />}</Alert>;
 	return (
-		<>
-			<WafCard status={data} />
-			<AgentCard agent={data.agent} />
+		<div className={styles.dashboard}>
 			<AgentMetricsCard />
+			<AgentCard agent={data.agent} />
+			<WafCard status={data} />
 			<AgentSettingsCard />
 			<FileSecurityCard />
 			<PolicyCard policy={data.policy} />
-		</>
+		</div>
 	);
 }
 

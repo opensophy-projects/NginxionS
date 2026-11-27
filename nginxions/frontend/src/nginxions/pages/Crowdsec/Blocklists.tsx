@@ -3,6 +3,7 @@
 import { IconDots, IconPlus, IconTrash } from "@tabler/icons-react";
 import cn from "classnames";
 import { useState } from "react";
+import { LoadingPage } from "src/components";
 import { T } from "src/locale";
 import { showError, showSuccess } from "src/notifications";
 import {
@@ -24,6 +25,7 @@ import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
 import { Dropdown } from "../../ui/Dropdown";
 import { dateTime, timeAgo } from "../../ui/time";
+import crowdsecStyles from "./Crowdsec.module.css";
 
 function Share({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
 	const can = useCan();
@@ -284,6 +286,7 @@ export function RegistryTab() {
 	const can = useCan();
 	const manage = can("crowdsec", "manage");
 	const registry = useRegistry({ refetchInterval: 30000 });
+	if (registry.isLoading) return <LoadingPage noLogo />;
 	if (registry.isError) return <p className="text-danger">{(registry.error as Error).message}</p>;
 	const data = registry.data;
 	const reload = () => registry.refetch();
@@ -299,7 +302,7 @@ export function RegistryTab() {
 					<T id="nginxions.crowdsec.machines.hint" />
 				</div>
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className={cn("table table-vcenter card-table nx-stack", crowdsecStyles.table)}>
 						<thead>
 							<tr>
 								<th>
@@ -341,12 +344,18 @@ export function RegistryTab() {
 											</span>
 										)}
 									</td>
-									<td className="font-monospace">{m.ipAddress || "—"}</td>
-									<td className={styles.sub}>{m.version || "—"}</td>
-									<td>{ago(m.lastHeartbeat)}</td>
-									<td>{ago(m.lastPush)}</td>
+									<td className="font-monospace" data-label={t("nginxions.crowdsec.ip")}>
+										{m.ipAddress || "—"}
+									</td>
+									<td className={styles.sub} data-label={t("nginxions.crowdsec.version")}>
+										{m.version || "—"}
+									</td>
+									<td data-label={t("nginxions.crowdsec.machine.heartbeat")}>
+										{ago(m.lastHeartbeat)}
+									</td>
+									<td data-label={t("nginxions.crowdsec.machine.push")}>{ago(m.lastPush)}</td>
 									{manage && (
-										<td>
+										<td className="nx-actions">
 											{deletable("machines", m.name) && (
 												<DeleteRegistered kind="machines" name={m.name} onDone={reload} />
 											)}
@@ -366,7 +375,7 @@ export function RegistryTab() {
 					<T id="nginxions.crowdsec.bouncers.hint" />
 				</div>
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className={cn("table table-vcenter card-table nx-stack", crowdsecStyles.table)}>
 						<thead>
 							<tr>
 								<th>
@@ -400,13 +409,15 @@ export function RegistryTab() {
 											</span>
 										)}
 									</td>
-									<td className="font-monospace">{b.ipAddress || "—"}</td>
-									<td className={styles.sub}>
+									<td className="font-monospace" data-label={t("nginxions.crowdsec.ip")}>
+										{b.ipAddress || "—"}
+									</td>
+									<td className={styles.sub} data-label={t("nginxions.crowdsec.bouncer.type")}>
 										{[b.type, b.version].filter(Boolean).join(" ") || "—"}
 									</td>
-									<td>{ago(b.lastPull)}</td>
+									<td data-label={t("nginxions.crowdsec.bouncer.pull")}>{ago(b.lastPull)}</td>
 									{manage && (
-										<td>
+										<td className="nx-actions">
 											{deletable("bouncers", b.name) && (
 												<DeleteRegistered kind="bouncers" name={b.name} onDone={reload} />
 											)}
