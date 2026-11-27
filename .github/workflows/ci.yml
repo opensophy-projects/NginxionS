@@ -415,12 +415,12 @@ jobs:
             [ -f "$f" ] && node scripts/sarif-accepted.mjs "trivy-$img" "$f" "upload/trivy-$img.sarif"
           done
           true
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/trivy-nginxions.sarif') != ''
         with:
           sarif_file: upload/trivy-nginxions.sarif
           category: trivy-nginxions
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/trivy-nginxions-openappsec.sarif') != ''
         with:
           sarif_file: upload/trivy-nginxions-openappsec.sarif
@@ -433,12 +433,12 @@ jobs:
           mkdir -p upload
           echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Trivy","informationUri":"https://github.com/aquasecurity/trivy","rules":[]}},"results":[]}]}' \
             > upload/retired.sarif
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/retired.sarif') != ''
         with:
           sarif_file: upload/retired.sarif
           category: trivy-npmos
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: always() && hashFiles('upload/retired.sarif') != ''
         with:
           sarif_file: upload/retired.sarif
