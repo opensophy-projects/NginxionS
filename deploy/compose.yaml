@@ -247,6 +247,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       NGINXIONS_CONTROL_RPC_SOCKET: /run/nginxions-control/control.sock
+      NGINXIONS_HOST_UPDATER: ${NGINXIONS_HOST_UPDATER:-false}
       DB_POSTGRES_HOST: postgres
       DB_POSTGRES_NAME: nginxions
       DB_POSTGRES_USER: nginxions

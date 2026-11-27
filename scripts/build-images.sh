@@ -24,10 +24,12 @@ for image in "${images[@]}"; do
   case "$image" in
     nginxions)
       docker build --build-arg "CROWDSEC_VERSION=$CROWDSEC_VERSION" \
+        --build-arg "NGINXIONS_BUILD_VERSION=$TAG" \
         --build-arg "FLAGS=${FLAGS:--march=x86-64-v2 -mtune=generic -fcf-protection=full}" \
         --build-context attachment=openappsec/attachment -t "$REGISTRY/nginxions:$TAG" nginxions ;;
     openappsec)
       docker buildx build --load --build-context openappsec=openappsec \
+        --build-arg "NGINXIONS_BUILD_VERSION=$TAG" \
         --build-context control=nginxions/backend/nginxions/control \
         -t "$REGISTRY/nginxions-openappsec:$TAG" deploy/openappsec ;;
     *) echo "unknown image: $image" >&2; exit 1 ;;

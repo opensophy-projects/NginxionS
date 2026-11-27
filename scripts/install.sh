@@ -9,10 +9,15 @@ scripts_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 
 install_dir=/opt/nginxions
 yes=false
+version=
+with_updater=false
 while (($#)); do
   case "$1" in
-    -h|--help) echo "Usage: $0 [--dir /opt/nginxions] [--yes]"; exit 0 ;;
+    -h|--help) echo "Usage: $0 [--dir /opt/nginxions] [--version V1.0.0] [--with-updater] [--yes]"; exit 0 ;;
     --dir) (($# >= 2)) || fail "--dir requires a path."; install_dir=$2; shift ;;
+    --version) (($# >= 2)) || fail "--version requires a stable release tag."; version=$2; shift
+      stable_release_tag "$version" || fail "Use a stable release tag such as V1.0.0." ;;
+    --with-updater) with_updater=true ;;
     --yes) yes=true ;;
     *) fail "Unknown argument: $1" ;;
   esac
@@ -21,18 +26,40 @@ done
 
 [[ "$(uname -s)" = Linux && "$(uname -m)" = x86_64 ]] || fail "This installer supports Linux x86_64."
 lock_install_dir
+if $with_updater; then
+  [[ $EUID = 0 && "$install_dir" = /opt/nginxions && -d /run/systemd/system ]] \
+    || fail "The host updater requires a root installation at /opt/nginxions on systemd."
+  command -v curl >/dev/null || fail "Install curl before enabling the host updater."
+  if [[ ! -f "$install_dir/.host-updater" ]]; then
+    for unit in nginxions-update.service nginxions-update.timer; do
+      [[ ! -e "/etc/systemd/system/$unit" && ! -L "/etc/systemd/system/$unit" ]] \
+        || fail "The systemd unit $unit already exists."
+    done
+  fi
+fi
+[[ -z "$version" || ! -e "$install_dir" ]] || fail "--version is for a new installation. See the release notes to upgrade an existing deployment."
 if [[ ! -e "$install_dir" ]]; then
   source_deploy=$scripts_dir/../deploy
   stage=$(mktemp -d -- "$(dirname -- "$install_dir")/.nginxions-install.XXXXXXXX")
   trap '[[ ! -d "$stage" ]] || rm -r -- "$stage"' EXIT
   mkdir -- "$stage/deploy"
   cp -R -- "$source_deploy"/{.env,compose.yaml,init,seccomp,clamav} "$stage/deploy/"
+  if [[ -n "$version" ]]; then
+    set_deployment_env "$stage/deploy/.env" NGINXIONS_VERSION "$version"
+    unset NGINXIONS_VERSION
+  fi
   install -m 0700 -- "$scripts_dir/uninstall.sh" "$stage/uninstall.sh"
   install -m 0600 -- "$scripts_dir/install-lib.sh" "$stage/install-lib.sh"
   printf '1\n' > "$stage/.nginxions-install"
   touch "$stage/.images"
   mv -T -- "$stage" "$install_dir"
   trap - EXIT
+fi
+if $with_updater; then
+  grep -q 'NGINXIONS_HOST_UPDATER:' "$install_dir/deploy/compose.yaml" \
+    || fail "Update the deployment files before installing the host updater."
+  set_deployment_env "$install_dir/deploy/.env" NGINXIONS_HOST_UPDATER true
+  unset NGINXIONS_HOST_UPDATER
 fi
 # Docker bind-mounts these files into containers that run under different UIDs
 # and without CAP_DAC_OVERRIDE. The host installation directory stays private.
@@ -110,6 +137,17 @@ if ! "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 420; th
   "${compose[@]}" ps -a || true
   "${compose[@]}" logs --no-color --tail 30 nginxions-init || true
   fail "The stack did not become ready. Inspect the container logs and rerun the installer."
+fi
+if $with_updater; then
+  install -m 0700 -- "$scripts_dir/update.sh" "$install_dir/update.sh"
+  install -m 0700 -- "$scripts_dir/uninstall.sh" "$install_dir/uninstall.sh"
+  install -m 0600 -- "$scripts_dir/install-lib.sh" "$install_dir/install-lib.sh"
+  touch "$install_dir/.host-updater"
+  for unit in nginxions-update.service nginxions-update.timer; do
+    install -m 0644 -- "$scripts_dir/../deploy/update/$unit" "/etc/systemd/system/$unit"
+  done
+  systemctl daemon-reload
+  systemctl enable --now nginxions-update.timer
 fi
 printf 'NginxionS installed in %s\n' "$install_dir"
 printf 'Panel on this server: https://127.0.0.1:81 (default address)\n'

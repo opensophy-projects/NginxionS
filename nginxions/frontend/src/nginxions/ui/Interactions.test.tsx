@@ -11,6 +11,7 @@ import { event } from "../test/fixtures";
 import { answer, mockApi, renderApp } from "../test/harness";
 import { Dropdown } from "./Dropdown";
 import { Popover } from "./Popover";
+import { ReleaseInfo } from "./ReleaseInfo";
 import { SearchField } from "./SearchField";
 import { Shell } from "./Shell";
 
@@ -18,6 +19,41 @@ afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+});
+
+it("shows the running version, checks GitHub on demand and saves the automatic update preference", async () => {
+	changeLocale("en");
+	mockApi();
+	const actions: string[] = [];
+	vi.mocked(fetch).mockImplementation(async (input, init) => {
+		const path = new URL(String(input), "http://localhost").pathname;
+		if (path === "/api/") return Response.json({ status: "OK", version: "V1.0.0" });
+		if (path.endsWith("/system/release/check")) {
+			actions.push("check");
+			return Response.json({ status: "available", tag: "V1.2.0" });
+		}
+		if (path.endsWith("/system/release")) {
+			const autoUpdate = init?.method === "PUT";
+			if (autoUpdate) actions.push(String(init.body));
+			return Response.json({ current: "V1.0.0", canAutoUpdate: true, autoUpdate });
+		}
+		return Response.json(answer(path));
+	});
+	await renderApp(<ReleaseInfo />);
+
+	const version = await screen.findByText("Version V1.0.0");
+	expect(actions).toEqual([]);
+	fireEvent.click(version);
+	fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
+	expect(await screen.findByRole("link", { name: "Release notes" })).toHaveAttribute(
+		"href",
+		"https://github.com/opensophy-projects/NginxionS/releases/tag/V1.2.0",
+	);
+	const automatic = await screen.findByRole("checkbox", { name: "Install compatible updates automatically" });
+	expect(automatic).not.toBeChecked();
+	fireEvent.click(automatic);
+	await waitFor(() => expect(automatic).toBeChecked());
+	expect(actions).toEqual(["check", '{"enabled":true}']);
 });
 
 it("groups open-appsec log counters on the chart and preserves exact paths in the table", async () => {

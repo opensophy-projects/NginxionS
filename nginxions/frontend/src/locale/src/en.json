@@ -7370,6 +7370,42 @@
 	"nginxions.rbac.view-only": {
 		"defaultMessage": "View only"
 	},
+	"nginxions.release.auto-off": {
+		"defaultMessage": "Automatic updates are off."
+	},
+	"nginxions.release.auto-on": {
+		"defaultMessage": "Automatic updates are enabled."
+	},
+	"nginxions.release.automatic": {
+		"defaultMessage": "Install compatible updates automatically"
+	},
+	"nginxions.release.available": {
+		"defaultMessage": "{version} is available."
+	},
+	"nginxions.release.check": {
+		"defaultMessage": "Check for updates"
+	},
+	"nginxions.release.current": {
+		"defaultMessage": "This installation is up to date."
+	},
+	"nginxions.release.host-required": {
+		"defaultMessage": "Automatic updates require a stable version and the updater on the Docker host."
+	},
+	"nginxions.release.notes": {
+		"defaultMessage": "Release notes"
+	},
+	"nginxions.release.settings-error": {
+		"defaultMessage": "Could not load or save update settings."
+	},
+	"nginxions.release.unavailable": {
+		"defaultMessage": "Could not reach GitHub. Try again later."
+	},
+	"nginxions.release.unpublished": {
+		"defaultMessage": "No stable release has been published yet."
+	},
+	"nginxions.release.version": {
+		"defaultMessage": "Version {version}"
+	},
 	"nginxions.services": {
 		"defaultMessage": "Services"
 	},
