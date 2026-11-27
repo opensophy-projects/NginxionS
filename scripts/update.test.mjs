@@ -1,29 +1,47 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const scripts = resolve("scripts");
+const updater = fileURLToPath(new URL("./update.sh", import.meta.url));
+const sourceDeploy = fileURLToPath(new URL("../deploy/", import.meta.url));
 const registry = "docker.io/opensophy";
 const digest = (digit) => "sha256:" + digit.repeat(64);
+const sha256 = (data) => createHash("sha256").update(data).digest("hex");
+
+// Build the expected release fingerprint from the fixture files without running the updater's shell code.
+function fixtureFingerprint(deploy) {
+	const files = [
+		"compose.yaml",
+		"init/nginxions-init.sh",
+		"init/postgres-init.sh",
+		"seccomp/nginxions.json",
+		"clamav/nginxions-clamav.sh",
+	];
+	const checksums = files.map((file) => `${sha256(readFileSync(join(deploy, file)))}  ${file}`);
+	const versions = readFileSync(join(deploy, ".env"), "utf8")
+		.split("\n")
+		.filter((line) => /^(CROWDSEC_VERSION|POSTGRES_VERSION|CLAMAV_VERSION)=/.test(line))
+		.sort();
+	return sha256(`${[...checksums, ...versions].join("\n")}\n`);
+}
 
 function fixture(t, { consent = "true", release = "V1.10.0", compatible = true, healthy = true, trusted = true } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "nginxions-updater-"));
 	t.after(() => rmSync(dir, { recursive: true }));
 	const install = join(dir, "installed");
+	const deploy = join(install, "deploy");
 	mkdirSync(install, { mode: 0o700 });
-	cpSync("deploy", join(install, "deploy"), { recursive: true });
-	writeFileSync(join(install, "deploy/.env"), readFileSync("deploy/.env", "utf8").replace("=develop", "=V1.9.0"));
+	cpSync(sourceDeploy, deploy, { recursive: true });
+	const dotenv = join(deploy, ".env");
+	writeFileSync(dotenv, readFileSync(dotenv, "utf8").replace(/^NGINXIONS_VERSION=develop$/m, "NGINXIONS_VERSION=V1.9.0"));
 	for (const [name, content] of Object.entries({ ".nginxions-install": "1\n", ".docker-id": "test\n", ".images": "" })) {
 		writeFileSync(join(install, name), content);
 	}
-	const stamp = execFileSync(
-		"bash",
-		["-c", 'source "$1"; deployment_fingerprint "$2"', "--", join(scripts, "install-lib.sh"), join(install, "deploy")],
-		{ encoding: "utf8" },
-	).trim();
 	const manifest = join(dir, "manifest");
 	writeFileSync(
 		manifest,
@@ -32,7 +50,7 @@ function fixture(t, { consent = "true", release = "V1.10.0", compatible = true, 
 			"registry=" + (trusted ? registry : "docker.io/other"),
 			"nginxions=" + digest("1"),
 			"nginxions_openappsec=" + digest("2"),
-			"deployment=" + (compatible ? stamp : "3".repeat(64)),
+			"deployment=" + (compatible ? fixtureFingerprint(deploy) : "3".repeat(64)),
 		].join("\n") + "\n",
 	);
 
@@ -72,7 +90,7 @@ esac
 
 	const commands = join(dir, "commands");
 	const run = () =>
-		spawnSync(join(scripts, "update.sh"), ["--dir", install], {
+		spawnSync(updater, ["--dir", install], {
 			encoding: "utf8",
 			env: {
 				...process.env,
