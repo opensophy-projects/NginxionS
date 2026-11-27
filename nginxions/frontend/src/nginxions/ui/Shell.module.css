@@ -154,7 +154,11 @@
 }
 
 .controls .field {
+	border: 1px solid var(--border);
+	background: color-mix(in oklab, var(--background-muted) 85%, var(--background-inset));
+	box-shadow: none;
 	color: var(--foreground-muted);
+	cursor: pointer;
 }
 
 .field {
