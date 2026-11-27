@@ -6,6 +6,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -61,6 +62,8 @@ else if (cmd === "pull") {
 else if (cmd === "compose") {
   if (sub === "version") emit(e.TEST_COMPOSE || "v2.40.3");
   else if (args.includes("config")) console.log(${JSON.stringify([agent, project, postgres, project].join("\n"))});
+  else if (args.includes("up") && e.TEST_FAIL_START) process.exit(1);
+  else if (args.includes("logs")) emit("fixture init logs");
   else if (!args.some((x) => ["up", "down", "ps"].includes(x))) process.exit(2);
 }
 else process.exit(2);
@@ -141,13 +144,20 @@ test("installer preserves settings and downloads each missing image once", (t) =
 	ok(f.install());
 	const envFile = join(f.target, "deploy", ".env");
 	assert.match(readFileSync(envFile, "utf8"), /NGINXIONS_VERSION=develop/);
+	assert.equal(statSync(f.target).mode & 0o777, 0o700);
+	assert.equal(statSync(envFile).mode & 0o777, 0o600);
 	for (const file of [
 		"init/nginxions-init.sh",
-		"seccomp/nginxions.json",
+		"init/postgres-init.sh",
 		"clamav/nginxions-clamav.sh",
 	]) {
-		assert.ok(existsSync(join(f.target, "deploy", file)), file);
+		assert.equal(
+			statSync(join(f.target, "deploy", file)).mode & 0o777,
+			0o755,
+			file,
+		);
 	}
+	assert.ok(existsSync(join(f.target, "deploy", "seccomp", "nginxions.json")));
 	assert.ok(existsSync(join(f.target, "uninstall.sh")));
 	writeFileSync(envFile, "# keep existing settings\n");
 	ok(f.install());
@@ -170,6 +180,15 @@ test("installer preserves settings and downloads each missing image once", (t) =
 			),
 	);
 	assert.equal(f.apt(), "");
+});
+
+test("a failed start reports the init log and preserves the installation for retry", (t) => {
+	const f = fixture(t);
+	const result = f.install({ TEST_FAIL_START: "1" });
+	assert.equal(result.status, 1);
+	assert.match(result.stdout, /fixture init logs/);
+	assert.match(result.stderr, /did not become ready/);
+	ok(f.install());
 });
 
 test("uninstaller confirms deletion and keeps pre-existing and shared images", (t) => {
