@@ -411,7 +411,7 @@ jobs:
         run: |
           mkdir -p upload
           for img in nginxions nginxions-openappsec; do
-            f="reports/images/trivy-$img.sarif"
+            f="reports/images/code-scanning/trivy-$img.sarif"
             [ -f "$f" ] && node scripts/sarif-accepted.mjs "trivy-$img" "$f" "upload/trivy-$img.sarif"
           done
           true
