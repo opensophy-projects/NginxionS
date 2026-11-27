@@ -318,16 +318,20 @@ done
 expect "$($CURL "$ADMIN/api/nginx/proxy-hosts" | json | grep -o '"mtls.local"' | wc -l | tr -d ' ')" 1 "rows of mtls.local"
 
 step "Nodes: the agent of the node learns through the manager (its relay, the shared storage of the manager)"
-# the join restarted the agent with the storage and smartsync of the manager (docs/adr/0012-nodes.md 5c); it reads the
-# labels of each WAF site every minute: through the relay of NginxionS, the pinned TLS of the node, the storage there
+# The join restarts the agent. Send traffic to test.local to initialize its WAF state in the new process,
+# which then reads the site's labels from the manager through the relay (docs/adr/0012-nodes.md 5c).
 learning=""
 for _ in $(seq 1 60); do
-  member=$($CURL "$ADMIN/api/nginxions/cluster/member" | json)
+  site_status=$(status / || true)
+  member=$($CURL "$ADMIN/api/nginxions/cluster/member" 2>/dev/null | json)
   # the time of the last answer of the storage to the relay (not the heartbeat: "learning":{..., "last_ok_on":"..."})
-  echo "$member" | grep -q '"learning":{[^}]*"last_ok_on":"' && { learning=1; break; }
+  if [ "$site_status" = 200 ] && echo "$member" | grep -q '"learning":{[^}]*"last_ok_on":"'; then
+    learning=1
+    break
+  fi
   sleep 3
 done
-[ -n "$learning" ] || fail "the agent of the node did not reach the storage of the manager: $member"
+[ -n "$learning" ] || fail "the agent of the node did not reach the storage of the manager (test.local: $site_status): $member"
 step "Nodes: the node is disabled on the manager, learns it with its heartbeat and leaves"
 $CURL -X POST "$ADMIN/api/nginxions/nodes/$node_id/revoke" | json | grep -q '"state":"revoked"' || fail "the node was not disabled"
 # its next heartbeat (every 30 s) learns it was disabled
