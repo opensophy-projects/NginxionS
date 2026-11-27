@@ -3359,6 +3359,9 @@
 	"nginxions.learning.history.text": {
 		"defaultMessage": "Кто, что и когда разметил: локальный размеченный датасет. Отмена убирает разметку и её эффекты, группа возвращается в очередь."
 	},
+	"nginxions.learning.history.total": {
+		"defaultMessage": "{total, plural, one {# разметка} few {# разметки} many {# разметок} other {# разметки}}"
+	},
 	"nginxions.learning.host": {
 		"defaultMessage": "Хост"
 	},

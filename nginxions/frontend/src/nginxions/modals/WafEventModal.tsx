@@ -14,6 +14,8 @@ import { ActionBadge, EventTime, SeverityBadge } from "../pages/WafEvents/badges
 import { getPolicyObjects } from "../policy/api";
 import { showObjectModal } from "../policy/ObjectModal";
 import { useCan } from "../rbac/hooks";
+import { CountryFlag } from "../ui/charts/CountryFlag";
+import { eventCountry } from "../ui/charts/format";
 import { useBan } from "./BanActions";
 
 type FilterField = "ip" | "host";
@@ -123,12 +125,30 @@ const WafEventModal = EasyModal.create(({ visible, remove, event: summary, onFil
 							filter(
 								"ip",
 								event.sourceIp,
-								`${event.sourceIp}${event.sourcePort ? `:${event.sourcePort}` : ""}`,
+								<>
+									<CountryFlag code={event.sourceCountryCode} fallback={event.sourceCountry} />
+									{event.sourcePort
+										? `${event.sourceIp.includes(":") ? `[${event.sourceIp}]` : event.sourceIp}:${event.sourcePort}`
+										: event.sourceIp}
+								</>,
 							)
 						}
 					/>
-					<Field label="nginxions.events.country" value={event.sourceCountry} />
-					<Field label="nginxions.waf.events.proxy-ip" value={event.proxyIp} />
+					<Field
+						label="nginxions.events.country"
+						value={eventCountry(event.sourceCountryCode || event.sourceCountry)}
+					/>
+					<Field
+						label="nginxions.waf.events.proxy-ip"
+						value={
+							event.proxyIp && (
+								<>
+									<CountryFlag code={event.proxyCountryCode} />
+									{event.proxyIp}
+								</>
+							)
+						}
+					/>
 					<Field
 						label="nginxions.waf.events.host"
 						value={event.host ? filter("host", event.host, event.host) : event.asset}

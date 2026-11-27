@@ -3359,6 +3359,9 @@
 	"nginxions.learning.history.text": {
 		"defaultMessage": "Who labelled what and when: the local dataset. Undo takes back the label and its effects; the group comes back to the queue."
 	},
+	"nginxions.learning.history.total": {
+		"defaultMessage": "{total, plural, one {# label} other {# labels}}"
+	},
 	"nginxions.learning.host": {
 		"defaultMessage": "Host"
 	},

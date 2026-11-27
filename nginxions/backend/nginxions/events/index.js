@@ -5,6 +5,7 @@ import db from "../../db.js";
 import internalAuditLog from "../../internal/audit-log.js";
 import { isPostgres } from "../../lib/config.js";
 import errs from "../../lib/error.js";
+import { countryCodes } from "../geoip/index.js";
 import { getSetting, setSetting } from "../settings.js";
 import { requestFilters, requestOnly } from "./feed-filters.js";
 import { status as ingestStatus, runMaintenance } from "./ingest.js";
@@ -223,6 +224,26 @@ const toApi = (row) => ({
 	repeats: Number(row.repeats ?? 1),
 });
 
+const withCountryCodes = async (events) => {
+	const addresses = new Set();
+	for (const event of events) {
+		if (event.kind === "request") continue;
+		if (event.source_ip) addresses.add(event.source_ip);
+		if (event.proxy_ip) addresses.add(event.proxy_ip);
+	}
+	if (!addresses.size) return events;
+	const countries = await countryCodes(addresses);
+	return events.map((event) =>
+		event.kind === "request"
+			? event
+			: {
+					...event,
+					source_country_code: countries.get(event.source_ip) ?? "",
+					proxy_country_code: countries.get(event.proxy_ip) ?? "",
+				},
+	);
+};
+
 const internalEvents = {
 	/**
 	 * A page of events, newest first.
@@ -280,7 +301,7 @@ const internalEvents = {
 		const page = merged.slice(0, limit);
 		const ingest = ingestStatus();
 		return {
-			events: page.map(({ rawId, ...row }) => row),
+			events: await withCountryCodes(page.map(({ rawId, ...row }) => row)),
 			next: merged.length > limit ? cursorOf(page[page.length - 1]) : null,
 			total: Math.min(total, cap),
 			totalCapped: total > cap,
@@ -304,7 +325,8 @@ const internalEvents = {
 		if (!/^\d{1,18}$/.test(String(id)) || !t) throw new errs.ValidationError("Invalid event");
 		const row = await db()(EVENT_TABLE).where({ id, time: t }).first();
 		if (!row) throw new errs.ItemNotFoundError(id);
-		return { ...toApi(row), raw: typeof row.raw === "string" ? JSON.parse(row.raw) : row.raw };
+		const [event] = await withCountryCodes([toApi(row)]);
+		return { ...event, raw: typeof row.raw === "string" ? JSON.parse(row.raw) : row.raw };
 	},
 
 	/**

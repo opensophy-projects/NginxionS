@@ -1,7 +1,7 @@
 // Agents → open-appsec → Learning: readiness of the hosts, the queue of what the agent is not sure about (and the
 // suggestions of the tuning service), the history of labels with undo.
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlayerSkipForward, IconShieldX } from "@tabler/icons-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
 import { useEffect, useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -15,6 +15,7 @@ import hostStyles from "../pages/Hosts/Hosts.module.css";
 import eventStyles from "../pages/WafEvents/Events.module.css";
 import { SimulationNote } from "../policy/Review";
 import { useCan, useRbacMe } from "../rbac/hooks";
+import { Pager } from "../ui/Lists";
 import { SearchField } from "../ui/SearchField";
 import { dateTime, timeAgo } from "../ui/time";
 import {
@@ -665,9 +666,10 @@ function Queue({ label }: { label: boolean }) {
 function History({ label }: { label: boolean }) {
 	const refresh = useRefresh();
 	const [page, setPage] = useState(0);
-	const { data, isLoading, isError, error } = useQuery({
+	const { data, isLoading, isError, isPlaceholderData, error } = useQuery({
 		queryKey: ["nginxions-learning-labels", page],
 		queryFn: () => getLabels({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+		placeholderData: keepPreviousData,
 	});
 	const pages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
 
@@ -729,7 +731,7 @@ function History({ label }: { label: boolean }) {
 										{label && <th />}
 									</tr>
 								</thead>
-								<tbody>
+								<tbody aria-busy={isPlaceholderData}>
 									{data.items.length === 0 ? (
 										<tr>
 											<td colSpan={label ? 5 : 4} className={hostStyles.empty}>
@@ -840,6 +842,7 @@ function History({ label }: { label: boolean }) {
 															<button
 																type="button"
 																className="btn btn-sm"
+																disabled={isPlaceholderData}
 																onClick={() => undo(l.id)}
 															>
 																<T id="nginxions.learning.undo" />
@@ -853,34 +856,19 @@ function History({ label }: { label: boolean }) {
 								</tbody>
 							</table>
 						</div>
-						{pages > 1 && (
-							<div className={eventStyles.pager}>
-								<span>
-									<T id="nginxions.audit.total" data={{ total: data.total }} />
+						<Pager
+							total={<T id="nginxions.learning.history.total" data={{ total: data.total }} />}
+							extra={
+								<span className="text-nowrap" aria-live="polite">
+									<T
+										id="nginxions.audit.page"
+										data={{ page: Math.floor(data.offset / PAGE_SIZE) + 1, pages }}
+									/>
 								</span>
-								<div className={eventStyles.pagerButtons}>
-									<span>
-										<T id="nginxions.audit.page" data={{ page: page + 1, pages }} />
-									</span>
-									<button
-										type="button"
-										className={hostStyles.tool}
-										disabled={page === 0}
-										onClick={() => setPage(page - 1)}
-									>
-										<IconChevronLeft size={16} />
-									</button>
-									<button
-										type="button"
-										className={hostStyles.tool}
-										disabled={page + 1 >= pages}
-										onClick={() => setPage(page + 1)}
-									>
-										<IconChevronRight size={16} />
-									</button>
-								</div>
-							</div>
-						)}
+							}
+							newer={isPlaceholderData || page === 0 ? null : () => setPage(page - 1)}
+							older={isPlaceholderData || page + 1 >= pages ? null : () => setPage(page + 1)}
+						/>
 					</>
 				)}
 			</div>

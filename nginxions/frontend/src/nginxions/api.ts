@@ -162,6 +162,8 @@ export interface SecurityEvent {
 	sourcePort: number | null;
 	proxyIp: string;
 	sourceCountry: string;
+	sourceCountryCode?: string;
+	proxyCountryCode?: string;
 	host: string;
 	asset: string;
 	method: string;
