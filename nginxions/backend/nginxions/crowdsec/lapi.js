@@ -175,11 +175,13 @@ export const parseMetrics = (text) => {
 		if (!line || line.startsWith("#")) continue;
 		const m = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{(.*)\})?\s+(\S+)/.exec(line);
 		if (!m) continue;
+		const value = Number(m[4]);
+		if (!Number.isFinite(value)) continue;
 		const labels = {};
 		for (const l of (m[3] || "").matchAll(/([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"/g)) {
 			labels[l[1]] = l[2].replace(/\\(.)/g, "$1");
 		}
-		rows.push({ name: m[1], labels, value: Number(m[4]) });
+		rows.push({ name: m[1], labels, value });
 	}
 	return rows;
 };

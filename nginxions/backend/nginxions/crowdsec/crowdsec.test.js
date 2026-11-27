@@ -292,8 +292,9 @@ test("blocklists, exports, metrics and logs", () => {
 	assert.deepEqual(text.split("\n").slice(1, -1), ["1.1.1.1", "4.4.0.0/16"]);
 
 	const metrics = parseMetrics(
-		'# HELP x\ncs_info{version="v1.8.1"} 1\ncs_filesource_hits_total{source="/var/log/a.log",type="file"} 12\n',
+		'# HELP x\ncs_info{version="v1.8.1"} 1\ncs_filesource_hits_total{source="/var/log/a.log",type="file"} 12\ncs_bucket_overflowed_total{name="x"} NaN\n',
 	);
+	assert.equal(metrics.length, 2);
 	assert.deepEqual(metrics[1], {
 		name: "cs_filesource_hits_total",
 		labels: { source: "/var/log/a.log", type: "file" },

@@ -2054,11 +2054,23 @@
 	"nginxions.crowdsec.metrics.decisions-of": {
 		"defaultMessage": "Decisions: {origin}"
 	},
+	"nginxions.crowdsec.metrics.file": {
+		"defaultMessage": "Log file"
+	},
 	"nginxions.crowdsec.metrics.none": {
 		"defaultMessage": "No metrics: CrowdSec does not answer."
 	},
+	"nginxions.crowdsec.metrics.other": {
+		"defaultMessage": "Others ({count})"
+	},
 	"nginxions.crowdsec.metrics.overflows": {
 		"defaultMessage": "Scenarios that triggered"
+	},
+	"nginxions.crowdsec.metrics.overflows.count": {
+		"defaultMessage": "Triggers"
+	},
+	"nginxions.crowdsec.metrics.overflows.hint": {
+		"defaultMessage": "How many times each scenario has triggered since CrowdSec started."
 	},
 	"nginxions.crowdsec.metrics.overflows.none": {
 		"defaultMessage": "No scenario has triggered since CrowdSec started."
@@ -2066,11 +2078,32 @@
 	"nginxions.crowdsec.metrics.parsed": {
 		"defaultMessage": "Log lines parsed"
 	},
+	"nginxions.crowdsec.metrics.source-access": {
+		"defaultMessage": "nginx requests"
+	},
+	"nginxions.crowdsec.metrics.source-error": {
+		"defaultMessage": "nginx errors"
+	},
+	"nginxions.crowdsec.metrics.source-openappsec": {
+		"defaultMessage": "open-appsec log"
+	},
 	"nginxions.crowdsec.metrics.sources": {
 		"defaultMessage": "Lines read by source"
 	},
+	"nginxions.crowdsec.metrics.sources.count": {
+		"defaultMessage": "Lines"
+	},
+	"nginxions.crowdsec.metrics.sources.hint": {
+		"defaultMessage": "Lines read since CrowdSec started. The chart groups open-appsec log files."
+	},
 	"nginxions.crowdsec.metrics.sources.none": {
 		"defaultMessage": "Nothing read yet."
+	},
+	"nginxions.crowdsec.metrics.view.chart": {
+		"defaultMessage": "Chart"
+	},
+	"nginxions.crowdsec.metrics.view.table": {
+		"defaultMessage": "Table"
 	},
 	"nginxions.crowdsec.move-down": {
 		"defaultMessage": "Move down"
