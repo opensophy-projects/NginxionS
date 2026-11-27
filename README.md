@@ -4,7 +4,7 @@
 
 # NginxionS
 
-**Next-Generation Open Source Proxy & Application Security Platform**
+**Reverse Proxy & Application Security Platform**
 
 Обратный прокси на nginx со встроенной защитой: WAF на машинном обучении, CrowdSec, свой центр сертификации
 и mTLS, аналитика трафика и роли. Всё настраивается в одном интерфейсе и работает без облака.
@@ -96,12 +96,12 @@ cosign verify docker.io/opensophy/nginxions:develop \
 
 ## Как устроено
 
-Пять контейнеров: `nginxions` (nginx, панель и API), `openappsec` (WAF-агент, его сервисы обучения и
-управление стеком), `crowdsec`, `clamav` (проверка загружаемых файлов политикой WAF) и `postgres`; при каждом
-запуске один раз отрабатывает `nginxions-init` (дополняет недостающие секреты, существующие не трогает).
+Шесть сервисов: `nginxions` (nginx, панель и API), `openappsec` (WAF-агент и обучение), `control` (управление
+стеком), `crowdsec`, `clamav` (проверка загружаемых файлов политикой WAF) и `postgres`.
+При запуске `nginxions-init` подготавливает тома и создаёт недостающие секреты.
 Образы — `opensophy/nginxions` и `opensophy/nginxions-openappsec` на Docker Hub, версии закреплены в
-`deploy/.env`. Архитектура — в [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md#3-архитектура-nginxions),
-разработка — в [CONTRIBUTING.md](CONTRIBUTING.md).
+`deploy/.env`. См. [архитектуру](CODE_OF_CONDUCT.md#3-архитектура-nginxions),
+[структуру репозитория](CODE_OF_CONDUCT.md#4-дерево-файлов) и [правила разработки](CONTRIBUTING.md).
 
 Стек, установленный под старым названием NPMOS, переносится скриптом `scripts/upgrade-from-npmos.sh`
 ([как](docs/MIGRATION.md#обновление-стека-установленного-под-названием-npmos)).
@@ -116,3 +116,5 @@ cosign verify docker.io/opensophy/nginxions:develop \
 NginxionS построен на [NPMplus](https://github.com/ZoeyVid/NPMplus) и
 [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager), использует
 [open-appsec](https://github.com/openappsec/openappsec) и [CrowdSec](https://www.crowdsec.net).
+
+Условия NginxionS описаны в [LICENSE](LICENSE).
