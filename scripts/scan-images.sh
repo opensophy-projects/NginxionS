@@ -28,6 +28,14 @@ for img in nginxions nginxions-openappsec; do
     --format json --output "/out/trivy-$img.json" "$ref"
   docker run --rm "${cache[@]}" -v "$out:/out" "$TRIVY_IMAGE" convert --format sarif \
     --output "/out/trivy-$img.sarif" "/out/trivy-$img.json"
+  # GitHub gets a separate SARIF. Only the JSON scan has the package provenance needed
+  # to prove the pinned setuptools SBOM entries are not installed vulnerable packages.
+  mkdir -p "$out/code-scanning"
+  node scripts/security-report.mjs --trivy-upload "trivy-$img" --in "$out/trivy-$img.json" \
+    --out "$out/code-scanning/trivy-$img.json"
+  docker run --rm "${cache[@]}" -v "$out:/out" "$TRIVY_IMAGE" convert --format sarif \
+    --output "/out/code-scanning/trivy-$img.sarif" "/out/code-scanning/trivy-$img.json"
+  rm -- "$out/code-scanning/trivy-$img.json"
 
   echo "==> $img: SBOM (Syft)"
   docker run --rm "${sock[@]}" -v "$out:/out" "$SYFT_IMAGE" scan "docker:$ref" -q --source-name "$img" \

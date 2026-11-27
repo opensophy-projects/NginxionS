@@ -192,7 +192,13 @@ services:
       NGINXIONS_CONTROL_TOKEN_FILE: /run/secrets/control/control_token
       NGINXIONS_CONTROL_RPC_SOCKET: /run/nginxions-control/control.sock
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Read-only protects the socket file, while Docker API commands still reach the daemon.
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
       - control-rpc:/run/nginxions-control
       # what the agent learned (read, and a snapshot staged back for its next start; control/learning.js)
       - appsec-conf:/etc/cp/conf
