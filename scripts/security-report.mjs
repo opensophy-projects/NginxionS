@@ -10,6 +10,7 @@
 //   node scripts/security-report.mjs --in reports --out security-report [--summary "$GITHUB_STEP_SUMMARY"]
 //     [--expect source,images,dast]   groups of checks that must have run (default: source)
 //     [--scope images,dast]           only these groups (the gate of the images before they are pushed)
+//   node scripts/security-report.mjs --trivy-upload <check> --in scan.json --out upload.json
 //
 // Policy (what blocks):
 //   SAST (Semgrep, CodeQL)       high and critical in the code of NginxionS (OURS), the agent of NginxionS in
@@ -51,7 +52,7 @@ const walk = (dir) =>
 				return statSync(p).isDirectory() ? walk(p) : [p];
 			})
 		: [];
-const files = walk(inDir);
+const files = args["trivy-upload"] ? [] : walk(inDir);
 const readJson = (file) => {
 	const text = readFileSync(file, "utf8").trim();
 	return text ? JSON.parse(text) : null;
@@ -157,37 +158,41 @@ const osv = (doc) => {
 	return out;
 };
 
+const trivyVulnerabilities = (result, image) => {
+	const packages = new Map((result.Packages ?? []).filter((p) => p.Identifier?.UID).map((p) => [p.Identifier.UID, p]));
+	const installedPython = new Map();
+	for (const p of packages.values()) {
+		if (p.AnalyzedBy === "python-pkg" && p.FilePath && p.Layer?.Digest) {
+			installedPython.set(`${p.Layer.Digest}/${p.Name}`, p.Identifier.PURL);
+		}
+	}
+	return (result.Vulnerabilities ?? []).map((v) => {
+		const pkg = packages.get(v.PkgIdentifier?.UID);
+		const layer = v.Layer?.Digest;
+		return {
+			rule: v.VulnerabilityID,
+			title: `${v.PkgName} ${v.InstalledVersion}: ${firstLine(v.Title) || v.VulnerabilityID}`,
+			severity: fromWord(v.Severity),
+			location: `${image} · ${result.Target}`,
+			trivyPackage: {
+				purl: v.PkgIdentifier?.PURL,
+				layer,
+				path: v.PkgPath || pkg?.FilePath || "",
+				analyzedBy: pkg?.AnalyzedBy,
+				pip: installedPython.get(`${layer}/pip`),
+				setuptools: installedPython.get(`${layer}/setuptools`),
+			},
+			fix: v.FixedVersion ?? "",
+			url: v.PrimaryURL ?? "",
+			kind: "vuln",
+		};
+	});
+};
+
 const trivy = (doc, { image } = {}) => {
 	const out = [];
 	for (const result of doc?.Results ?? []) {
-		const packages = new Map((result.Packages ?? []).filter((p) => p.Identifier?.UID).map((p) => [p.Identifier.UID, p]));
-		const installedPython = new Map();
-		for (const p of packages.values()) {
-			if (p.AnalyzedBy === "python-pkg" && p.FilePath && p.Layer?.Digest) {
-				installedPython.set(`${p.Layer.Digest}/${p.Name}`, p.Identifier.PURL);
-			}
-		}
-		for (const v of result.Vulnerabilities ?? []) {
-			const pkg = packages.get(v.PkgIdentifier?.UID);
-			const layer = v.Layer?.Digest;
-			out.push({
-				rule: v.VulnerabilityID,
-				title: `${v.PkgName} ${v.InstalledVersion}: ${firstLine(v.Title) || v.VulnerabilityID}`,
-				severity: fromWord(v.Severity),
-				location: `${image} · ${result.Target}`,
-				trivyPackage: {
-					purl: v.PkgIdentifier?.PURL,
-					layer,
-					path: v.PkgPath || pkg?.FilePath || "",
-					analyzedBy: pkg?.AnalyzedBy,
-					pip: installedPython.get(`${layer}/pip`),
-					setuptools: installedPython.get(`${layer}/setuptools`),
-				},
-				fix: v.FixedVersion ?? "",
-				url: v.PrimaryURL ?? "",
-				kind: "vuln",
-			});
-		}
+		out.push(...trivyVulnerabilities(result, image));
 		for (const s of result.Secrets ?? [])
 			out.push({
 				rule: s.RuleID,
@@ -633,6 +638,25 @@ const acceptance = (check, f) =>
 			(!r.runtimeContainer || (f.runtimeContainer === r.runtimeContainer && !severe(f.severity))) &&
 			(!r.where || f.location.includes(r.where) || f.title.includes(r.where)),
 	);
+
+if (args["trivy-upload"]) {
+	const check = CHECKS.find(({ id }) => id === args["trivy-upload"] && /^trivy-nginxions(?:-openappsec)?$/.test(id));
+	if (!check || !args.in || !outDir) throw new Error("--trivy-upload requires a Trivy image check, --in and --out");
+	const doc = readJson(inDir);
+	if (doc?.SchemaVersion !== 2 || (doc.Results !== undefined && !Array.isArray(doc.Results))) {
+		throw new Error(`${inDir}: invalid Trivy scan`);
+	}
+	for (const result of doc.Results ?? []) {
+		if (!result.Vulnerabilities) continue;
+		const findings = trivyVulnerabilities(result, check.id.slice("trivy-".length));
+		result.Vulnerabilities = result.Vulnerabilities.filter((_, index) => {
+			const risk = acceptance(check, findings[index]);
+			return !(risk?.kind === "false-positive" && risk.trivyPackage && (!risk.until || risk.until >= today));
+		});
+	}
+	writeFileSync(outDir, JSON.stringify(doc));
+	process.exit(0);
+}
 
 // ---------------------------------------------------------------- run the checks
 

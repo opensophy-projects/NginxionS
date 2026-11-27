@@ -8,12 +8,16 @@ scripts_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 . "$scripts_dir/install-lib.sh"
 
 install_dir=/opt/nginxions
-case "${1:-}" in
-  -h|--help) echo "Usage: $0 [--dir /opt/nginxions]"; exit 0 ;;
-  --dir) [[ $# = 2 ]] || fail "--dir requires a path."; install_dir=$2 ;;
-  '') [[ $# = 0 ]] || fail "Unexpected argument." ;;
-  *) fail "Unknown argument: $1" ;;
-esac
+yes=false
+while (($#)); do
+  case "$1" in
+    -h|--help) echo "Usage: $0 [--dir /opt/nginxions] [--yes]"; exit 0 ;;
+    --dir) (($# >= 2)) || fail "--dir requires a path."; install_dir=$2; shift ;;
+    --yes) yes=true ;;
+    *) fail "Unknown argument: $1" ;;
+  esac
+  shift
+done
 
 [[ "$(uname -s)" = Linux && "$(uname -m)" = x86_64 ]] || fail "This installer supports Linux x86_64."
 lock_install_dir
@@ -36,11 +40,18 @@ chmod 0755 -- "$install_dir"/deploy/{init/nginxions-init.sh,init/postgres-init.s
 
 install_engine() {
   (( EUID == 0 )) || fail "Run as root to install Docker packages."
+  allow_package_install "Docker Engine and Compose are required. Install missing Docker packages now?"
   if [[ $(dpkg-query -W -f='${db:Status-Status}' containerd.io 2>/dev/null || true) != installed ]]; then
     touch "$install_dir/.installed-containerd"
   fi
   install_docker_packages "${apt_docker_packages[@]}"
   systemctl enable --now docker.service
+}
+
+allow_package_install() {
+  if ! "$yes" && ! confirm "$1"; then
+    fail "Install Docker first or rerun the installer with --yes to authorize package installation."
+  fi
 }
 
 if ! command -v docker >/dev/null; then
@@ -62,6 +73,7 @@ fi
 docker_version_at_least "$engine" 28 0 || fail "Docker Engine 28 or newer is required. Update the existing engine first."
 if ! plugin=$(docker compose version --short 2>/dev/null); then
   (( EUID == 0 )) || fail "Run as root to install Docker Compose."
+  allow_package_install "Docker Compose is missing. Install the Compose plugin now?"
   install_docker_packages docker-compose-plugin
   plugin=$(docker compose version --short)
 fi

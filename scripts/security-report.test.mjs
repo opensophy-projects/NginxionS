@@ -208,3 +208,40 @@ test("a newly built image needs evidence from the pinned distributions in the sa
 	assert.equal(report.status, 1, report.stdout);
 	assert.deepEqual(report.findings.map(({ verdict }) => verdict), ["blocking", "false-positive"]);
 });
+
+test("Trivy upload removes only proven false positives and preserves the full input report", (t) => {
+	const unknownLayer = { ...vendored, layer: { Digest: `sha256:${"3".repeat(64)}` } };
+	const scan = pinnedPython(trivy(vendored, installed, unknownLayer));
+	const result = scan.Results[0];
+	for (const id of ["CVE-2026-59890", "GHSA-xmj3-9gf7-h52w", "CVE-2026-999999"]) {
+		result.Vulnerabilities.push({ ...result.Vulnerabilities[0], VulnerabilityID: id });
+	}
+	result.Secrets = [{ RuleID: "example-rule" }];
+	const dir = mkdtempSync(join(tmpdir(), "nginxions-trivy-upload-"));
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+	const input = join(dir, "trivy.json");
+	const output = join(dir, "for-upload.json");
+	const raw = JSON.stringify(scan);
+	writeFileSync(input, raw);
+	const prepare = (date) => {
+		const run = spawnSync(process.execPath, [
+			"--input-type=module",
+			"--eval",
+			`import { mock } from "node:test";
+			 mock.timers.enable({ apis: ["Date"], now: Date.parse(${JSON.stringify(date)}) });
+			 await import(${JSON.stringify(new URL("./security-report.mjs", import.meta.url).href)});`,
+			"--", script, "--trivy-upload", "trivy-nginxions", "--in", input, "--out", output,
+		], { encoding: "utf8" });
+		assert.equal(run.status, 0, run.stderr);
+		return JSON.parse(readFileSync(output, "utf8")).Results[0];
+	};
+	const filtered = prepare("2026-11-27");
+	assert.deepEqual(filtered.Vulnerabilities, [
+		result.Vulnerabilities[1],
+		result.Vulnerabilities[2],
+		result.Vulnerabilities[5],
+	]);
+	assert.deepEqual(filtered.Secrets, result.Secrets);
+	assert.deepEqual(prepare("2027-05-02").Vulnerabilities, result.Vulnerabilities);
+	assert.equal(readFileSync(input, "utf8"), raw);
+});
