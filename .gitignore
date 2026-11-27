@@ -6,3 +6,6 @@ __pycache__/
 
 # reports of local runs of the tests (scripts/test-*.sh)
 reports/
+
+# generated checksum cache from the upstream Go modules
+/openappsec/smartsync-tuning/dependencies/openappsec.io/*/vendor/cache/
