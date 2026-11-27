@@ -7,6 +7,7 @@ import { useFormikContext } from "formik";
 import { intl, T } from "src/locale";
 import { WAF_DEFAULTS, type WafConfidence, type WafHost, type WafLocationSettings, type WafMode } from "../api";
 import { getPolicyObjects, type HostObjects, type PolicyObjects } from "../policy/api";
+import { objectTitle } from "../policy/names";
 import { RefsEditor } from "../policy/RefsEditor";
 import { useCan } from "../rbac/hooks";
 
@@ -130,7 +131,7 @@ export function WafFields() {
 			</p>
 
 			<div className="row">
-				<div className="col-md-7 mb-3">
+				<div className="col-lg-7 mb-3">
 					<label className="form-label" htmlFor="nginxionsWafMode">
 						<T id="nginxions.waf.mode" />
 					</label>
@@ -151,7 +152,7 @@ export function WafFields() {
 						<T id={`nginxions.waf.mode.${waf.mode}.hint`} />
 					</div>
 				</div>
-				<div className="col-md-5 mb-3">
+				<div className="col-lg-5 mb-3">
 					<label className="form-label" htmlFor="nginxionsWafConfidence">
 						<T id="nginxions.waf.minimum-confidence" />
 					</label>
@@ -253,11 +254,12 @@ function PolicyChoice({
 	});
 	if (!data) return null;
 	const choice = value === null ? "default" : value.template ? `template:${value.template}` : "custom";
+	const source = value?.template ? (data.templates[value.template] ?? data.policy) : (value ?? data.policy);
 	const select = (next: string) => {
 		if (next === "default") onChange(null);
 		else if (next === "custom") {
 			// own objects start from what the host uses now
-			const { template: _template, mode: _mode, ...refs } = (value ?? data.policy) as Record<string, any>;
+			const { template: _template, mode: _mode, ...refs } = { ...source, template: undefined, mode: undefined };
 			onChange(refs);
 		} else {
 			const template = next.slice("template:".length);
@@ -295,6 +297,24 @@ function PolicyChoice({
 			<div className="form-hint">
 				<T id="nginxions.waf.host-policy.hint" />
 			</div>
+			{choice !== "custom" && (
+				<dl className="d-flex flex-wrap gap-2 mt-2 mb-0 small">
+					{(
+						["threatPreventionPractices", "accessControlPractices", "triggers", "customResponse"] as const
+					).map((field) => {
+						const ref = source[field] === undefined ? data.policy[field] : source[field];
+						const object = data.objects.find(({ id }) => id === (Array.isArray(ref) ? ref[0] : ref));
+						return object ? (
+							<div className="d-flex flex-wrap gap-1 bg-body-tertiary rounded px-2 py-1" key={field}>
+								<dt className="text-secondary fw-normal">
+									<T id={`nginxions.policy.rule.${field}`} />
+								</dt>
+								<dd className="mb-0">{objectTitle(object)}</dd>
+							</div>
+						) : null;
+					})}
+				</dl>
+			)}
 			{choice === "custom" && value && (
 				<div className="mt-3">
 					<RefsEditor value={value} onChange={onChange} objects={data.objects} disabled={disabled} />
@@ -324,8 +344,8 @@ function LocationObjects({
 	const toggle = (on: boolean) => {
 		if (!on) return onChange(null);
 		// they start from what the host uses (a template has no references here)
-		const source = host && !host.template ? host : data.policy;
-		const { template: _template, mode: _mode, ...refs } = source as Record<string, any>;
+		const source = host?.template ? (data.templates[host.template] ?? data.policy) : (host ?? data.policy);
+		const { template: _template, mode: _mode, ...refs } = { ...source, template: undefined, mode: undefined };
 		onChange(refs);
 	};
 	return (

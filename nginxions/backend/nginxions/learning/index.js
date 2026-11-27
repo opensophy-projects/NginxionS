@@ -33,6 +33,8 @@ import {
 	learnedFolders,
 	learnedOf,
 	mergeDecisions,
+	resolveGroupScopes,
+	scopeRevision,
 	statsOf,
 	suggestionOf,
 } from "./model.js";
@@ -382,6 +384,7 @@ const internalLearning = {
 				hostName: names.get(g.hostId) ?? g.host,
 				hostMode: hosts.find((h) => h.id === g.hostId)?.mode ?? null,
 				scopes: defaultScopes(g),
+				scopeRevision: scopeRevision(g),
 			})),
 			suggestions: tuning.items,
 			suggestionsError: tuning.error,
@@ -404,6 +407,7 @@ const internalLearning = {
 			hostName: host?.name ?? group.host,
 			hostMode: host?.mode ?? null,
 			scopes: defaultScopes(group),
+			scopeRevision: scopeRevision(group),
 			sourceList: await groupSources(group, from, host?.assets ?? []),
 			labelled: (await activeKeys()).has(group.key),
 		};
@@ -427,7 +431,7 @@ const internalLearning = {
 	/**
 	 * Labels a group of the queue or a suggestion of the tuning service.
 	 * @param {Access} access
-	 * @param {{key?: string, suggestion?: {id, asset, type, title, hostId}, decision, scopes, exception?,
+	 * @param {{key?: string, suggestion?: {id, asset, type, title, hostId}, decision, scopes, scope_fields?, scope_revision?, exception?,
 	 *   ttl_days?, ban?, ban_duration?, note?}} data
 	 */
 	label: async (access, data = {}) => {
@@ -437,11 +441,17 @@ const internalLearning = {
 		if (data.suggestion) {
 			// the API client of the GUI sends snake_case keys
 			const raw = data.suggestion;
-			const s = { ...raw, hostId: raw.host_id ?? raw.hostId, attackTypes: raw.attack_types ?? raw.attackTypes };
 			if (!["benign", "malicious", "dismiss"].includes(data.decision)) throw new errs.ValidationError("decision");
-			const host = hosts.find(({ id }) => id === Number(s.hostId));
-			if (!host?.assets.includes(s.asset)) throw new errs.ValidationError("suggestion: unknown asset");
+			const host = hosts.find(({ id }) => id === Number(raw.host_id ?? raw.hostId));
+			if (!host?.assets.includes(raw.asset)) throw new errs.ValidationError("suggestion: unknown asset");
 			const tenant = await getTenant();
+			const s =
+				raw.title === undefined
+					? (await appsec.getSuggestions(tenant, raw.asset))
+							.map((item) => suggestionOf(item, raw.asset))
+							.find(({ id }) => String(id) === String(raw.id))
+					: { ...raw, attackTypes: raw.attack_types ?? raw.attackTypes }; // older API clients
+			if (!s) throw new errs.ValidationError("The suggestion is no longer available. Refresh the queue.");
 			await appsec.postSuggestions(tenant, s.asset, [
 				{ id: String(s.id), decision: data.decision, eventType: s.type, eventTitle: String(s.title) },
 			]);
@@ -489,7 +499,13 @@ const internalLearning = {
 				"The group is no longer in the queue (labelled, or its events are older than 30 days)",
 			);
 		if ((await activeKeys()).has(data.key)) throw new errs.ValidationError("The group is already labelled");
-		const label = checkLabel(data);
+		let scopes;
+		try {
+			scopes = resolveGroupScopes(data, group);
+		} catch (err) {
+			throw new errs.ValidationError(err.message);
+		}
+		const label = checkLabel({ ...data, scopes });
 		if (label.errors) throw new errs.ValidationError(label.errors.join("; "));
 		const host = hosts.find(({ id }) => id === group.hostId);
 		let banned = [];

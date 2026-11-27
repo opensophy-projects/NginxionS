@@ -36,7 +36,7 @@ export function FileSecurityCard() {
 	};
 
 	return (
-		<div className="card mt-4">
+		<div className="card">
 			<div className="card-header">
 				<h3 className="card-title">
 					<T id="nginxions.waf.files.title" />
@@ -57,7 +57,7 @@ export function FileSecurityCard() {
 							<dt className="col-sm-4">
 								<T id="nginxions.waf.files.state" />
 							</dt>
-							<dd className="col-sm-8">
+							<dd className="col-sm-8 text-break">
 								{!data.enabled ? (
 									<T id="nginxions.waf.files.off" />
 								) : data.clamd ? (
@@ -71,7 +71,7 @@ export function FileSecurityCard() {
 							<dt className="col-sm-4">
 								<T id="nginxions.waf.files.signatures" />
 							</dt>
-							<dd className="col-sm-8">
+							<dd className="col-sm-8 text-break">
 								{data.clamd ?? "—"}
 								{data.uploaded.length > 0 && (
 									<div className="text-secondary small">

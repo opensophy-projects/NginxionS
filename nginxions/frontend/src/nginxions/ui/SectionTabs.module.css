@@ -3,7 +3,7 @@
 	gap: 0.25rem;
 	margin-bottom: 1rem;
 	padding: 0.25rem;
-	overflow-x: auto;
+	flex-wrap: wrap;
 	border-radius: var(--radius-sm);
 	background: var(--background-muted);
 	box-shadow: var(--shadow-inset);
@@ -28,4 +28,14 @@
 	background: var(--background);
 	color: var(--foreground);
 	box-shadow: var(--shadow-card);
+}
+
+@media (max-width: 575.98px) {
+	.tab {
+		display: flex;
+		align-items: center;
+		min-height: 2.5rem;
+		padding-inline: 0.55rem;
+		white-space: normal;
+	}
 }
