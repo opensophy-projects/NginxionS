@@ -146,9 +146,15 @@
 }
 .pagerButtons {
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
 	align-items: center;
 	gap: 0.375rem;
 	margin-left: auto;
+}
+.pagerButtons button:disabled {
+	opacity: 0.5;
+	pointer-events: none;
 }
 
 /* retention panel */
