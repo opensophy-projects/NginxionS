@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runtime checks of the containers of a running stack (the extended DAST, scripts/test-dast.sh): what the compose
 # files ask for is checked on what Docker really runs. One JSON finding per weakness:
-#   high     privileged, the host's PID, IPC or network namespace, a Docker socket mount outside networkless control
+#   high     privileged, host PID/IPC/network, a Docker socket mount other than read-only on networkless control
 #   medium   added capabilities, no no-new-privileges, cap_drop without ALL
 #   low      root user, writable root filesystem
 #   info     the Docker socket of nginxions-control (service control, CLAUDE.md), ports published on every address
@@ -25,8 +25,8 @@ docker inspect $ids | jq '
         | select($c.HostConfig[$ns] == "host")
         | finding("host-namespace"; "high"; "\($ns): host") ),
       ( $c.Mounts[]? | select(.Source == "/var/run/docker.sock" or .Source == "/run/docker.sock")
-        | if $svc == "control" and $c.HostConfig.NetworkMode == "none"
-          then finding("docker-socket"; "info"; "Docker socket (nginxions-control без сети)")
+        | if $svc == "control" and $c.HostConfig.NetworkMode == "none" and .RW == false
+          then finding("docker-socket"; "info"; "Docker socket (nginxions-control без сети, bind только для чтения)")
           else finding("docker-socket"; "high"; "Docker socket в контейнере \($svc)") end ),
       ( ($c.HostConfig.CapAdd // []) | select(length > 0)
         | finding("cap-add"; "medium"; "cap_add: \(join(", "))") ),
