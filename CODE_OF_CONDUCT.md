@@ -265,6 +265,9 @@ flowchart LR
 ### `scripts/` — инструменты разработчика
 
 - `build-images.sh` — локальная сборка всех образов (тег `local/<имя>:dev`)
+- `install.sh` — установка NginxionS и Docker Engine при необходимости
+- `uninstall.sh` — удаление ресурсов установленного стека с отдельным подтверждением удаления Docker
+- `install-lib.sh` — общие функции установки, удаления и работы с пакетами Docker
 - `offline-bundle.sh` — архив для офлайн-установки с образами, Compose и инструкцией
 - `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh` (все группы или `SMOKE_GROUPS`), затем проверки после него
 - `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `gui`, `waf-score`, `upgrade`, `chaos`, `cluster`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах

@@ -96,6 +96,18 @@ jobs:
           UI_E2E: "0"
           SMOKE_GROUPS: waf crowdsec
         run: scripts/test-airgap.sh
+      - name: Install and uninstall with the imported images
+        if: inputs.ci_image_tag != ''
+        run: |
+          installation="$RUNNER_TEMP/nginxions-installed"
+          scripts/install.sh --dir "$installation"
+          printf 'n\n' | "$installation/uninstall.sh" --yes
+          test ! -e "$installation"
+          label="label=com.docker.compose.project=nginxions"
+          for object in "$(docker ps -aq --filter "$label")" \
+            "$(docker volume ls -q --filter "$label")" "$(docker network ls -q --filter "$label")"; do
+            test -z "$object"
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nginxions-offline-linux-amd64
