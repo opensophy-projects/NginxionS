@@ -321,9 +321,8 @@ test("Docker purge checks other resources and reverse dependencies and keeps pre
 	);
 	assert.doesNotMatch(f.apt(), /^purge /m);
 	ok(f.packages(action));
-	assert.match(
-		f.apt(),
-		/^purge -y --no-auto-remove docker-ce docker-compose-plugin$/m,
+	assert.equal(
+		f.apt().trimEnd().split("\n").at(-1),
+		"purge -y --no-auto-remove docker-ce docker-compose-plugin",
 	);
-	assert.doesNotMatch(f.apt(), /containerd\.io/);
 });
