@@ -2054,11 +2054,23 @@
 	"nginxions.crowdsec.metrics.decisions-of": {
 		"defaultMessage": "Решений: {origin}"
 	},
+	"nginxions.crowdsec.metrics.file": {
+		"defaultMessage": "Файл журнала"
+	},
 	"nginxions.crowdsec.metrics.none": {
 		"defaultMessage": "Нет метрик: CrowdSec не отвечает."
 	},
+	"nginxions.crowdsec.metrics.other": {
+		"defaultMessage": "Остальные ({count})"
+	},
 	"nginxions.crowdsec.metrics.overflows": {
 		"defaultMessage": "Сработавшие сценарии"
+	},
+	"nginxions.crowdsec.metrics.overflows.count": {
+		"defaultMessage": "Срабатывания"
+	},
+	"nginxions.crowdsec.metrics.overflows.hint": {
+		"defaultMessage": "Число срабатываний каждого сценария с запуска CrowdSec."
 	},
 	"nginxions.crowdsec.metrics.overflows.none": {
 		"defaultMessage": "С запуска CrowdSec не сработал ни один сценарий."
@@ -2066,11 +2078,32 @@
 	"nginxions.crowdsec.metrics.parsed": {
 		"defaultMessage": "Строк журналов разобрано"
 	},
+	"nginxions.crowdsec.metrics.source-access": {
+		"defaultMessage": "Запросы nginx"
+	},
+	"nginxions.crowdsec.metrics.source-error": {
+		"defaultMessage": "Ошибки nginx"
+	},
+	"nginxions.crowdsec.metrics.source-openappsec": {
+		"defaultMessage": "Журнал open-appsec"
+	},
 	"nginxions.crowdsec.metrics.sources": {
 		"defaultMessage": "Прочитано строк по источникам"
 	},
+	"nginxions.crowdsec.metrics.sources.count": {
+		"defaultMessage": "Строки"
+	},
+	"nginxions.crowdsec.metrics.sources.hint": {
+		"defaultMessage": "Строки с запуска CrowdSec. На графике файлы журнала open-appsec объединены."
+	},
 	"nginxions.crowdsec.metrics.sources.none": {
 		"defaultMessage": "Пока ничего не прочитано."
+	},
+	"nginxions.crowdsec.metrics.view.chart": {
+		"defaultMessage": "График"
+	},
+	"nginxions.crowdsec.metrics.view.table": {
+		"defaultMessage": "Таблица"
 	},
 	"nginxions.crowdsec.move-down": {
 		"defaultMessage": "Ниже"

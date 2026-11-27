@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { changeLocale } from "src/locale";
 import { afterEach, expect, it, vi } from "vitest";
 import { LearningTab } from "../learning/Learning";
+import { MetricsPanel } from "../pages/Crowdsec/Metrics";
 import WafEvents from "../pages/WafEvents";
 import { event } from "../test/fixtures";
 import { answer, mockApi, renderApp } from "../test/harness";
@@ -17,6 +18,31 @@ afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+});
+
+it("groups open-appsec log counters on the chart and preserves exact paths in the table", async () => {
+	changeLocale("en");
+	mockApi();
+	const log = "/var/log/openappsec/cp-nano-http-transaction-handler.log";
+	await renderApp(
+		<MetricsPanel
+			kind="sources"
+			rows={[
+				{ key: log, value: 4 },
+				{ key: `${log}1`, value: 9 },
+			]}
+		/>,
+	);
+	const panel = within(screen.getByRole("region", { name: "Lines read by source" }));
+	expect(panel.getAllByRole("listitem")).toHaveLength(1);
+	expect(panel.getByRole("listitem")).toHaveTextContent("open-appsec log13");
+	fireEvent.click(panel.getByRole("button", { name: "Table" }));
+	expect(panel.getByRole("table")).toBeVisible();
+	expect(panel.getByText(log, { exact: true })).toBeVisible();
+	expect(panel.getByText(`${log}1`, { exact: true })).toBeVisible();
+	fireEvent.click(panel.getByRole("button", { name: "Chart" }));
+	expect(panel.queryByRole("table")).toBeNull();
+	expect(panel.getByRole("listitem")).toHaveTextContent("13");
 });
 
 it("paginates learning history on the server with the same controls as Events", async () => {

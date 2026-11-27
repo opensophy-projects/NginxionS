@@ -21,6 +21,7 @@ import { showProfileModal } from "../../crowdsec/ProfileModal";
 import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
 import { HiddenUsername } from "../../ui/HiddenUsername";
+import crowdsecStyles from "./Crowdsec.module.css";
 
 const SCENARIO_PLACEHOLDER = "crowdsecurity/http-probing\nnginxions/openappsec-prevent";
 
@@ -426,7 +427,7 @@ export function SettingsTab({ data, refresh }: { data: CrowdsecSettingsState; re
 
 			<Section heading="nginxions.crowdsec.profiles.title" hint="nginxions.crowdsec.profiles.hint">
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className={cn("table table-vcenter card-table nx-stack", crowdsecStyles.table)}>
 						<thead>
 							<tr>
 								<th>
@@ -452,12 +453,12 @@ export function SettingsTab({ data, refresh }: { data: CrowdsecSettingsState; re
 											</span>
 										)}
 									</td>
-									<td className={styles.sub}>
+									<td data-label={t("nginxions.crowdsec.profile.takes")} className={styles.sub}>
 										{t(`nginxions.crowdsec.scope.${p.scope}`)}
 										{p.scenarios.length > 0 && `, ${p.scenarios.join(", ")}`}
 										{p.filter && `, ${p.filter}`}
 									</td>
-									<td className="text-nowrap">
+									<td data-label={t("nginxions.crowdsec.decision")} className="text-nowrap">
 										{t(`nginxions.crowdsec.decision.${p.type}`)}, {durationLabel(p.duration)}
 										{p.escalate && (
 											<span className="badge bg-orange-lt ms-2">
@@ -466,7 +467,7 @@ export function SettingsTab({ data, refresh }: { data: CrowdsecSettingsState; re
 										)}
 									</td>
 									{manage && (
-										<td className="text-nowrap">
+										<td className="text-nowrap nx-actions-row">
 											<button
 												type="button"
 												className="btn btn-sm btn-ghost-secondary btn-icon"
@@ -653,7 +654,7 @@ export function SettingsTab({ data, refresh }: { data: CrowdsecSettingsState; re
 				</Alert>
 			)}
 			{manage && (
-				<div className="d-flex align-items-center gap-3">
+				<div className="d-flex flex-wrap align-items-center gap-3">
 					<button type="button" className="btn btn-primary" disabled={busy} onClick={save}>
 						{busy && <span className="spinner-border spinner-border-sm me-2" />}
 						<T id="nginxions.crowdsec.settings.save" />
