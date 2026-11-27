@@ -9,6 +9,7 @@ import { intl, T } from "src/locale";
 import { useCan } from "../rbac/hooks";
 import { Brand, LocaleSwitch, ThemeToggle, UserMenu } from "./Controls";
 import { containsActive, isActivePath, type NavItem, navigation, visibleItems } from "./menu";
+import { ReleaseInfo } from "./ReleaseInfo";
 import styles from "./Shell.module.css";
 
 /** how long the active line follows a group that opens or closes (the panel transition) */
@@ -213,8 +214,11 @@ export function Sidebar({ onLeave }: Props) {
 			</div>
 
 			<div className={styles.bottom}>
-				<ThemeToggle />
-				<LocaleSwitch />
+				<ReleaseInfo />
+				<div className={styles.bottomControls}>
+					<ThemeToggle />
+					<LocaleSwitch />
+				</div>
 			</div>
 		</aside>
 	);

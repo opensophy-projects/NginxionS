@@ -7,6 +7,10 @@ on:
         description: Tag of the amd64 images built and uploaded by the calling run
         type: string
         required: true
+      release_tag:
+        description: Stable tag to give the tested images inside the release archive
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       version:
@@ -32,11 +36,21 @@ jobs:
           path: ${{ runner.temp }}/offline-ci-images
       - name: Load the images built for this checkout
         if: inputs.ci_image_tag != ''
-        run: docker image load -i "$RUNNER_TEMP/offline-ci-images/images.tar.zst"
+        env:
+          CI_TAG: ${{ inputs.ci_image_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
+        run: |
+          docker image load -i "$RUNNER_TEMP/offline-ci-images/images.tar.zst"
+          if [ -n "$RELEASE_TAG" ]; then
+            for image in nginxions nginxions-openappsec; do
+              docker image tag "$REGISTRY/$image:$CI_TAG" "$REGISTRY/$image:$RELEASE_TAG"
+            done
+          fi
       - name: Build Linux amd64 offline bundle
         env:
           NGINXIONS_REGISTRY: docker.io/${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
-          NGINXIONS_VERSION: ${{ inputs.ci_image_tag || inputs.version }}
+          NGINXIONS_VERSION: ${{ inputs.release_tag || inputs.ci_image_tag || inputs.version }}
           OFFLINE_BUNDLE_USE_LOCAL_IMAGES: ${{ inputs.ci_image_tag != '' && '1' || '0' }}
         run: |
           scripts/offline-bundle.sh nginxions-linux-amd64.tar

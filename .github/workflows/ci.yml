@@ -4,13 +4,13 @@
 # services, nginxions-control; amd64, arm64 is experimental: upstream open-appsec ships amd64 only).
 # Publishing to Docker Hub (vars.DOCKERHUB_NAMESPACE, secrets.DOCKERHUB_USERNAME/DOCKERHUB_TOKEN):
 #   push to work  -> :develop and :<sha>
-#   tag vX.Y.Z    -> :X.Y.Z and :latest
+#   tag VX.Y.Z   -> :VX.Y.Z, :X.Y.Z and :latest, then a GitHub release
 #   other events  -> build and test only (registry login is still checked when secrets exist)
 #
 # Three depths (docs/DEVSECOPS.md), chosen by the job "level":
 #   fast            standalone pushes and PRs: lint, types, tests, and security.yml (SAST, secrets, SCA, IaC, the workflows)
 #   full            also the images: build, closed-network test, image scan, DAST, the security gate before a push.
-#                   On work, tags v*, pull requests, by hand (Run workflow, level "full") and on any push whose commit
+#                   On work, stable tags, pull requests, by hand (Run workflow, level "full") and on any push whose commit
 #                   message holds [full].
 #   extended        the full run and the heavy checks: ZAP full active scan, Nuclei with info and intrusive templates,
 #                   API fuzzing (Schemathesis), runtime checks of the containers, CodeQL security-and-quality, more
@@ -24,7 +24,7 @@ name: CI
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
+    tags: ["V*", "v*"]
   pull_request:
     # labeled: the label security-scan starts the extended run (the job "level" ignores other labels)
     types: [opened, synchronize, reopened, labeled]
@@ -49,7 +49,7 @@ concurrency:
 
 env:
   NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'opensophy' }}
-  PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v')) && vars.DOCKERHUB_NAMESPACE != '' }}
+  PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/work' || github.ref_type == 'tag') && vars.DOCKERHUB_NAMESPACE != '' }}
 
 jobs:
   level:
@@ -61,6 +61,8 @@ jobs:
       cpp: ${{ steps.level.outputs.cpp }}
       go: ${{ steps.level.outputs.go }}
       dast: ${{ steps.level.outputs.dast }}
+      release_version: ${{ steps.level.outputs.release_version }}
+      image_tags: ${{ steps.level.outputs.image_tags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -348,17 +350,21 @@ jobs:
           version: latest
       - name: versions
         id: versions
+        env:
+          RELEASE_VERSION: ${{ needs.level.outputs.release_version }}
         run: |
           v="$(git rev-parse --short HEAD)"
           echo "tag=$v" >> "$GITHUB_OUTPUT"
           {
             echo "VERSION=$v"
+            echo "PROJECT_VERSION=${RELEASE_VERSION:-$v}"
             echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
             # the day of the build: the "apk upgrade" layers of the images are rebuilt daily (Dockerfiles, APK_REFRESH)
             echo "APK_REFRESH=$(date -u +%F)"
           } >> "$GITHUB_ENV"
+          package_version=${RELEASE_VERSION:1}
           for f in nginxions/frontend/package.json nginxions/backend/package.json; do
-            jq --arg v "$v" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+            jq --arg v "${package_version:-$v}" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
           done
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
@@ -376,6 +382,7 @@ jobs:
             CROWDSEC_VERSION=${{ env.CROWDSEC_VERSION }}
             FLAGS=-march=x86-64-v2 -mtune=generic -fcf-protection=full
             APK_REFRESH=${{ env.APK_REFRESH }}
+            NGINXIONS_BUILD_VERSION=${{ env.PROJECT_VERSION }}
       - name: build nginxions-openappsec
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -389,6 +396,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=openappsec-amd64
           build-args: |
             APK_REFRESH=${{ env.APK_REFRESH }}
+            NGINXIONS_BUILD_VERSION=${{ env.PROJECT_VERSION }}
           # smartsync is built into it too (the learning of several servers, run on a manager with nodes:
           # docs/adr/0012-nodes.md 5c)
       - name: policy contract with the agent of this build
@@ -469,10 +477,11 @@ jobs:
 
   offline-bundle:
     name: Offline bundle
-    needs: images
+    needs: [level, images]
     uses: ./.github/workflows/offline-bundle.yml
     with:
       ci_image_tag: ${{ needs.images.outputs.tag }}
+      release_tag: ${{ needs.level.outputs.release_version }}
 
   stack:
     name: Stack test (${{ matrix.suite }})
@@ -519,7 +528,9 @@ jobs:
 
   publish:
     name: Security gate${{ github.event_name == 'push' && ' + publish' || '' }}
-    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository, contract, security, images, stack]
+    needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository, contract, security, images, stack, offline-bundle]
+    outputs:
+      appsec_digest: ${{ steps.digests.outputs.nginxions_openappsec }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -577,19 +588,17 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: push
         if: env.PUBLISH == 'true'
+        env:
+          TAGS: ${{ needs.level.outputs.image_tags }}
         run: |
-          case "$GITHUB_REF" in
-            refs/tags/v*) tags="${GITHUB_REF#refs/tags/v} latest" ;;
-            *) tags="develop" ;;
-          esac
           for img in nginxions nginxions-openappsec; do
             src="docker.io/$NAMESPACE/$img:$VERSION"
             # nginxions gets a multi-arch manifest in the manifest job; push its amd64 build under an arch tag
             if [ "$img" = nginxions ]; then
-              for t in $tags; do docker tag "$src" "docker.io/$NAMESPACE/$img:$t-amd64"; docker push "docker.io/$NAMESPACE/$img:$t-amd64"; done
+              for t in $TAGS; do docker tag "$src" "docker.io/$NAMESPACE/$img:$t-amd64"; docker push "docker.io/$NAMESPACE/$img:$t-amd64"; done
             else
               docker push "$src"
-              for t in $tags; do docker tag "$src" "docker.io/$NAMESPACE/$img:$t"; docker push "docker.io/$NAMESPACE/$img:$t"; done
+              for t in $TAGS; do docker tag "$src" "docker.io/$NAMESPACE/$img:$t"; docker push "docker.io/$NAMESPACE/$img:$t"; done
             fi
           done
 
@@ -652,7 +661,7 @@ jobs:
     name: nginxions image (arm64)
     needs: [level, checks-backend, checks-frontend, checks-agent, checks-repository]
     if: >-
-      github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v')) ||
+      github.event_name == 'push' && (github.ref == 'refs/heads/work' || github.ref_type == 'tag') ||
       github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/security/') &&
       needs.level.outputs.level != 'fast'
     runs-on: ubuntu-26.04-arm
@@ -661,20 +670,19 @@ jobs:
         with:
           persist-credentials: false
       - name: versions
+        env:
+          RELEASE_VERSION: ${{ needs.level.outputs.release_version }}
         run: |
           v="$(git rev-parse --short HEAD)"
-          case "$GITHUB_REF" in
-            refs/tags/v*) tags="${GITHUB_REF#refs/tags/v} latest" ;;
-            *) tags="develop" ;;
-          esac
           {
             echo "VERSION=$v"
             echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
-            echo "TAGS=$tags"
+            echo "PROJECT_VERSION=${RELEASE_VERSION:-$v}"
             echo "APK_REFRESH=$(date -u +%F)"
           } >> "$GITHUB_ENV"
+          package_version=${RELEASE_VERSION:1}
           for f in nginxions/frontend/package.json nginxions/backend/package.json; do
-            jq --arg v "$v" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+            jq --arg v "${package_version:-$v}" '.version = $v' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
           done
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
@@ -698,8 +706,11 @@ jobs:
             CROWDSEC_VERSION=${{ env.CROWDSEC_VERSION }}
             FLAGS=-mbranch-protection=standard
             APK_REFRESH=${{ env.APK_REFRESH }}
+            NGINXIONS_BUILD_VERSION=${{ env.PROJECT_VERSION }}
       - name: arch tags
         if: env.PUBLISH == 'true'
+        env:
+          TAGS: ${{ needs.level.outputs.image_tags }}
         run: |
           for t in $TAGS; do
             docker buildx imagetools create -t "docker.io/$NAMESPACE/nginxions:$t-arm64" "docker.io/$NAMESPACE/nginxions:$VERSION-arm64"
@@ -707,8 +718,10 @@ jobs:
 
   nginxions-manifest:
     name: nginxions multi-arch manifest
-    needs: [publish, nginxions-arm64]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/work' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [level, publish, nginxions-arm64]
+    outputs:
+      nginxions_digest: ${{ steps.manifest.outputs.digest }}
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/work' || github.ref_type == 'tag')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -723,26 +736,59 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: manifest
         if: env.PUBLISH == 'true'
+        id: manifest
+        env:
+          TAGS: ${{ needs.level.outputs.image_tags }}
+          PRIMARY_TAG: ${{ needs.level.outputs.release_version || 'develop' }}
         run: |
-          case "$GITHUB_REF" in
-            refs/tags/v*) tags="${GITHUB_REF#refs/tags/v} latest" ;;
-            *) tags="develop" ;;
-          esac
-          for t in $tags; do
+          for t in $TAGS; do
             docker buildx imagetools create -t "docker.io/$NAMESPACE/nginxions:$t" \
-              "docker.io/$NAMESPACE/nginxions:$t-amd64" "docker.io/$NAMESPACE/nginxions:$t-arm64"
+              "docker.io/$NAMESPACE/nginxions:$PRIMARY_TAG-amd64" "docker.io/$NAMESPACE/nginxions:$PRIMARY_TAG-arm64"
           done
+          digest=$(docker buildx imagetools inspect "docker.io/$NAMESPACE/nginxions:$PRIMARY_TAG" --format '{{json .Manifest}}' | jq -er '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         if: env.PUBLISH == 'true'
       - name: sign the multi-arch manifest (cosign, keyless)
         if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: cosign sign --yes "docker.io/$NAMESPACE/nginxions@$DIGEST"
+
+  release:
+    name: Publish GitHub release
+    needs: [level, publish, nginxions-manifest, offline-bundle]
+    if: github.event_name == 'push' && needs.level.outputs.release_version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nginxions-offline-linux-amd64
+      - name: Release notes and verified artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.level.outputs.release_version }}
+          NGINXIONS_DIGEST: ${{ needs.nginxions-manifest.outputs.nginxions_digest }}
+          APPSEC_DIGEST: ${{ needs.publish.outputs.appsec_digest }}
         run: |
-          case "$GITHUB_REF" in
-            refs/tags/v*) t="${GITHUB_REF#refs/tags/v}" ;;
-            *) t="develop" ;;
-          esac
-          digest=$(docker buildx imagetools inspect "docker.io/$NAMESPACE/nginxions:$t" --format '{{json .Manifest}}' | jq -r .digest)
-          cosign sign --yes "docker.io/$NAMESPACE/nginxions@$digest"
+          sha256sum --check nginxions-linux-amd64.tar.sha256
+          [[ "$NGINXIONS_DIGEST" =~ ^sha256:[0-9a-f]{64}$ && "$APPSEC_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          # shellcheck source=scripts/install-lib.sh
+          source scripts/install-lib.sh
+          printf '%s\n' "version=$RELEASE_VERSION" "registry=docker.io/$NAMESPACE" \
+            "nginxions=$NGINXIONS_DIGEST" "nginxions_openappsec=$APPSEC_DIGEST" \
+            "deployment=$(deployment_fingerprint deploy)" > nginxions-release.env
+          if ! gh release view "$GITHUB_REF_NAME" --json url > /dev/null 2>&1; then
+            printf '## Docker images\n\n- %s/nginxions:%s\n- %s/nginxions-openappsec:%s\n' \
+              "docker.io/$NAMESPACE" "$RELEASE_VERSION" "docker.io/$NAMESPACE" "$RELEASE_VERSION" > release-notes.md
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$RELEASE_VERSION" --generate-notes --notes-file release-notes.md \
+              nginxions-linux-amd64.tar nginxions-linux-amd64.tar.sha256 nginxions-release.env
+          fi
 
   appsec-arm64:
     name: nginxions-openappsec image (arm64, experimental)

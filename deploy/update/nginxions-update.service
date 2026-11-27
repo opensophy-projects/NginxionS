@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for and apply compatible NginxionS image updates
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/nginxions/.nginxions-install
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/nginxions/update.sh
+TimeoutStartSec=30min

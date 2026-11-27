@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decide, SUITES } from "./ci-level.mjs";
+import { decide, release, SUITES } from "./ci-level.mjs";
 
 const push = (changed, message = "") => decide({ event: "push", ref: "refs/heads/feature", message, changed });
 
@@ -66,4 +66,16 @@ test("security branches, the label and Run workflow", () => {
 		"extended",
 	);
 	assert.equal(decide({ event: "workflow_dispatch", input: "fast", ref: "refs/heads/x", changed: null }).level, "fast");
+});
+
+
+test("stable tags build and publish matching release and Docker versions", () => {
+	assert.deepEqual(release("refs/tags/V1.0.0"), { version: "V1.0.0", tags: "V1.0.0 1.0.0 latest" });
+	assert.deepEqual(release("refs/tags/v1.12.3"), {
+		version: "V1.12.3",
+		tags: "V1.12.3 v1.12.3 1.12.3 latest",
+	});
+	assert.deepEqual(release("refs/heads/work"), { version: "", tags: "develop" });
+	assert.equal(decide({ event: "push", ref: "refs/tags/V1.0.0", changed: ["README.md"] }).level, "full");
+	for (const tag of ["V1.0", "V01.0.0", "v2.0.0-rc.1"]) assert.throws(() => release(`refs/tags/${tag}`));
 });

@@ -37,7 +37,7 @@
 | `NGINX_LOAD_NJS_MODULE`, `NGINX_LOAD_GEOIP2_MODULE`, `NGINX_LOAD_LDAP_MODULE`, `NGINX_LOAD_NTLM_MODULE`, `NGINX_LOAD_VHOST_TRAFFIC_STATUS_MODULE` | `false` | `false` | GUI (Администрирование → Настройки → Nginx) | 4 ✅ |
 | `TRUST_CLOUDFLARE` | `false` | `false` (загрузка IP-диапазонов Cloudflare — только при явном включении) | GUI (Администрирование → Настройки → Сеть, помечено «интернет») | 4 ✅ |
 | `DISABLE_GRAVATAR` | `false` | **`true`** ✅ | NginxionS фиксирует: Gravatar убран, аватары с gravatar.com не загружаются | — |
-| `NGINXIONS_CHECK_VERSION` | — (проверка всегда включена) | **`false`** ✅ | GUI (Администрирование → Настройки → Внешние сервисы) | 4 ✅ |
+| `NGINXIONS_CHECK_VERSION` | — (проверка всегда включена) | **`false`** ✅ | Совместимость со старым API. Ручная проверка находится в боковом меню | 4 ✅ |
 | `LOGROTATE`, `LOGROTATIONS` | `false`, 3 | **`true`** (логи нужны CrowdSec и аналитике), 3 | NginxionS фиксирует `LOGROTATE`; `LOGROTATIONS` — GUI (Администрирование → Настройки → Журналы) | 4 ✅ |
 | `GOA`, `GOACLA` | `false` | `false` | Заменяется аналитикой NginxionS (Аналитика) | 4 ✅ |
 | `PHP83`, `PHP84`, `PHP85` | `false` | `false` | PHP нет в образе NginxionS; если понадобится — GUI | позже |
@@ -111,6 +111,7 @@ smartsync (общее обучение нескольких агентов) ра
 - общие тома: `appsec-localconfig` (политика), `appsec-logs` (события, только чтение для NginxionS и CrowdSec), логи nginx для CrowdSec, `crowdsec-conf` и `crowdsec-data` в `nginxions` (настройки CrowdSec из GUI, список машин и баунсеров);
 - метки `nginxions.managed=true`, по которым `nginxions-control` решает, чем можно управлять; сокет Docker смонтирован только в `control` — отдельном контейнере `nginxions-control` со своим белым списком операций;
 - образы и версии (`deploy/.env`): `NGINXIONS_REGISTRY`, `NGINXIONS_VERSION`, `CROWDSEC_VERSION`, `POSTGRES_VERSION`, `CLAMAV_VERSION`.
+- `NGINXIONS_HOST_UPDATER` — установщик ставит `true` для установки с таймером. Согласие на автообновление хранится отдельно и по умолчанию выключено. [Руководство по релизам](RELEASES.md)
 
 ## Обращения наружу только по действию администратора
 

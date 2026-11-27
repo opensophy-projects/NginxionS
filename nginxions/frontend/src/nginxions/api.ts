@@ -4,6 +4,22 @@ import * as api from "src/api/backend/base";
 import { isNotJson, notJsonError } from "./apiErrors";
 import type { HostObjects } from "./policy/api";
 
+interface ReleaseSettings {
+	current: string;
+	canAutoUpdate: boolean;
+	autoUpdate: boolean;
+}
+
+export interface ReleaseCheck {
+	status: "available" | "current" | "unavailable" | "unpublished";
+	tag?: string;
+}
+
+export const getReleaseSettings = (): Promise<ReleaseSettings> => api.get({ url: "/nginxions/system/release" });
+export const checkRelease = (): Promise<ReleaseCheck> => api.post({ url: "/nginxions/system/release/check" });
+export const setAutoUpdate = (enabled: boolean): Promise<ReleaseSettings> =>
+	api.put({ url: "/nginxions/system/release", data: { enabled } });
+
 export interface Service {
 	id: string;
 	service: string;
