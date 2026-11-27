@@ -31,7 +31,7 @@ it("replaces a threat protection profile while preserving the other policy refer
 			objects={[
 				{ ...f.policyObject, kind: "threat_prevention", name: "first" },
 				{ ...f.policyObject, id: 2, kind: "threat_prevention", name: "second" },
-				{ ...f.policyObject, id: 3 },
+				{ ...f.policyObject, id: 3, kind: "exception" },
 			]}
 			onChange={change}
 		/>,
