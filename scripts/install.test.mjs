@@ -5,6 +5,7 @@ import {
 	existsSync,
 	fstatSync,
 	ftruncateSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	openSync,
@@ -14,6 +15,7 @@ import {
 	statSync,
 	symlinkSync,
 	writeFileSync,
+	writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -74,7 +76,24 @@ else if (cmd === "compose") {
 else process.exit(2);
 `,
 	);
-	command("apt-cache", '#!/bin/sh\n[ -z "$TEST_APT_NO_SOURCE" ]\n');
+	command(
+		"apt-cache",
+		`#!/bin/sh
+# apt-cache show returns success for a package name only mentioned by dependencies.
+[ "$1" = show ] && exit 0
+[ "$1" = policy ] || exit 2
+candidate=29.0
+if [ "$2" = "$TEST_APT_NO_CANDIDATE" ] ||
+   { [ "$2" = "$TEST_APT_NEEDS_SOURCE" ] && [ ! -f docker.sources ]; }; then
+  candidate='(none)'
+fi
+printf '%s:\\n  Installed: (none)\\n  Candidate: %s\\n' "$2" "$candidate"
+`,
+	);
+	writeFileSync(
+		join(root, "os-release"),
+		"ID=ubuntu\nVERSION_CODENAME=resolute\n",
+	);
 	command(
 		"curl",
 		`#!/bin/bash
@@ -129,7 +148,7 @@ fi
 			run(
 				[
 					"-ec",
-					'. "$1"; install_dir="$2"; docker_sources="$PWD/docker.sources"; docker_key="$PWD/docker.asc"; shift 2; "$@"',
+					'. "$1"; install_dir="$2"; docker_sources="$PWD/docker.sources"; docker_key="$PWD/docker.asc"; os_release="$PWD/os-release"; shift 2; "$@"',
 					"bash",
 					script("install-lib"),
 					target,
@@ -148,17 +167,7 @@ test("installer preserves settings and downloads each missing image once", (t) =
 	const f = fixture(t);
 	ok(f.install());
 	const envFile = join(f.target, "deploy", ".env");
-	assert.match(readFileSync(envFile, "utf8"), /NGINXIONS_VERSION=develop/);
 	assert.equal(statSync(f.target).mode & 0o777, 0o700);
-	// Use an open descriptor so the permission check and the update refer to the same file.
-	const envFd = openSync(envFile, "r+");
-	try {
-		assert.equal(fstatSync(envFd).mode & 0o777, 0o600);
-		ftruncateSync(envFd, 0);
-		writeFileSync(envFd, "# keep existing settings\n");
-	} finally {
-		closeSync(envFd);
-	}
 	for (const file of [
 		"init/nginxions-init.sh",
 		"init/postgres-init.sh",
@@ -172,17 +181,28 @@ test("installer preserves settings and downloads each missing image once", (t) =
 	}
 	assert.ok(existsSync(join(f.target, "deploy", "seccomp", "nginxions.json")));
 	assert.ok(existsSync(join(f.target, "uninstall.sh")));
-	ok(f.install());
-	const updatedFd = openSync(envFile, "r");
+	const envFd = openSync(envFile, "r+");
 	try {
-		const contents = Buffer.alloc(64);
-		const size = readSync(updatedFd, contents, 0, contents.length, 0);
+		const initial = fstatSync(envFd);
+		assert.equal(initial.mode & 0o777, 0o600);
+		assert.match(readFileSync(envFd, "utf8"), /NGINXIONS_VERSION=develop/);
+		const custom = Buffer.from("# keep existing settings\n");
+		ftruncateSync(envFd, 0);
+		assert.equal(writeSync(envFd, custom, 0, custom.length, 0), custom.length);
+		ok(f.install());
+		// Verify the installer did not replace the file while we held it open.
+		const current = lstatSync(envFile);
+		assert.equal(current.dev, initial.dev);
+		assert.equal(current.ino, initial.ino);
+		assert.equal(current.size, custom.length);
+		const contents = Buffer.alloc(custom.length);
 		assert.equal(
-			contents.toString("utf8", 0, size),
-			"# keep existing settings\n",
+			readSync(envFd, contents, 0, contents.length, 0),
+			custom.length,
 		);
+		assert.deepEqual(contents, custom);
 	} finally {
-		closeSync(updatedFd);
+		closeSync(envFd);
 	}
 	assert.deepEqual(
 		f.calls().filter(([cmd]) => cmd === "pull"),
@@ -322,7 +342,7 @@ test("APT install uses explicit packages and refuses dependency removal", (t) =>
 	);
 });
 
-test("a fresh Docker installation registers a signed APT source and removes only its own source on purge", (t) => {
+test("Ubuntu resolute registers the signed Docker source when one requested package has no APT candidate", (t) => {
 	const f = fixture(t);
 	mkdirSync(f.target, { mode: 0o700 });
 	f.setImages({});
@@ -331,7 +351,7 @@ test("a fresh Docker installation registers a signed APT source and removes only
 	ok(
 		f.packages(
 			["install_docker_packages", "docker-ce", "docker-compose-plugin"],
-			{ TEST_APT_NO_SOURCE: "1" },
+			{ TEST_APT_NEEDS_SOURCE: "docker-compose-plugin" },
 		),
 	);
 	assert.match(
@@ -339,12 +359,27 @@ test("a fresh Docker installation registers a signed APT source and removes only
 		/^URIs: https:\/\/download\.docker\.com\/linux\/(debian|ubuntu)$/m,
 	);
 	assert.ok(readFileSync(source, "utf8").includes(`Signed-By: ${key}\n`));
+	assert.match(readFileSync(source, "utf8"), /^Suites: resolute$/m);
 	assert.match(
 		f.apt(),
 		/^update\ninstall -y --no-remove ca-certificates curl\nupdate\n/m,
 	);
 	ok(f.packages(["remove_docker_packages"]));
 	assert.ok(!existsSync(source) && !existsSync(key));
+});
+
+test("APT installation stops if any requested package still has no candidate after adding the source", (t) => {
+	const f = fixture(t);
+	mkdirSync(f.target, { mode: 0o700 });
+	const result = f.packages(
+		["install_docker_packages", "docker-ce", "docker-compose-plugin"],
+		{
+			TEST_APT_NO_CANDIDATE: "docker-compose-plugin",
+		},
+	);
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /unavailable for ubuntu resolute/);
+	assert.doesNotMatch(f.apt(), /install -y --no-remove docker-ce/);
 });
 
 test("Docker purge checks other resources and reverse dependencies and keeps pre-existing containerd", (t) => {

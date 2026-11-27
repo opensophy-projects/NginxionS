@@ -61,17 +61,29 @@ docker_id() {
 apt_docker_packages=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
 docker_sources=/etc/apt/sources.list.d/nginxions-docker.sources
 docker_key=/etc/apt/keyrings/nginxions-docker.asc
+os_release=/etc/os-release
+
+apt_has_candidates() {
+  local package
+  for package in "$@"; do
+    LC_ALL=C apt-cache policy "$package" | awk '
+      $1 == "Candidate:" && NF == 2 && $2 != "(none)" { found = 1 }
+      END { exit !found }
+    ' || return 1
+  done
+}
 
 install_docker_packages() {
   local os suite stage key_dir
   # shellcheck source=/dev/null
-  . /etc/os-release
+  . "$os_release"
   os=${ID:-} suite=${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}
   [[ "$os" = debian || "$os" = ubuntu ]] && [[ "$suite" =~ ^[a-z][a-z0-9-]*$ ]] \
     || fail "Automatic Docker installation supports Debian and Ubuntu. Install Docker Engine and Compose on this distribution first."
   command -v systemctl >/dev/null || fail "Automatic Docker installation requires systemd."
   apt-get update
-  if ! apt-cache show "$1" >/dev/null 2>&1; then
+  # APT can know a package name through dependencies even if no repository provides a version.
+  if ! apt_has_candidates "$@"; then
     if [[ ! -f "$install_dir/.docker-apt-source" ]]; then
       [[ ! -e "$docker_sources" && ! -L "$docker_sources" && ! -e "$docker_key" && ! -L "$docker_key" ]] \
         || fail "The NginxionS Docker APT source or key already exists."
@@ -94,6 +106,7 @@ install_docker_packages() {
     rm -r -- "$stage"
     apt-get update
   fi
+  apt_has_candidates "$@" || fail "Docker packages are unavailable for $os $suite (amd64). Check the Docker APT source."
   apt-get install -y --no-remove "$@"
 }
 
