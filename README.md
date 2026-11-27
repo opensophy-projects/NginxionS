@@ -28,16 +28,17 @@
 
 ## Быстрая установка
 
-Нужен Linux-сервер x86_64 со свободными портами 80, 443 и 81 и примерно 10 ГБ на диске.
-На Debian и Ubuntu с systemd установщик добавит Docker Engine и Compose из официального репозитория Docker, если их нет.
-На других дистрибутивах заранее установите Docker Engine 28+ и Compose 2.23+.
-Docker 28+ нужен для безопасности: в старых версиях до порта, опубликованного на `127.0.0.1` (панель), могли достучаться
-соседние машины той же локальной сети.
+На Linux x86_64 с Git, свободными портами 80, 443 и 81 и примерно 10 ГБ на диске выполните:
 
 ```bash
-git clone https://github.com/opensophy-projects/NginxionS nginxions && cd nginxions
-sudo ./scripts/install.sh
+git clone https://github.com/opensophy-projects/NginxionS nginxions &&
+  cd nginxions &&
+  sudo ./scripts/install.sh
 ```
+
+Установщик развернёт стек в `/opt/nginxions` и дождётся готовности сервисов. На Debian и Ubuntu с systemd он добавит
+недостающие Docker Engine и Compose из официального репозитория Docker. На других дистрибутивах заранее установите
+Docker Engine 28+ и Compose 2.23+. Docker 28 закрывает доступ из локальной сети к портам, опубликованным на `127.0.0.1`.
 
 Панель (порт `81`) по умолчанию слушает только `127.0.0.1` сервера, из интернета её не видно. Откройте её через
 SSH-туннель и зарегистрируйте администратора:
