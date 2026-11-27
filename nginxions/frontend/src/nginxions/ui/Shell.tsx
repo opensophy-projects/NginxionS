@@ -125,7 +125,7 @@ export function Shell({ children }: { children: ReactNode }) {
 			<a href={`#${MAIN_ID}`} className={styles.skip}>
 				<T id="nginxions.nav.skip" />
 			</a>
-			<main className={styles.main}>
+			<div className={styles.main}>
 				<MobileDrawer />
 				<div className={styles.grid}>
 					<div className={styles.sidebarShell}>
@@ -134,15 +134,15 @@ export function Shell({ children }: { children: ReactNode }) {
 					<div className={styles.contentShell}>
 						<div className={styles.content}>
 							<div id={SCROLL_ID} className={styles.scroll}>
-								<div id={MAIN_ID} tabIndex={-1} className={styles.page}>
+								<main id={MAIN_ID} tabIndex={-1} className={styles.page}>
 									<SectionTabs />
 									{children}
-								</div>
+								</main>
 							</div>
 						</div>
 					</div>
 				</div>
-			</main>
+			</div>
 		</>
 	);
 }

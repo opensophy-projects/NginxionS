@@ -190,10 +190,12 @@ export function BarList({
 	items,
 	emptyText,
 	format = formatNumber,
+	wrapLabels = false,
 }: {
 	items: BarItem[];
 	emptyText: string;
 	format?: (n: number) => string;
+	wrapLabels?: boolean;
 }) {
 	if (!items.length) return <div className={cn(styles.empty, "py-3")}>{emptyText}</div>;
 	const max = Math.max(...items.map((i) => i.value), 1);
@@ -201,7 +203,7 @@ export function BarList({
 		<ul className={styles.list}>
 			{items.map((item) => (
 				<li key={item.key} className={styles.listItem} title={item.title}>
-					<span className={styles.listLabel}>
+					<span className={cn(styles.listLabel, wrapLabels && styles.listLabelWrap)}>
 						{item.onClick ? (
 							<button type="button" className={styles.listButton} onClick={item.onClick}>
 								{item.label}
@@ -212,10 +214,14 @@ export function BarList({
 						{item.sub && <span className={styles.listSub}> · {item.sub}</span>}
 					</span>
 					<span className={styles.listValue}>{format(item.value)}</span>
-					<span className={styles.track}>
+					<span className={styles.track} aria-hidden="true">
 						<span
 							className={styles.bar}
-							style={{ display: "block", width: `${(item.value / max) * 100}%` }}
+							style={{
+								display: "block",
+								width: `${(item.value / max) * 100}%`,
+								minWidth: item.value === 0 ? 0 : undefined,
+							}}
 						/>
 					</span>
 				</li>

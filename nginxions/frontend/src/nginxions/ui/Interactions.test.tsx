@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { changeLocale } from "src/locale";
 import { afterEach, expect, it, vi } from "vitest";
-import { mockApi, renderApp } from "../test/harness";
+import { LearningTab } from "../learning/Learning";
+import { MetricsPanel } from "../pages/Crowdsec/Metrics";
+import WafEvents from "../pages/WafEvents";
+import { event } from "../test/fixtures";
+import { answer, mockApi, renderApp } from "../test/harness";
 import { Dropdown } from "./Dropdown";
 import { Popover } from "./Popover";
 import { SearchField } from "./SearchField";
@@ -14,6 +18,108 @@ afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+});
+
+it("groups open-appsec log counters on the chart and preserves exact paths in the table", async () => {
+	changeLocale("en");
+	mockApi();
+	const log = "/var/log/openappsec/cp-nano-http-transaction-handler.log";
+	await renderApp(
+		<MetricsPanel
+			kind="sources"
+			rows={[
+				{ key: log, value: 4 },
+				{ key: `${log}1`, value: 9 },
+			]}
+		/>,
+	);
+	const panel = within(screen.getByRole("region", { name: "Lines read by source" }));
+	expect(panel.getAllByRole("listitem")).toHaveLength(1);
+	expect(panel.getByRole("listitem")).toHaveTextContent("open-appsec log13");
+	fireEvent.click(panel.getByRole("button", { name: "Table" }));
+	expect(panel.getByRole("table")).toBeVisible();
+	expect(panel.getByText(log, { exact: true })).toBeVisible();
+	expect(panel.getByText(`${log}1`, { exact: true })).toBeVisible();
+	fireEvent.click(panel.getByRole("button", { name: "Chart" }));
+	expect(panel.queryByRole("table")).toBeNull();
+	expect(panel.getByRole("listitem")).toHaveTextContent("13");
+});
+
+it("paginates learning history on the server with the same controls as Events", async () => {
+	changeLocale("en");
+	mockApi();
+	const offsets: [number, number][] = [];
+	vi.mocked(fetch).mockImplementation(async (input) => {
+		const url = new URL(String(input), "http://localhost");
+		if (!url.pathname.endsWith("/learning/labels")) return Response.json(answer(String(input)));
+		const offset = Number(url.searchParams.get("offset"));
+		const limit = Number(url.searchParams.get("limit"));
+		offsets.push([offset, limit]);
+		const total = 26;
+		const items = Array.from({ length: Math.min(limit, total - offset) }, (_, i) => ({
+			id: total - offset - i,
+			host: `host-${total - offset - i}.example`,
+			createdOn: "2026-11-18T10:00:00.000Z",
+			decision: "dismiss",
+			origin: "group",
+			scopes: [],
+			features: {},
+		}));
+		return Response.json({ items, total, limit, offset });
+	});
+	await renderApp(<LearningTab />);
+
+	expect(await screen.findByText("Page 1 of 2")).toBeVisible();
+	expect(screen.getAllByText(/^host-\d+\.example$/)).toHaveLength(25);
+	expect(screen.getByRole("button", { name: "Newer" })).toBeDisabled();
+	fireEvent.click(screen.getByRole("button", { name: "Older" }));
+	expect(await screen.findByText("Page 2 of 2")).toBeVisible();
+	expect(screen.getByText("host-1.example")).toBeVisible();
+	expect(screen.queryByText("host-2.example")).toBeNull();
+	expect(screen.getByRole("button", { name: "Older" })).toBeDisabled();
+	fireEvent.click(screen.getByRole("button", { name: "Newer" }));
+	expect(await screen.findByText("Page 1 of 2")).toBeVisible();
+	expect(offsets).toEqual(
+		expect.arrayContaining([
+			[0, 25],
+			[25, 25],
+		]),
+	);
+});
+
+it("renders event flags for stored country names and GeoIP codes, including the event details", async () => {
+	changeLocale("en");
+	mockApi();
+	const security = { ...event, sourceCountry: "Germany", proxyIp: "192.0.2.8", proxyCountryCode: "FR" };
+	const crowdsec = {
+		...event,
+		id: "2",
+		kind: "crowdsec",
+		sourceIp: "198.51.100.8",
+		sourceCountry: "",
+		sourceCountryCode: "SG",
+	};
+	const unknown = { ...event, id: "3", kind: "system", sourceIp: "192.168.0.8", sourceCountry: "" };
+	vi.mocked(fetch).mockImplementation(async (input) => {
+		const path = new URL(String(input), "http://localhost").pathname;
+		if (path.endsWith("/nginxions/events")) {
+			return Response.json({ ...(answer(path) as object), events: [security, crowdsec, unknown] });
+		}
+		if (path.endsWith(`/nginxions/events/${security.id}`)) return Response.json({ ...security, raw: {} });
+		return Response.json(answer(String(input)));
+	});
+	await renderApp(<WafEvents />);
+
+	const germany = await screen.findByRole("img", { name: "Germany" });
+	expect(germany.closest("button")).toHaveTextContent(security.sourceIp);
+	expect(screen.getByRole("img", { name: "Singapore" }).closest("button")).toHaveTextContent(crowdsec.sourceIp);
+	expect(within(screen.getByRole("button", { name: unknown.sourceIp })).queryByRole("img")).toBeNull();
+	const row = germany.closest("tr");
+	if (!row) throw new Error("Missing event row");
+	fireEvent.click(row);
+	const details = await screen.findByRole("dialog");
+	expect(within(details).getByRole("img", { name: "Germany" })).toBeVisible();
+	expect(within(details).getByRole("img", { name: "France" })).toBeVisible();
 });
 
 it("opens a floating menu on an enabled choice and skips disabled choices with the arrow keys", async () => {

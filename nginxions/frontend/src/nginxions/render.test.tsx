@@ -10,6 +10,7 @@ import { toWafForm } from "./components/WafFields";
 import AgentOpenappsec from "./pages/AgentOpenappsec";
 import { type HostRow, recommendations, toRows } from "./pages/Hosts/rows";
 import Roles from "./pages/Roles";
+import { RefsEditor } from "./policy/RefsEditor";
 import { showRoleModal } from "./rbac/RoleModal";
 import { showUserRolesModal } from "./rbac/UserRolesModal";
 import * as f from "./test/fixtures";
@@ -20,6 +21,26 @@ afterEach(cleanup);
 
 const noop = () => {};
 const fn = () => vi.fn();
+
+it("replaces a threat protection profile while preserving the other policy references", async () => {
+	await changeLocale("en");
+	const change = vi.fn();
+	await renderApp(
+		<RefsEditor
+			value={{ threatPreventionPractices: [1], exceptions: [3] }}
+			objects={[
+				{ ...f.policyObject, kind: "threat_prevention", name: "first" },
+				{ ...f.policyObject, id: 2, kind: "threat_prevention", name: "second" },
+				{ ...f.policyObject, id: 3, kind: "exception" },
+			]}
+			onChange={change}
+		/>,
+	);
+
+	const profile = screen.getByRole("combobox", { name: "Threat protection profile" });
+	fireEvent.change(profile, { target: { value: "2" } });
+	expect(change).toHaveBeenCalledWith({ threatPreventionPractices: [2], exceptions: [3] });
+});
 
 // a host of each type, as the hosts page builds it
 const rows: HostRow[] = toRows(

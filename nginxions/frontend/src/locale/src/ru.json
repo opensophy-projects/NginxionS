@@ -818,20 +818,26 @@
 	"nginxions.acme.servers.used": {
 		"defaultMessage": "Сертификатов"
 	},
+	"nginxions.agent.choose-policy": {
+		"defaultMessage": "Что настроить"
+	},
 	"nginxions.agent.default.hint": {
-		"defaultMessage": "Действует на все хосты без своей политики: режим и блоки, которые использует агент."
+		"defaultMessage": "Хосты берут отсюда настройки, которые у них не заданы. Общие исключения действуют и на хостах со своими настройками."
 	},
 	"nginxions.agent.group.blocks": {
-		"defaultMessage": "Блоки политики"
+		"defaultMessage": "Переиспользуемые правила"
+	},
+	"nginxions.agent.group.hosts": {
+		"defaultMessage": "Хосты"
 	},
 	"nginxions.agent.group.more": {
-		"defaultMessage": "Ещё"
+		"defaultMessage": "Версии и YAML"
 	},
 	"nginxions.agent.group.policies": {
 		"defaultMessage": "Политики"
 	},
 	"nginxions.agent.host.hint": {
-		"defaultMessage": "Политика этого хоста: проверяет ли его WAF, насколько строго и какие блоки, если они отличаются от базовой политики."
+		"defaultMessage": "Выберите режим защиты и правила для этого хоста."
 	},
 	"nginxions.agent.host.none": {
 		"defaultMessage": "Хост удалён."
@@ -852,7 +858,7 @@
 		"defaultMessage": "Каждое изменение политики сохраняется; любую версию можно вернуть."
 	},
 	"nginxions.agent.openappsec.description": {
-		"defaultMessage": "WAF хостов на машинном обучении: его политики (базовая и политики хостов, собранные из блоков) и сам агент."
+		"defaultMessage": "Настройки защиты хостов, обучение и состояние агента."
 	},
 	"nginxions.agent.policies": {
 		"defaultMessage": "Из чего состоит политика"
@@ -870,10 +876,10 @@
 		"defaultMessage": "Вид"
 	},
 	"nginxions.agent.view.code": {
-		"defaultMessage": "Код"
+		"defaultMessage": "YAML"
 	},
 	"nginxions.agent.view.gui": {
-		"defaultMessage": "Интерфейс"
+		"defaultMessage": "Настройки"
 	},
 	"nginxions.analytics": {
 		"defaultMessage": "Аналитика"
@@ -2048,11 +2054,23 @@
 	"nginxions.crowdsec.metrics.decisions-of": {
 		"defaultMessage": "Решений: {origin}"
 	},
+	"nginxions.crowdsec.metrics.file": {
+		"defaultMessage": "Файл журнала"
+	},
 	"nginxions.crowdsec.metrics.none": {
 		"defaultMessage": "Нет метрик: CrowdSec не отвечает."
 	},
+	"nginxions.crowdsec.metrics.other": {
+		"defaultMessage": "Остальные ({count})"
+	},
 	"nginxions.crowdsec.metrics.overflows": {
 		"defaultMessage": "Сработавшие сценарии"
+	},
+	"nginxions.crowdsec.metrics.overflows.count": {
+		"defaultMessage": "Срабатывания"
+	},
+	"nginxions.crowdsec.metrics.overflows.hint": {
+		"defaultMessage": "Число срабатываний каждого сценария с запуска CrowdSec."
 	},
 	"nginxions.crowdsec.metrics.overflows.none": {
 		"defaultMessage": "С запуска CrowdSec не сработал ни один сценарий."
@@ -2060,11 +2078,32 @@
 	"nginxions.crowdsec.metrics.parsed": {
 		"defaultMessage": "Строк журналов разобрано"
 	},
+	"nginxions.crowdsec.metrics.source-access": {
+		"defaultMessage": "Запросы nginx"
+	},
+	"nginxions.crowdsec.metrics.source-error": {
+		"defaultMessage": "Ошибки nginx"
+	},
+	"nginxions.crowdsec.metrics.source-openappsec": {
+		"defaultMessage": "Журнал open-appsec"
+	},
 	"nginxions.crowdsec.metrics.sources": {
 		"defaultMessage": "Прочитано строк по источникам"
 	},
+	"nginxions.crowdsec.metrics.sources.count": {
+		"defaultMessage": "Строки"
+	},
+	"nginxions.crowdsec.metrics.sources.hint": {
+		"defaultMessage": "Строки с запуска CrowdSec. На графике файлы журнала open-appsec объединены."
+	},
 	"nginxions.crowdsec.metrics.sources.none": {
 		"defaultMessage": "Пока ничего не прочитано."
+	},
+	"nginxions.crowdsec.metrics.view.chart": {
+		"defaultMessage": "График"
+	},
+	"nginxions.crowdsec.metrics.view.table": {
+		"defaultMessage": "Таблица"
 	},
 	"nginxions.crowdsec.move-down": {
 		"defaultMessage": "Ниже"
@@ -3353,6 +3392,9 @@
 	"nginxions.learning.history.text": {
 		"defaultMessage": "Кто, что и когда разметил: локальный размеченный датасет. Отмена убирает разметку и её эффекты, группа возвращается в очередь."
 	},
+	"nginxions.learning.history.total": {
+		"defaultMessage": "{total, plural, one {# разметка} few {# разметки} many {# разметок} other {# разметки}}"
+	},
 	"nginxions.learning.host": {
 		"defaultMessage": "Хост"
 	},
@@ -3681,7 +3723,7 @@
 		"defaultMessage": "{values} значений, {assets} asset"
 	},
 	"nginxions.learning.snapshots.open": {
-		"defaultMessage": "Снимки обучения"
+		"defaultMessage": "Резервные копии обучения"
 	},
 	"nginxions.learning.snapshots.reason": {
 		"defaultMessage": "Почему"
@@ -3744,7 +3786,7 @@
 		"defaultMessage": "NginxionS делает снимок обученного состояния агента каждый день (хранятся последние {keep}) и по кнопке и сравнивает каждый с предыдущим. Восстановленный снимок заменяет обученное состояние: агент и NginxionS перезапускаются (около минуты), прежнее состояние сначала сохраняется снимком. Снимки лежат в томе данных NginxionS, поэтому его резервная копия их содержит; скачанный снимок загружается на другой NginxionS, чтобы перенести выученное."
 	},
 	"nginxions.learning.snapshots.title": {
-		"defaultMessage": "Снимки того, что выучил агент"
+		"defaultMessage": "Резервные копии обучения"
 	},
 	"nginxions.learning.snapshots.upload": {
 		"defaultMessage": "Загрузить снимок"
@@ -3862,6 +3904,48 @@
 	},
 	"nginxions.learning.when": {
 		"defaultMessage": "Когда"
+	},
+	"nginxions.metrics.cpu": {
+		"defaultMessage": "Нагрузка CPU"
+	},
+	"nginxions.metrics.cpu.hint": {
+		"defaultMessage": "Наибольшая средняя загрузка среди процессов агента."
+	},
+	"nginxions.metrics.detected": {
+		"defaultMessage": "Обнаружение"
+	},
+	"nginxions.metrics.ignored": {
+		"defaultMessage": "Пропуск"
+	},
+	"nginxions.metrics.ips": {
+		"defaultMessage": "Совпадения с сигнатурами IPS"
+	},
+	"nginxions.metrics.ips.hint": {
+		"defaultMessage": "Число совпадений в каждом отчёте агента."
+	},
+	"nginxions.metrics.mib": {
+		"defaultMessage": "{value} МиБ"
+	},
+	"nginxions.metrics.no-samples": {
+		"defaultMessage": "Нет замеров для этого графика"
+	},
+	"nginxions.metrics.prevented": {
+		"defaultMessage": "Блокировка"
+	},
+	"nginxions.metrics.rss": {
+		"defaultMessage": "Оперативная память"
+	},
+	"nginxions.metrics.rss.hint": {
+		"defaultMessage": "Наибольший средний объём физической памяти (RSS) отдельного процесса."
+	},
+	"nginxions.metrics.technical": {
+		"defaultMessage": "Технические метрики Prometheus"
+	},
+	"nginxions.metrics.updated": {
+		"defaultMessage": "Замер в {time}"
+	},
+	"nginxions.metrics.window": {
+		"defaultMessage": "Один замер в минуту · история до 60 минут с запуска сервера"
 	},
 	"nginxions.migration.after": {
 		"defaultMessage": "Проверьте хосты, направьте DNS или порты на NginxionS и после этого остановите старый контейнер. WAF и CrowdSec настраиваются для хостов уже в NginxionS."
@@ -6167,6 +6251,9 @@
 	"nginxions.policy.enforcement.fullSchema": {
 		"defaultMessage": "Весь API: запрос к пути, которого нет в файлах, тоже отклоняется"
 	},
+	"nginxions.policy.exceptions-selected": {
+		"defaultMessage": "Выбрано: {count}"
+	},
 	"nginxions.policy.export": {
 		"defaultMessage": "Экспорт"
 	},
@@ -6690,19 +6777,19 @@
 		"defaultMessage": "Ограничения частоты"
 	},
 	"nginxions.policy.rule.customResponse": {
-		"defaultMessage": "Ответ"
+		"defaultMessage": "Ответ при блокировке"
 	},
 	"nginxions.policy.rule.exceptions": {
 		"defaultMessage": "Исключения"
 	},
 	"nginxions.policy.rule.mode": {
-		"defaultMessage": "Режим"
+		"defaultMessage": "Режим по умолчанию"
 	},
 	"nginxions.policy.rule.sourceIdentifiers": {
-		"defaultMessage": "Идентификаторы источника"
+		"defaultMessage": "Как определить клиента"
 	},
 	"nginxions.policy.rule.threatPreventionPractices": {
-		"defaultMessage": "Практики"
+		"defaultMessage": "Набор защиты от атак"
 	},
 	"nginxions.policy.rule.triggers": {
 		"defaultMessage": "Журналирование"
@@ -8724,22 +8811,22 @@
 		"defaultMessage": "Сигнатуры загружены, ClamAV перезапускается с ними"
 	},
 	"nginxions.waf.host-description": {
-		"defaultMessage": "WAF анализирует каждый запрос к этому хосту с помощью машинного обучения. Начните с Detect-Learn: модель изучает обычный трафик сайта и только записывает атаки. Когда события выглядят правильно, переключите на Prevent-Learn."
+		"defaultMessage": "В режиме обнаружения агент записывает подозрительные запросы. После проверки событий можно включить блокировку."
 	},
 	"nginxions.waf.host-enabled": {
 		"defaultMessage": "Защищать с помощью open-appsec"
 	},
 	"nginxions.waf.host-policy": {
-		"defaultMessage": "Объекты политики"
+		"defaultMessage": "Правила защиты"
 	},
 	"nginxions.waf.host-policy.custom": {
-		"defaultMessage": "Свои объекты"
+		"defaultMessage": "Настроить для этого хоста"
 	},
 	"nginxions.waf.host-policy.default": {
-		"defaultMessage": "Как в базовой политике"
+		"defaultMessage": "Использовать базовые правила"
 	},
 	"nginxions.waf.host-policy.hint": {
-		"defaultMessage": "Защита от атак, ограничение запросов, ответ и исключения этого хоста (Агенты → open-appsec). Исключения базовой политики действуют тоже."
+		"defaultMessage": "Режим задан выше для этого хоста. Исключения из базовой политики применяются вместе с исключениями хоста."
 	},
 	"nginxions.waf.host-policy.template": {
 		"defaultMessage": "Шаблон: {name}"
@@ -8802,7 +8889,7 @@
 		"defaultMessage": "Prevent-Learn"
 	},
 	"nginxions.waf.mode.prevent-learn.hint": {
-		"defaultMessage": "Атаки блокируются (ответ 403) и записываются в журнал. Модель продолжает обучаться."
+		"defaultMessage": "Агент блокирует запросы по выбранным правилам и продолжает обучаться."
 	},
 	"nginxions.waf.model": {
 		"defaultMessage": "Расширенная ML-модель"

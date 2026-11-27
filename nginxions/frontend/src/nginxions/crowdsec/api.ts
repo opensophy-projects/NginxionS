@@ -91,7 +91,7 @@ export interface Bouncer {
 	authType: string;
 }
 
-interface Counter {
+export interface Counter {
 	key: string;
 	value: number;
 }
@@ -147,7 +147,15 @@ export interface CrowdsecAlert {
 	machineId: string;
 	eventsCount: number;
 	simulated: boolean;
-	source: { ip?: string; value?: string; scope?: string; cn?: string; asName?: string; range?: string };
+	source: {
+		ip?: string;
+		value?: string;
+		scope?: string;
+		cn?: string;
+		countryCode?: string;
+		asName?: string;
+		range?: string;
+	};
 	decisions: { id: number; type: string; value: string; duration: string; origin: string }[];
 	meta: { key: string; value: string }[];
 }

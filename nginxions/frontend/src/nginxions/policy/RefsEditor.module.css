@@ -1,0 +1,39 @@
+.fields {
+	border-block-start: 1px solid var(--border-strong);
+}
+
+.row {
+	display: grid;
+	grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 1.2fr);
+	align-items: start;
+	min-width: 0;
+	gap: 0.375rem 1rem;
+	padding-block: 0.75rem;
+	border-block-end: 1px solid var(--border-strong);
+}
+
+.label {
+	padding-top: 0.5rem;
+	font-weight: 500;
+	overflow-wrap: anywhere;
+}
+
+.control {
+	min-width: 0;
+	padding-block: 0.4rem;
+	overflow-wrap: anywhere;
+}
+
+.control summary {
+	cursor: pointer;
+}
+
+@media (max-width: 575.98px) {
+	.row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.label {
+		padding-top: 0;
+	}
+}

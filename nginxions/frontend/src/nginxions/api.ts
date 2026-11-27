@@ -162,6 +162,8 @@ export interface SecurityEvent {
 	sourcePort: number | null;
 	proxyIp: string;
 	sourceCountry: string;
+	sourceCountryCode?: string;
+	proxyCountryCode?: string;
 	host: string;
 	asset: string;
 	method: string;
@@ -548,8 +550,22 @@ export interface AgentMetric {
 	samples: { labels: [string, string][]; value: number }[];
 }
 
-export const getWafAgentMetrics = (): Promise<{ reachable: boolean; metrics: AgentMetric[]; error: string | null }> =>
-	api.get({ url: "/nginxions/waf/agent/metrics" });
+export interface AgentMetricPoint {
+	time: number;
+	cpu: number | null;
+	rss: number | null;
+	prevented: number | null;
+	detected: number | null;
+	ignored: number | null;
+}
+
+export const getWafAgentMetrics = (): Promise<{
+	reachable: boolean;
+	metrics: AgentMetric[];
+	error: string | null;
+	time: number;
+	history: AgentMetricPoint[];
+}> => api.get({ url: "/nginxions/waf/agent/metrics" });
 
 export const setWafAgent = (data: WafAgentSettings, apply = true): Promise<WafAgentState> =>
 	api.put({ url: "/nginxions/waf/agent", data: { ...data, apply } });

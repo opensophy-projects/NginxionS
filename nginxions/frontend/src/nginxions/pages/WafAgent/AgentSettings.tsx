@@ -188,10 +188,10 @@ function ModelCard() {
 			<p className="text-secondary">
 				<T id="nginxions.waf.model.description" />
 			</p>
-			<div className="d-flex align-items-center gap-3">
-				<div className="flex-fill">
+			<div className="d-flex flex-wrap align-items-center gap-2">
+				<div className="flex-fill text-break">
 					{data?.model.present ? (
-						<span className="badge bg-green-lt">
+						<span className="badge bg-green-lt text-wrap">
 							<T
 								id="nginxions.waf.model.present"
 								data={{
@@ -245,7 +245,7 @@ function ModelCard() {
 
 export function AgentSettingsCard() {
 	return (
-		<div className="card mt-4">
+		<div className="card">
 			<div className="card-header">
 				<h3 className="card-title">
 					<T id="nginxions.waf.agent-settings" />

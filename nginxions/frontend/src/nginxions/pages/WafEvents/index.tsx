@@ -15,6 +15,7 @@ import { useEvents } from "../../hooks";
 import { hostLabel, showRequestModal, statusTone } from "../../modals/RequestModal";
 import { showWafEventModal } from "../../modals/WafEventModal";
 import { useCan } from "../../rbac/hooks";
+import { CountryFlag } from "../../ui/charts/CountryFlag";
 import { Label } from "../../ui/InfoTip";
 import { CustomPeriod, ExportMenu, Pager } from "../../ui/Lists";
 import { Popover } from "../../ui/Popover";
@@ -413,7 +414,15 @@ const FIELD_LABEL: Record<ListField, string> = {
 	node: "nginxions.events.node",
 };
 
-function ActiveFilters({ filters, onChange }: { filters: EventFilters; onChange: (f: EventFilters) => void }) {
+function ActiveFilters({
+	filters,
+	onChange,
+	events,
+}: {
+	filters: EventFilters;
+	onChange: (f: EventFilters) => void;
+	events: SecurityEvent[];
+}) {
 	const chips: { key: string; label: string; value: string; remove: () => void }[] = [];
 	if (filters.important) {
 		chips.push({
@@ -457,15 +466,34 @@ function ActiveFilters({ filters, onChange }: { filters: EventFilters; onChange:
 	if (!chips.length) return null;
 	return (
 		<div className={hostStyles.active}>
-			{chips.map((chip) => (
-				<span key={chip.key} className={hostStyles.activeChip}>
-					<span className={hostStyles.activeField}>{chip.label}</span>
-					{chip.value && <span>{chip.value}</span>}
-					<button type="button" aria-label={t("nginxions.events.filters.remove")} onClick={chip.remove}>
-						<IconX size={14} />
-					</button>
-				</span>
-			))}
+			{chips.map((chip) => {
+				const source = chip.key.startsWith("ip:")
+					? events.find(
+							(e) =>
+								e.sourceIp === chip.value &&
+								(e.request?.country || e.sourceCountryCode || e.sourceCountry),
+						)
+					: undefined;
+				return (
+					<span key={chip.key} className={hostStyles.activeChip}>
+						<span className={hostStyles.activeField}>{chip.label}</span>
+						{chip.value && (
+							<span>
+								{source && (
+									<CountryFlag
+										code={source.request?.country || source.sourceCountryCode}
+										fallback={source.sourceCountry}
+									/>
+								)}
+								{chip.value}
+							</span>
+						)}
+						<button type="button" aria-label={t("nginxions.events.filters.remove")} onClick={chip.remove}>
+							<IconX size={14} />
+						</button>
+					</span>
+				);
+			})}
 		</div>
 	);
 }
@@ -506,6 +534,7 @@ function RequestRow({
 			<td className={styles.score}>—</td>
 			<td>
 				<button type="button" className={styles.link} onClick={stop("ip", r.ip)}>
+					<CountryFlag code={r.country} />
 					{r.ip}
 				</button>
 			</td>
@@ -561,6 +590,7 @@ function EventRow({ event, onFilter }: { event: SecurityEvent; onFilter: (field:
 			<td>
 				{event.sourceIp ? (
 					<button type="button" className={styles.link} onClick={stop("ip", event.sourceIp)}>
+						<CountryFlag code={event.sourceCountryCode} fallback={event.sourceCountry} />
 						{event.sourceIp}
 					</button>
 				) : (
@@ -702,7 +732,7 @@ function WafEventsPage() {
 				/>
 			)}
 
-			<ActiveFilters filters={filters} onChange={setFilters} />
+			<ActiveFilters filters={filters} onChange={setFilters} events={events} />
 
 			{data && !data.available && (
 				<Alert variant="warning" className="mb-0">

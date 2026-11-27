@@ -1,7 +1,7 @@
 // Agents → open-appsec → Learning: readiness of the hosts, the queue of what the agent is not sure about (and the
 // suggestions of the tuning service), the history of labels with undo.
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlayerSkipForward, IconShieldX } from "@tabler/icons-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import cn from "classnames";
 import { useEffect, useState } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -15,6 +15,7 @@ import hostStyles from "../pages/Hosts/Hosts.module.css";
 import eventStyles from "../pages/WafEvents/Events.module.css";
 import { SimulationNote } from "../policy/Review";
 import { useCan, useRbacMe } from "../rbac/hooks";
+import { Pager } from "../ui/Lists";
 import { SearchField } from "../ui/SearchField";
 import { dateTime, timeAgo } from "../ui/time";
 import {
@@ -137,7 +138,7 @@ function Hosts({
 					</p>
 				</div>
 				{allHosts && (
-					<div className="d-flex gap-2">
+					<div className="d-flex flex-wrap gap-2">
 						<button
 							type="button"
 							className="btn btn-sm"
@@ -177,7 +178,9 @@ function Hosts({
 					</div>
 				) : (
 					<div className={hostStyles.scroller}>
-						<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+						<table
+							className={cn("table table-vcenter card-table", hostStyles.table, styles.responsiveTable)}
+						>
 							<thead>
 								<tr>
 									<th>
@@ -208,11 +211,11 @@ function Hosts({
 								) : (
 									data.hosts.map((h) => (
 										<tr key={h.id}>
-											<td>{h.name}</td>
-											<td>
+											<td data-label={t("nginxions.learning.host")}>{h.name}</td>
+											<td data-label={t("nginxions.learning.mode")}>
 												<T id={`nginxions.learning.mode.${h.mode}`} />
 											</td>
-											<td>
+											<td data-label={t("nginxions.learning.readiness")}>
 												<Readiness host={h} />
 												<button
 													type="button"
@@ -229,7 +232,7 @@ function Hosts({
 													</div>
 												)}
 											</td>
-											<td className={styles.num}>
+											<td data-label={t("nginxions.learning.labels")} className={styles.num}>
 												<T
 													id="nginxions.learning.labels.value"
 													data={{
@@ -247,7 +250,10 @@ function Hosts({
 													</div>
 												)}
 											</td>
-											<td className={styles.num}>
+											<td
+												data-label={t("nginxions.learning.false-positives")}
+												className={styles.num}
+											>
 												{h.falsePositives.before || h.falsePositives.after ? (
 													<T
 														id="nginxions.learning.false-positives.value"
@@ -458,7 +464,13 @@ function Queue({ label }: { label: boolean }) {
 				) : (
 					<>
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table
+								className={cn(
+									"table table-vcenter card-table",
+									hostStyles.table,
+									styles.responsiveTable,
+								)}
+							>
 								<thead>
 									<tr>
 										<th>
@@ -486,7 +498,7 @@ function Queue({ label }: { label: boolean }) {
 									) : (
 										data.items.map((g) => (
 											<tr key={g.key}>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div className={styles.whatHead}>
 														<span className={cn(styles.badge, styles[g.reason])}>
 															<T id={`nginxions.learning.reason.${g.reason}`} />
@@ -512,7 +524,10 @@ function Queue({ label }: { label: boolean }) {
 														</div>
 													)}
 												</td>
-												<td className={cn(styles.num, styles.wrap)}>
+												<td
+													data-label={t("nginxions.learning.events")}
+													className={cn(styles.num, styles.wrap)}
+												>
 													<div>{g.events.toLocaleString(intl.locale)}</div>
 													<div className={styles.muted}>
 														<T
@@ -521,8 +536,14 @@ function Queue({ label }: { label: boolean }) {
 														/>
 													</div>
 												</td>
-												<td className={styles.num}>{g.score ?? "—"}</td>
-												<td className={styles.num} title={g.last ? dateTime(g.last) : ""}>
+												<td data-label={t("nginxions.learning.score")} className={styles.num}>
+													{g.score ?? "—"}
+												</td>
+												<td
+													data-label={t("nginxions.learning.last")}
+													className={styles.num}
+													title={g.last ? dateTime(g.last) : ""}
+												>
 													{g.last ? timeAgo(g.last) : "—"}
 												</td>
 												{label && (
@@ -587,7 +608,13 @@ function Queue({ label }: { label: boolean }) {
 					{data.suggestions.length > 0 && (
 						<div className={cn("card", hostStyles.tableCard)}>
 							<div className={hostStyles.scroller}>
-								<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+								<table
+									className={cn(
+										"table table-vcenter card-table",
+										hostStyles.table,
+										styles.responsiveTable,
+									)}
+								>
 									<thead>
 										<tr>
 											<th>
@@ -605,15 +632,19 @@ function Queue({ label }: { label: boolean }) {
 									<tbody>
 										{data.suggestions.map((s) => (
 											<tr key={`${s.asset}:${s.id}`}>
-												<td>{s.severity || "—"}</td>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.severity")}>
+													{s.severity || "—"}
+												</td>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div>{s.asset}</div>
 													<div className={styles.muted}>
 														<T id={`nginxions.learning.scope.${s.type}`} />:{" "}
 														<span className={styles.mono}>{s.title}</span>
 													</div>
 												</td>
-												<td>{s.attackTypes.join(", ") || "—"}</td>
+												<td data-label={t("nginxions.learning.attacks")}>
+													{s.attackTypes.join(", ") || "—"}
+												</td>
 												{label && (
 													<td>
 														<LabelButtons onLabel={(d) => openSuggestion(s, d)} />
@@ -635,9 +666,10 @@ function Queue({ label }: { label: boolean }) {
 function History({ label }: { label: boolean }) {
 	const refresh = useRefresh();
 	const [page, setPage] = useState(0);
-	const { data, isLoading, isError, error } = useQuery({
+	const { data, isLoading, isError, isPlaceholderData, error } = useQuery({
 		queryKey: ["nginxions-learning-labels", page],
 		queryFn: () => getLabels({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+		placeholderData: keepPreviousData,
 	});
 	const pages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
 
@@ -675,7 +707,13 @@ function History({ label }: { label: boolean }) {
 				) : (
 					<>
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table
+								className={cn(
+									"table table-vcenter card-table",
+									hostStyles.table,
+									styles.responsiveTable,
+								)}
+							>
 								<thead>
 									<tr>
 										<th>
@@ -693,7 +731,7 @@ function History({ label }: { label: boolean }) {
 										{label && <th />}
 									</tr>
 								</thead>
-								<tbody>
+								<tbody aria-busy={isPlaceholderData}>
 									{data.items.length === 0 ? (
 										<tr>
 											<td colSpan={label ? 5 : 4} className={hostStyles.empty}>
@@ -703,11 +741,11 @@ function History({ label }: { label: boolean }) {
 									) : (
 										data.items.map((l) => (
 											<tr key={l.id} className={cn(l.undoneOn && "text-secondary")}>
-												<td className={styles.num}>
+												<td data-label={t("nginxions.learning.when")} className={styles.num}>
 													<div title={dateTime(l.createdOn)}>{timeAgo(l.createdOn)}</div>
 													<div className={styles.muted}>{l.user?.name ?? "—"}</div>
 												</td>
-												<td>
+												<td data-label={t("nginxions.learning.decision")}>
 													<span className={cn(styles.badge, styles[l.decision])}>
 														<T id={`nginxions.learning.decision.${l.decision}`} />
 													</span>
@@ -723,7 +761,7 @@ function History({ label }: { label: boolean }) {
 														</div>
 													)}
 												</td>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div>{l.host}</div>
 													{l.features.uri !== undefined && (
 														<div className={styles.url}>{l.features.uri || "/"}</div>
@@ -740,7 +778,10 @@ function History({ label }: { label: boolean }) {
 													</div>
 													{l.note && <div className={styles.muted}>{l.note}</div>}
 												</td>
-												<td className={styles.muted}>
+												<td
+													data-label={t("nginxions.learning.effects")}
+													className={styles.muted}
+												>
 													{l.undoneOn ? (
 														"—"
 													) : l.origin === "tuning" ? (
@@ -801,6 +842,7 @@ function History({ label }: { label: boolean }) {
 															<button
 																type="button"
 																className="btn btn-sm"
+																disabled={isPlaceholderData}
 																onClick={() => undo(l.id)}
 															>
 																<T id="nginxions.learning.undo" />
@@ -814,34 +856,19 @@ function History({ label }: { label: boolean }) {
 								</tbody>
 							</table>
 						</div>
-						{pages > 1 && (
-							<div className={eventStyles.pager}>
-								<span>
-									<T id="nginxions.audit.total" data={{ total: data.total }} />
+						<Pager
+							total={<T id="nginxions.learning.history.total" data={{ total: data.total }} />}
+							extra={
+								<span className="text-nowrap" aria-live="polite">
+									<T
+										id="nginxions.audit.page"
+										data={{ page: Math.floor(data.offset / PAGE_SIZE) + 1, pages }}
+									/>
 								</span>
-								<div className={eventStyles.pagerButtons}>
-									<span>
-										<T id="nginxions.audit.page" data={{ page: page + 1, pages }} />
-									</span>
-									<button
-										type="button"
-										className={hostStyles.tool}
-										disabled={page === 0}
-										onClick={() => setPage(page - 1)}
-									>
-										<IconChevronLeft size={16} />
-									</button>
-									<button
-										type="button"
-										className={hostStyles.tool}
-										disabled={page + 1 >= pages}
-										onClick={() => setPage(page + 1)}
-									>
-										<IconChevronRight size={16} />
-									</button>
-								</div>
-							</div>
-						)}
+							}
+							newer={isPlaceholderData || page === 0 ? null : () => setPage(page - 1)}
+							older={isPlaceholderData || page + 1 >= pages ? null : () => setPage(page + 1)}
+						/>
 					</>
 				)}
 			</div>

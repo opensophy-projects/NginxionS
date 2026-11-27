@@ -1,10 +1,10 @@
- 
-
 package rest
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -109,11 +109,19 @@ func NewAdapter(cs Configuration, hs HealthService, appsvc AppService) (*Adapter
 	}
 
 	r := ra.newRouter(serverTimeout)
+	// In NginxionS the agent and the manager API use SmartSync through the shared loopback interface.
+	host, configured := os.LookupEnv("SERVER_HOST")
+	if !configured {
+		host = "127.0.0.1"
+	}
+	defaultAddr := net.JoinHostPort(host, "http")
 	server := &http.Server{
+		Addr:    defaultAddr,
 		Handler: r,
 	}
 
 	altServer := &http.Server{
+		Addr:    defaultAddr,
 		Handler: r,
 	}
 
@@ -139,7 +147,7 @@ func NewAdapter(cs Configuration, hs HealthService, appsvc AppService) (*Adapter
 	}
 
 	if port > 0 {
-		server.Addr = ":" + strconv.Itoa(port)
+		server.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 
 	ra.server = server
@@ -150,7 +158,7 @@ func NewAdapter(cs Configuration, hs HealthService, appsvc AppService) (*Adapter
 	}
 
 	if altPort > 0 {
-		altServer.Addr = ":" + strconv.Itoa(altPort)
+		altServer.Addr = net.JoinHostPort(host, strconv.Itoa(altPort))
 	}
 
 	ra.altServer = altServer

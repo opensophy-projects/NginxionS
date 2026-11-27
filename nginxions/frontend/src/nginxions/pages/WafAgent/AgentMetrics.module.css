@@ -1,0 +1,68 @@
+.dashboard {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 1rem;
+}
+
+.heading {
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 0.375rem 1rem;
+}
+
+.grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.875rem;
+}
+
+.chart {
+	min-width: 0;
+	padding: 0.875rem;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-lg);
+	background: var(--background-inset);
+}
+
+.wide {
+	grid-column: 1 / -1;
+}
+
+.chartHeading {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.chartHeading h4 {
+	flex: 1;
+	margin: 0;
+}
+
+.chartHeading strong {
+	white-space: nowrap;
+	font-size: 1.125rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.chart p {
+	margin: 0.375rem 0 0.75rem;
+	color: var(--foreground-muted);
+	font-size: 0.8125rem;
+}
+
+.technical {
+	margin-top: 1rem;
+}
+
+.technical summary {
+	cursor: pointer;
+	width: fit-content;
+	padding-block: 0.375rem;
+}
+
+@media (max-width: 767.98px) {
+	.grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

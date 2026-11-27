@@ -237,7 +237,7 @@ function Pane({
 						/>
 					)
 				) : item.type === "default" ? (
-					<DefaultPolicyTab data={data} manage={manage} refresh={refresh} />
+					<DefaultPolicyTab data={data} manage={manage} refresh={refresh} embedded />
 				) : item.type === "kind" ? (
 					<ObjectsTab kind={item.kind} data={data} manage={manage} refresh={refresh} />
 				) : item.type === "host" ? (
@@ -301,6 +301,7 @@ function PoliciesTab({ allHosts }: { allHosts: boolean }) {
 		<button
 			type="button"
 			className={cn(styles.navItem, itemKey(value) === itemKey(item) && styles.navOn)}
+			aria-current={itemKey(value) === itemKey(item) ? "true" : undefined}
 			onClick={() => choose(value)}
 		>
 			<span className={styles.navLabel}>{children}</span>
@@ -309,60 +310,105 @@ function PoliciesTab({ allHosts }: { allHosts: boolean }) {
 	);
 
 	return (
-		<div className={styles.editor}>
-			<nav className={cn("card", styles.nav)} aria-label={t("nginxions.agent.policies")}>
-				<div className={styles.navGroup}>
-					<T id="nginxions.agent.group.policies" />
-				</div>
-				{allHosts && (
-					<NavItem value={{ type: "default" }}>
-						<T id="nginxions.policy.default" />
-					</NavItem>
-				)}
-				{hosts.map((h) => (
-					<NavItem
-						key={h.id}
-						value={{ type: "host", id: h.id }}
-						sub={
-							<span className={cn(styles.mode, styles[mode(h.id)])}>
-								{t(`nginxions.hosts.waf.${mode(h.id)}`)}
-							</span>
-						}
+		<div className={styles.policyLayout}>
+			<div className={styles.editor}>
+				<label className={styles.mobilePicker}>
+					<span className="form-label">
+						<T id="nginxions.agent.choose-policy" />
+					</span>
+					<select
+						className="form-select"
+						value={itemKey(item)}
+						onChange={(e) => choose(parseItem(e.target.value))}
 					>
-						{h.name}
-					</NavItem>
-				))}
-				{allHosts && (
-					<>
+						{allHosts && <option value="default">{t("nginxions.policy.default")}</option>}
+						<optgroup label={t("nginxions.agent.group.hosts")}>
+							{hosts.map((h) => (
+								<option key={h.id} value={`host-${h.id}`}>
+									{h.name} · {t(`nginxions.hosts.waf.${mode(h.id)}`)}
+								</option>
+							))}
+						</optgroup>
+						{allHosts && (
+							<>
+								<optgroup label={t("nginxions.agent.group.blocks")}>
+									{KINDS.map((kind) => (
+										<option key={kind} value={`kind-${kind}`}>
+											{t(`nginxions.policy.kinds.${kind}`)}
+										</option>
+									))}
+								</optgroup>
+								<optgroup label={t("nginxions.agent.group.more")}>
+									<option value="versions">{t("nginxions.agent.item.versions")}</option>
+									<option value="expert">{t("nginxions.agent.item.expert")}</option>
+								</optgroup>
+							</>
+						)}
+					</select>
+				</label>
+				<nav className={cn("card", styles.nav)} aria-label={t("nginxions.agent.policies")}>
+					{allHosts && (
+						<NavItem value={{ type: "default" }}>
+							<T id="nginxions.policy.default" />
+						</NavItem>
+					)}
+					{hosts.length > 0 && (
 						<div className={styles.navGroup}>
-							<T id="nginxions.agent.group.blocks" />
+							<T id="nginxions.agent.group.hosts" />
 						</div>
-						{KINDS.map((kind) => (
-							<NavItem
-								key={kind}
-								value={{ type: "kind", kind }}
-								sub={
-									<span className={styles.count}>
-										{data.objects.filter((o) => o.kind === kind).length}
-									</span>
-								}
+					)}
+					{hosts.map((h) => (
+						<NavItem
+							key={h.id}
+							value={{ type: "host", id: h.id }}
+							sub={
+								<span className={cn(styles.mode, styles[mode(h.id)])}>
+									{t(`nginxions.hosts.waf.${mode(h.id)}`)}
+								</span>
+							}
+						>
+							{h.name}
+						</NavItem>
+					))}
+					{allHosts && (
+						<>
+							<details className={styles.navDetails} open={item.type === "kind" || undefined}>
+								<summary>
+									<T id="nginxions.agent.group.blocks" />
+								</summary>
+								{KINDS.map((kind) => (
+									<NavItem
+										key={kind}
+										value={{ type: "kind", kind }}
+										sub={
+											<span className={styles.count}>
+												{data.objects.filter((o) => o.kind === kind).length}
+											</span>
+										}
+									>
+										<T id={`nginxions.policy.kinds.${kind}`} />
+									</NavItem>
+								))}
+							</details>
+							<details
+								className={styles.navDetails}
+								open={item.type === "versions" || item.type === "expert" || undefined}
 							>
-								<T id={`nginxions.policy.kinds.${kind}`} />
-							</NavItem>
-						))}
-						<div className={styles.navGroup}>
-							<T id="nginxions.agent.group.more" />
-						</div>
-						<NavItem value={{ type: "versions" }}>
-							<T id="nginxions.agent.item.versions" />
-						</NavItem>
-						<NavItem value={{ type: "expert" }}>
-							<T id="nginxions.agent.item.expert" />
-						</NavItem>
-					</>
-				)}
-			</nav>
-			<Pane key={itemKey(item)} item={item} data={data} manage={manage} refresh={refresh} hosts={hosts} />
+								<summary>
+									<T id="nginxions.agent.group.more" />
+								</summary>
+								<NavItem value={{ type: "versions" }}>
+									<T id="nginxions.agent.item.versions" />
+								</NavItem>
+								<NavItem value={{ type: "expert" }}>
+									<T id="nginxions.agent.item.expert" />
+								</NavItem>
+							</details>
+						</>
+					)}
+				</nav>
+				<Pane key={itemKey(item)} item={item} data={data} manage={manage} refresh={refresh} hosts={hosts} />
+			</div>
 		</div>
 	);
 }
@@ -402,7 +448,12 @@ function AgentOpenappsecPage() {
 						<button
 							type="button"
 							className={cn("nav-link", { active: tab === x })}
-							onClick={() => setParams(x === "policies" ? {} : { tab: x }, { replace: true })}
+							aria-pressed={tab === x}
+							onClick={() => {
+								if (tab === x) return;
+								setParams(x === "policies" ? {} : { tab: x }, { replace: true });
+								document.getElementById("nginxions-content")?.scrollTo({ top: 0 });
+							}}
 						>
 							<T id={`nginxions.agent.tab.${x}`} />
 						</button>

@@ -20,6 +20,7 @@ import { t } from "../../crowdsec/labels";
 import styles from "../../pki/Pki.module.css";
 import { useCan } from "../../rbac/hooks";
 import { SearchField } from "../../ui/SearchField";
+import crowdsecStyles from "./Crowdsec.module.css";
 
 const STATUS_TONE: Record<string, string> = {
 	"up-to-date": "bg-green-lt",
@@ -96,7 +97,7 @@ export function HubTab({ onlineHub, refresh }: { onlineHub: boolean; refresh: ()
 					</span>
 				</label>
 				{manage && (
-					<div className="d-flex gap-2 ms-auto">
+					<div className="d-flex flex-wrap gap-2">
 						{outdated > 0 && (
 							<button
 								type="button"
@@ -168,7 +169,7 @@ export function HubTab({ onlineHub, refresh }: { onlineHub: boolean; refresh: ()
 				</p>
 			) : (
 				<div className="table-responsive">
-					<table className="table table-vcenter card-table">
+					<table className={cn("table table-vcenter card-table nx-stack", crowdsecStyles.table)}>
 						<thead>
 							<tr>
 								<th>
@@ -207,8 +208,10 @@ export function HubTab({ onlineHub, refresh }: { onlineHub: boolean; refresh: ()
 												</div>
 											)}
 										</td>
-										<td className="text-nowrap">{t(`nginxions.crowdsec.hub.type.${i.type}`)}</td>
-										<td>
+										<td data-label={t("nginxions.crowdsec.hub.type")} className="text-nowrap">
+											{t(`nginxions.crowdsec.hub.type.${i.type}`)}
+										</td>
+										<td data-label={t("nginxions.crowdsec.status")}>
 											{i.installed ? (
 												<span
 													className={cn("badge", STATUS_TONE[i.status] || "bg-secondary-lt")}
@@ -226,13 +229,13 @@ export function HubTab({ onlineHub, refresh }: { onlineHub: boolean; refresh: ()
 												</span>
 											)}
 										</td>
-										<td className="text-nowrap">
+										<td data-label={t("nginxions.crowdsec.version")} className="text-nowrap">
 											{i.version && i.version !== i.latest
 												? `${i.version} → ${i.latest}`
 												: i.latest}
 										</td>
 										{manage && (
-											<td>
+											<td className="nx-actions-row">
 												<button
 													type="button"
 													className={cn(
