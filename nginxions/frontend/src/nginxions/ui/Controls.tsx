@@ -87,7 +87,7 @@ export function UserMenu({ onAction }: { onAction?: () => void }) {
 				<>
 					<span className={styles.triggerLabel}>
 						{me?.nickname || me?.name}
-						<span>·</span>
+						<span className={styles.triggerSeparator}>·</span>
 						{role ? roleName(role) : <T id="nginxions.rbac.no-roles" />}
 					</span>
 					<IconSelector size={16} style={{ flex: "none" }} />
