@@ -30,6 +30,9 @@ if [[ ! -e "$install_dir" ]]; then
   mv -T -- "$stage" "$install_dir"
   trap - EXIT
 fi
+# Docker bind-mounts these files into containers that run under different UIDs
+# and without CAP_DAC_OVERRIDE. The host installation directory stays private.
+chmod 0755 -- "$install_dir"/deploy/{init/nginxions-init.sh,init/postgres-init.sh,clamav/nginxions-clamav.sh}
 
 install_engine() {
   (( EUID == 0 )) || fail "Run as root to install Docker packages."
@@ -92,7 +95,8 @@ while IFS= read -r image; do
 done <<< "$images"
 
 if ! "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 420; then
-  "${compose[@]}" ps -a
+  "${compose[@]}" ps -a || true
+  "${compose[@]}" logs --no-color --tail 30 nginxions-init || true
   fail "The stack did not become ready. Inspect the container logs and rerun the installer."
 fi
 printf 'NginxionS installed in %s\n' "$install_dir"
