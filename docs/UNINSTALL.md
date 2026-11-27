@@ -1,6 +1,27 @@
 # Полное удаление NginxionS
 
-Инструкция убирает с машины всё, что создаёт NginxionS:
+## Установка через `scripts/install.sh`
+
+```bash
+sudo /opt/nginxions/uninstall.sh
+```
+
+После подтверждения скрипт удаляет контейнеры, сети, тома, локальные конфигурационные файлы и образы,
+скачанные при установке. Образы, которые были на сервере до установки, используются другими контейнерами
+или с тех пор были заменены, сохраняются. Также сохраняются исходный клон и резервные копии вне каталога установки.
+
+Удаление томов необратимо. При необходимости сначала сделайте [резервную копию](#0-резервная-копия-по-желанию).
+
+Второй запрос подтверждает удаление Docker Engine и Compose на Debian или Ubuntu. Если в Docker остались другие
+контейнеры, тома, сети или образы, пакеты Docker сохраняются. При выборе «оставить Docker» репозиторий APT
+остаётся, чтобы Docker продолжал получать обновления. При удалении Docker скрипт убирает добавленные им файлы репозитория APT.
+
+При установке с `--dir` запустите `uninstall.sh` из указанного каталога. Параметр `--yes` подтверждает
+удаление только NginxionS. Без ответа на второй вопрос Docker сохраняется.
+
+## Стек, запущенный вручную
+
+Следующие шаги относятся к установкам через Docker Compose и к тестовым стекам. В такой установке могут остаться:
 
 - контейнеры;
 - тома с данными: база, сертификаты, ключи CA, настройки, логи;
@@ -21,7 +42,7 @@
 1. **Остался старый образ.** Тег `develop` (или `latest`) уже лежит на машине, и `docker compose up` его не обновляет: стек запускается из старой сборки, даже если тома и папка удалены. Поэтому шаг 3 удаляет образы, а переустановка (раздел 7) скачивает их заново с `--pull always`.
 2. **Браузер держит старый интерфейс.** Кэш и данные сайта панели переживают удаление сервера. Их чистит шаг 6.
 
-Ещё одна частая ошибка — команды выполняются не в той папке. Клон может лежать где угодно (`~/nginxions`, `~/Документы/docker/nginxions`…), поэтому ниже путь задаётся переменной `NGINXIONS_DIR`.
+Команды ручного удаления выполняются из каталога, из которого запускался стек.
 
 ## 0. Резервная копия (по желанию)
 
@@ -41,64 +62,16 @@ done
 Восстановление: создайте тома запуском `docker compose -f deploy/compose.yaml up -d`, остановите стек (`stop`), распакуйте
 архивы обратно (`docker run --rm -v nginxions_$v:/v -v ~/nginxions-backup:/b alpine tar xzf /b/$v.tgz -C /v`) и запустите снова.
 
-## Всё сразу
-
-Шаги 1–5 одним блоком. Укажите в `NGINXIONS_DIR` свою папку с клоном. Если папки уже нет, блок всё равно удалит остатки по именам.
-
-```bash
-NGINXIONS_DIR=~/nginxions   # путь к клону, например ~/Документы/docker/nginxions
-
-# 1. стек (прод, dev, тест закрытого контура) с томами и сетями
-if [ -f "$NGINXIONS_DIR/deploy/compose.yaml" ]; then
-  D="$NGINXIONS_DIR/deploy"
-  docker compose -f "$D/compose.yaml" -f "$D/compose.dev.yaml" --profile attack down --volumes --remove-orphans
-  docker compose -p nginxions-airgap -f "$D/compose.yaml" -f "$D/test/compose.airgap.yaml" --profile test \
-    down --volumes --remove-orphans 2>/dev/null
-fi
-# тестовые стеки scripts/test-*.sh (если запускались и прервались)
-for p in nginxions-airgap nginxions-chaos nginxions-dast nginxions-soak nginxions-upgrade nginxions-wafscore; do
-  docker compose -p "$p" down --volumes --remove-orphans 2>/dev/null
-done
-# свой compose.yaml вместо репозитория
-if [ -f "$NGINXIONS_DIR/compose.yaml" ]; then
-  docker compose -f "$NGINXIONS_DIR/compose.yaml" down --volumes --remove-orphans
-fi
-
-# 2. остатки по имени и метке
-docker ps -aq --filter 'name=^nginxions' | xargs -r docker rm -f
-docker ps -aq --filter 'label=nginxions.managed=true' | xargs -r docker rm -f
-docker volume ls -q | grep -E '^nginxions' | xargs -r docker volume rm -f
-docker network ls --format '{{.Name}}' | grep -E '^nginxions' | xargs -r docker network rm
-
-# 3. образы NginxionS и сторонние образы стека, dev и тестов
-docker images --format '{{.Repository}}:{{.Tag}}' \
-  | grep -E '(^|/)(nginxions(-openappsec|-appsec-[a-z-]+)?|npmos[a-z-]*|crowdsecurity/crowdsec|clamav/clamav|tecnativa/docker-socket-proxy|postgres|traefik/whoami|curlimages/curl|zoeyvid/npmplus|node):' \
-  | xargs -r docker rmi -f
-
-# 4. кэш сборки и висячие слои
-docker builder prune -af
-docker image prune -f
-
-# 5. клон (вместе с .git и всеми ветками) и резервная копия
-rm -rf "$NGINXIONS_DIR" ~/nginxions-backup
-
-# проверка: ничего не выводит
-ls -d "$NGINXIONS_DIR" 2>/dev/null
-docker ps -a | grep -i nginxions; docker volume ls | grep -i nginxions; docker network ls | grep -i nginxions
-docker images | grep -iE 'nginxions|npmplus'
-```
-
-Если проверка что-то вывела, удалите это вручную (`docker rm -f`, `docker volume rm`, `docker rmi -f`) и повторите проверку.
-
-Затем шаг 6 (браузер). Ниже — что делает каждый шаг и что учесть.
-
 ## 1. Стек
 
-`docker compose … down --volumes --remove-orphans` останавливает контейнеры и удаляет тома и сети проекта `nginxions`.
+Из каталога ручной установки выполните:
 
-- `-f deploy/compose.dev.yaml --profile attack` нужны, если запускался dev-стек: тогда удалятся `nginxions-test-upstream` и `nginxions-attacker`. На сервере, где был только прод-стек, лишними они не будут.
-- Тесты стека — отдельные проекты compose: `nginxions-airgap` (`scripts/test-airgap.sh`), `nginxions-chaos`, `nginxions-dast`, `nginxions-soak`, `nginxions-upgrade`, `nginxions-wafscore`. Обычно скрипты убирают их сами; цикл в блоке нужен, если тест прервали.
-- Если NginxionS запускался из своего `compose.yaml`, а не из репозитория, работает вторая команда.
+```bash
+docker compose -f deploy/compose.yaml down --volumes --remove-orphans
+```
+
+- Для dev-стека добавьте `-f deploy/compose.dev.yaml --profile attack`. Для собственного стека используйте его `compose.yaml` и имя проекта.
+- Тестовые проекты Compose, например `nginxions-airgap` или `nginxions-chaos`, обычно удаляют сами тесты. Если прогон прервался, укажите то же имя проекта и те же файлы Compose, которые использовал тест.
 
 ## 2. Остатки
 
@@ -117,23 +90,15 @@ Compose удаляет только то, что знает по текущим 
 Без этого шага переустановка запустит старую сборку (см. начало).
 
 - Образы NginxionS: `opensophy/nginxions`, `opensophy/nginxions-openappsec` (и `opensophy/nginxions-appsec-{agent,shared-storage,tuning}` старых версий) из Docker Hub, `local/nginxions*:dev` из `scripts/build-images.sh`, `nginxions:dev` из dev-стека.
-- Сторонние: `crowdsecurity/crowdsec`, `clamav/clamav`, `postgres` (и `tecnativa/docker-socket-proxy` старых версий); для dev и тестов `traefik/whoami`, `curlimages/curl`, `zoeyvid/npmplus` (база dev-образа), `node` (сборка dev-образа). Если они нужны другим проектам на машине, уберите их из команды. Удалённый образ просто скачается заново при следующем запуске того проекта.
+- Сторонние: `crowdsecurity/crowdsec`, `clamav/clamav`, `postgres` (и `tecnativa/docker-socket-proxy` старых версий); для dev и тестов `traefik/whoami`, `curlimages/curl`, `zoeyvid/npmplus` (база dev-образа), `node` (сборка dev-образа). Удаляйте только конкретные теги, которые больше не используются. Удалённый образ просто скачается заново при следующем запуске того проекта.
 
 ## 4. Кэш сборки
 
-Если образы собирались на этой машине (`scripts/build-images.sh`, dev-стек), кэш BuildKit занимает гигабайты. `docker builder prune -af` чистит весь кэш сборки Docker, а не только NginxionS: следующая сборка других проектов пойдёт с нуля.
+Если образы собирались на этой машине (`scripts/build-images.sh`, dev-стек), кэш BuildKit может занимать гигабайты. Очищайте кэш отдельно, если для NginxionS использовался отдельный экземпляр BuildKit.
 
 ## 5. Папки
 
-Клон удаляется целиком, вместе с `.git`: локальные ветки, история, `node_modules` фронтенда. Ветки на GitHub остаются.
-
-Если не помните, где лежат клоны:
-
-```bash
-find ~ -maxdepth 5 -type d \( -iname 'nginxions*' -o -iname 'npmplus*' \) 2>/dev/null
-```
-
-Удалите найденное через `rm -rf`. Глобально ставился только `pnpm` (`npm i -g pnpm`). Если он не нужен: `npm rm -g pnpm`.
+Клон ручной установки можно удалить отдельно после сохранения локальных изменений. Храните резервные копии вне клона.
 
 ## 6. Браузер
 
@@ -168,4 +133,3 @@ docker compose -f deploy/compose.yaml ps    # все сервисы healthy
 - **Файрвол.** Если для NginxionS открывали порты (ufw, firewalld, security group в облаке), закройте их: `ufw delete allow 81/tcp` и т.п.
 - **DNS.** Записи доменов, которые указывали на этот сервер, перенаправьте или удалите.
 - **Docker Hub.** Если входили в Docker Hub только ради NginxionS: `docker logout`.
-- **Docker целиком.** Если в Docker кроме NginxionS ничего нет, шаги 2–4 заменяет `docker system prune -af --volumes`. Эта команда удаляет **все** неиспользуемые контейнеры, образы, тома, сети и кэш Docker на машине.

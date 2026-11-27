@@ -90,6 +90,18 @@ jobs:
             docker image inspect "$image" > /dev/null
           done <<< "$images"
           rm "$extracted/images.tar.gz"
+      - name: Install and uninstall with the imported images
+        if: inputs.ci_image_tag != ''
+        run: |
+          installation="$RUNNER_TEMP/nginxions-installed"
+          scripts/install.sh --dir "$installation"
+          printf 'n\n' | "$installation/uninstall.sh" --yes
+          test ! -e "$installation"
+          label="label=com.docker.compose.project=nginxions"
+          containers=$(docker ps -aq --filter "$label")
+          volumes=$(docker volume ls -q --filter "$label")
+          networks=$(docker network ls -q --filter "$label")
+          test -z "$containers$volumes$networks"
       - name: Air-gap acceptance
         env:
           AIRGAP_PRELOADED: "1"
