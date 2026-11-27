@@ -137,7 +137,7 @@ function Hosts({
 					</p>
 				</div>
 				{allHosts && (
-					<div className="d-flex gap-2">
+					<div className="d-flex flex-wrap gap-2">
 						<button
 							type="button"
 							className="btn btn-sm"
@@ -177,7 +177,9 @@ function Hosts({
 					</div>
 				) : (
 					<div className={hostStyles.scroller}>
-						<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+						<table
+							className={cn("table table-vcenter card-table", hostStyles.table, styles.responsiveTable)}
+						>
 							<thead>
 								<tr>
 									<th>
@@ -208,11 +210,11 @@ function Hosts({
 								) : (
 									data.hosts.map((h) => (
 										<tr key={h.id}>
-											<td>{h.name}</td>
-											<td>
+											<td data-label={t("nginxions.learning.host")}>{h.name}</td>
+											<td data-label={t("nginxions.learning.mode")}>
 												<T id={`nginxions.learning.mode.${h.mode}`} />
 											</td>
-											<td>
+											<td data-label={t("nginxions.learning.readiness")}>
 												<Readiness host={h} />
 												<button
 													type="button"
@@ -229,7 +231,7 @@ function Hosts({
 													</div>
 												)}
 											</td>
-											<td className={styles.num}>
+											<td data-label={t("nginxions.learning.labels")} className={styles.num}>
 												<T
 													id="nginxions.learning.labels.value"
 													data={{
@@ -247,7 +249,10 @@ function Hosts({
 													</div>
 												)}
 											</td>
-											<td className={styles.num}>
+											<td
+												data-label={t("nginxions.learning.false-positives")}
+												className={styles.num}
+											>
 												{h.falsePositives.before || h.falsePositives.after ? (
 													<T
 														id="nginxions.learning.false-positives.value"
@@ -458,7 +463,13 @@ function Queue({ label }: { label: boolean }) {
 				) : (
 					<>
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table
+								className={cn(
+									"table table-vcenter card-table",
+									hostStyles.table,
+									styles.responsiveTable,
+								)}
+							>
 								<thead>
 									<tr>
 										<th>
@@ -486,7 +497,7 @@ function Queue({ label }: { label: boolean }) {
 									) : (
 										data.items.map((g) => (
 											<tr key={g.key}>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div className={styles.whatHead}>
 														<span className={cn(styles.badge, styles[g.reason])}>
 															<T id={`nginxions.learning.reason.${g.reason}`} />
@@ -512,7 +523,10 @@ function Queue({ label }: { label: boolean }) {
 														</div>
 													)}
 												</td>
-												<td className={cn(styles.num, styles.wrap)}>
+												<td
+													data-label={t("nginxions.learning.events")}
+													className={cn(styles.num, styles.wrap)}
+												>
 													<div>{g.events.toLocaleString(intl.locale)}</div>
 													<div className={styles.muted}>
 														<T
@@ -521,8 +535,14 @@ function Queue({ label }: { label: boolean }) {
 														/>
 													</div>
 												</td>
-												<td className={styles.num}>{g.score ?? "—"}</td>
-												<td className={styles.num} title={g.last ? dateTime(g.last) : ""}>
+												<td data-label={t("nginxions.learning.score")} className={styles.num}>
+													{g.score ?? "—"}
+												</td>
+												<td
+													data-label={t("nginxions.learning.last")}
+													className={styles.num}
+													title={g.last ? dateTime(g.last) : ""}
+												>
 													{g.last ? timeAgo(g.last) : "—"}
 												</td>
 												{label && (
@@ -587,7 +607,13 @@ function Queue({ label }: { label: boolean }) {
 					{data.suggestions.length > 0 && (
 						<div className={cn("card", hostStyles.tableCard)}>
 							<div className={hostStyles.scroller}>
-								<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+								<table
+									className={cn(
+										"table table-vcenter card-table",
+										hostStyles.table,
+										styles.responsiveTable,
+									)}
+								>
 									<thead>
 										<tr>
 											<th>
@@ -605,15 +631,19 @@ function Queue({ label }: { label: boolean }) {
 									<tbody>
 										{data.suggestions.map((s) => (
 											<tr key={`${s.asset}:${s.id}`}>
-												<td>{s.severity || "—"}</td>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.severity")}>
+													{s.severity || "—"}
+												</td>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div>{s.asset}</div>
 													<div className={styles.muted}>
 														<T id={`nginxions.learning.scope.${s.type}`} />:{" "}
 														<span className={styles.mono}>{s.title}</span>
 													</div>
 												</td>
-												<td>{s.attackTypes.join(", ") || "—"}</td>
+												<td data-label={t("nginxions.learning.attacks")}>
+													{s.attackTypes.join(", ") || "—"}
+												</td>
 												{label && (
 													<td>
 														<LabelButtons onLabel={(d) => openSuggestion(s, d)} />
@@ -675,7 +705,13 @@ function History({ label }: { label: boolean }) {
 				) : (
 					<>
 						<div className={hostStyles.scroller}>
-							<table className={cn("table table-vcenter card-table", hostStyles.table)}>
+							<table
+								className={cn(
+									"table table-vcenter card-table",
+									hostStyles.table,
+									styles.responsiveTable,
+								)}
+							>
 								<thead>
 									<tr>
 										<th>
@@ -703,11 +739,11 @@ function History({ label }: { label: boolean }) {
 									) : (
 										data.items.map((l) => (
 											<tr key={l.id} className={cn(l.undoneOn && "text-secondary")}>
-												<td className={styles.num}>
+												<td data-label={t("nginxions.learning.when")} className={styles.num}>
 													<div title={dateTime(l.createdOn)}>{timeAgo(l.createdOn)}</div>
 													<div className={styles.muted}>{l.user?.name ?? "—"}</div>
 												</td>
-												<td>
+												<td data-label={t("nginxions.learning.decision")}>
 													<span className={cn(styles.badge, styles[l.decision])}>
 														<T id={`nginxions.learning.decision.${l.decision}`} />
 													</span>
@@ -723,7 +759,7 @@ function History({ label }: { label: boolean }) {
 														</div>
 													)}
 												</td>
-												<td className={styles.what}>
+												<td data-label={t("nginxions.learning.what")} className={styles.what}>
 													<div>{l.host}</div>
 													{l.features.uri !== undefined && (
 														<div className={styles.url}>{l.features.uri || "/"}</div>
@@ -740,7 +776,10 @@ function History({ label }: { label: boolean }) {
 													</div>
 													{l.note && <div className={styles.muted}>{l.note}</div>}
 												</td>
-												<td className={styles.muted}>
+												<td
+													data-label={t("nginxions.learning.effects")}
+													className={styles.muted}
+												>
 													{l.undoneOn ? (
 														"—"
 													) : l.origin === "tuning" ? (

@@ -31,6 +31,8 @@ interface AreaChartProps<T> {
 	emptyText: string;
 	ariaLabel: string;
 	legend?: boolean;
+	/** Zero is a valid sample and isolated samples should be shown as points. */
+	showSamples?: boolean;
 	/** an extra line under the tooltip title */
 	tooltipExtra?: (item: T) => ReactNode;
 }
@@ -56,6 +58,7 @@ export function AreaChart<T>({
 	emptyText,
 	ariaLabel,
 	legend = true,
+	showSamples = false,
 	tooltipExtra,
 }: AreaChartProps<T>) {
 	const id = useId().replace(/:/g, "");
@@ -80,7 +83,7 @@ export function AreaChart<T>({
 			max = Math.max(max, b + v);
 		});
 	});
-	const empty = max === 0;
+	const empty = showSamples ? stacks.every((samples) => samples.every((sample) => sample === null)) : max === 0;
 	const scale = niceScale(max);
 	const innerW = Math.max(1, width - PAD.left - PAD.right);
 	const innerH = height - PAD.top - PAD.bottom;
@@ -149,7 +152,7 @@ export function AreaChart<T>({
 						: series.map((s, j) => [s, j] as const).reverse()
 					).map(([s, j]) => {
 						// a series without a value in the whole period draws no line over the others
-						if (totals[j] === 0 && series.length > 1) return null;
+						if (!showSamples && totals[j] === 0 && series.length > 1) return null;
 						const points = stacks[j].map((p, i) => (p ? { x: x(i), y: y(p[1]), y0: y(p[0]) } : null));
 						return (
 							<g key={s.key} className={styles.area} opacity={dim(s.key) ? 0.25 : 1}>
@@ -162,6 +165,12 @@ export function AreaChart<T>({
 									strokeDasharray="4 3"
 									strokeLinejoin="round"
 								/>
+								{showSamples &&
+									points.map((point, i) =>
+										point && !points[i - 1] && !points[i + 1] ? (
+											<circle key={i} cx={point.x} cy={point.y} r={3.5} fill={s.color} />
+										) : null,
+									)}
 							</g>
 						);
 					})}

@@ -137,6 +137,30 @@ export const defaultScopes = (group) =>
 			]
 		: [{ type: "url", value: group.uri }];
 
+const groupScopeValues = ({ sample, parameter, uri }) => ({
+	parameterValue: sample,
+	parameterName: parameter,
+	url: uri,
+});
+
+/** Detect a changed representative event before using a different value than the operator saw. */
+export const scopeRevision = (group) =>
+	createHash("sha256")
+		.update(JSON.stringify(groupScopeValues(group)))
+		.digest("hex");
+
+export const resolveGroupScopes = (data, group) => {
+	if (!Array.isArray(data.scope_fields)) return data.scopes; // older API clients
+	if (data.scope_fields.length && data.scope_revision !== scopeRevision(group)) {
+		throw new Error("The event details changed. Reopen the group and review the selected fields.");
+	}
+	const values = groupScopeValues(group);
+	return [
+		...data.scope_fields.map((type) => ({ type, value: Object.hasOwn(values, type) ? values[type] : undefined })),
+		...(Array.isArray(data.scopes) ? data.scopes.filter((s) => s?.type === "source") : []),
+	];
+};
+
 const isIp = (v) => /^[0-9a-f.:]+(\/\d{1,3})?$/i.test(v);
 
 /**

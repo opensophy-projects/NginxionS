@@ -13,10 +13,28 @@ import {
 	hostStats,
 	mergeDecisions,
 	reasonOf,
+	resolveGroupScopes,
 	ruleHost,
+	scopeRevision,
 	statsOf,
 	suggestionOf,
 } from "./model.js";
+
+test("label selections are resolved from stored event features, with stale revisions rejected", () => {
+	const group = { uri: "/asset", parameter: "file", sample: "observed value" };
+	const scopes = [
+		{ type: "parameterValue", value: "client replacement" },
+		{ type: "source", value: "192.0.2.10" },
+	];
+	const data = { scope_fields: ["url", "parameterValue"], scope_revision: scopeRevision(group), scopes };
+	assert.deepEqual(resolveGroupScopes(data, group), [
+		{ type: "url", value: "/asset" },
+		{ type: "parameterValue", value: "observed value" },
+		scopes[1],
+	]);
+	assert.throws(() => resolveGroupScopes(data, { ...group, sample: "new value" }), /details changed/);
+	assert.deepEqual(resolveGroupScopes({ scopes }, group), scopes);
+});
 
 test("rule names of proxy hosts and their locations", () => {
 	assert.deepEqual(ruleHost("npm-managed-specific-rule-proxyhost-7"), { hostId: 7, location: null });

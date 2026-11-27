@@ -818,20 +818,26 @@
 	"nginxions.acme.servers.used": {
 		"defaultMessage": "Certificates"
 	},
+	"nginxions.agent.choose-policy": {
+		"defaultMessage": "Choose what to configure"
+	},
 	"nginxions.agent.default.hint": {
-		"defaultMessage": "Applies to every host that has no policy of its own: the mode and the building blocks the agent uses."
+		"defaultMessage": "Hosts inherit settings they do not define. Shared exceptions also apply to hosts with custom settings."
 	},
 	"nginxions.agent.group.blocks": {
-		"defaultMessage": "Building blocks"
+		"defaultMessage": "Reusable rules"
+	},
+	"nginxions.agent.group.hosts": {
+		"defaultMessage": "Hosts"
 	},
 	"nginxions.agent.group.more": {
-		"defaultMessage": "More"
+		"defaultMessage": "Versions and YAML"
 	},
 	"nginxions.agent.group.policies": {
 		"defaultMessage": "Policies"
 	},
 	"nginxions.agent.host.hint": {
-		"defaultMessage": "The policy of this host: whether the WAF inspects it, how strictly, and the building blocks if they differ from the base policy."
+		"defaultMessage": "Choose the protection mode and rules for this host."
 	},
 	"nginxions.agent.host.none": {
 		"defaultMessage": "The host is gone."
@@ -852,7 +858,7 @@
 		"defaultMessage": "Every change of the policy is kept; any version can be restored."
 	},
 	"nginxions.agent.openappsec.description": {
-		"defaultMessage": "The machine-learning WAF of the hosts: its policies (the base one and those of the hosts, made of building blocks) and the agent itself."
+		"defaultMessage": "Host protection, learning and agent status."
 	},
 	"nginxions.agent.policies": {
 		"defaultMessage": "What the policy is made of"
@@ -870,10 +876,10 @@
 		"defaultMessage": "View"
 	},
 	"nginxions.agent.view.code": {
-		"defaultMessage": "Code"
+		"defaultMessage": "YAML"
 	},
 	"nginxions.agent.view.gui": {
-		"defaultMessage": "Interface"
+		"defaultMessage": "Settings"
 	},
 	"nginxions.analytics": {
 		"defaultMessage": "Analytics"
@@ -3681,7 +3687,7 @@
 		"defaultMessage": "{values} values, {assets} assets"
 	},
 	"nginxions.learning.snapshots.open": {
-		"defaultMessage": "Snapshots of learning"
+		"defaultMessage": "Learning backups"
 	},
 	"nginxions.learning.snapshots.reason": {
 		"defaultMessage": "Why"
@@ -3744,7 +3750,7 @@
 		"defaultMessage": "NginxionS takes a snapshot of the learned state of the agent every day (the last {keep} are kept) and when you ask, and compares each with the one before. A snapshot restored replaces the learned state: the agent and NginxionS restart (about a minute), the state before is kept as a snapshot first. Snapshots are in the data volume of NginxionS, so its backup holds them; a downloaded snapshot is uploaded on another NginxionS to move what was learned."
 	},
 	"nginxions.learning.snapshots.title": {
-		"defaultMessage": "Snapshots of what the agent learned"
+		"defaultMessage": "Learning backups"
 	},
 	"nginxions.learning.snapshots.upload": {
 		"defaultMessage": "Upload a snapshot"
@@ -3862,6 +3868,48 @@
 	},
 	"nginxions.learning.when": {
 		"defaultMessage": "When"
+	},
+	"nginxions.metrics.cpu": {
+		"defaultMessage": "CPU usage"
+	},
+	"nginxions.metrics.cpu.hint": {
+		"defaultMessage": "Highest average CPU usage among agent processes."
+	},
+	"nginxions.metrics.detected": {
+		"defaultMessage": "Detected"
+	},
+	"nginxions.metrics.ignored": {
+		"defaultMessage": "Ignored"
+	},
+	"nginxions.metrics.ips": {
+		"defaultMessage": "IPS signature matches"
+	},
+	"nginxions.metrics.ips.hint": {
+		"defaultMessage": "Number of matches in each agent report."
+	},
+	"nginxions.metrics.mib": {
+		"defaultMessage": "{value} MiB"
+	},
+	"nginxions.metrics.no-samples": {
+		"defaultMessage": "No samples for this chart"
+	},
+	"nginxions.metrics.prevented": {
+		"defaultMessage": "Blocked"
+	},
+	"nginxions.metrics.rss": {
+		"defaultMessage": "Physical memory"
+	},
+	"nginxions.metrics.rss.hint": {
+		"defaultMessage": "Highest average resident memory (RSS) of any one agent process."
+	},
+	"nginxions.metrics.technical": {
+		"defaultMessage": "Raw Prometheus metrics"
+	},
+	"nginxions.metrics.updated": {
+		"defaultMessage": "Sampled at {time}"
+	},
+	"nginxions.metrics.window": {
+		"defaultMessage": "One sample per minute · up to 60 minutes since server startup"
 	},
 	"nginxions.migration.after": {
 		"defaultMessage": "Check the hosts: point DNS or the ports to NginxionS, then stop the old container. WAF and CrowdSec are configured per host in NginxionS."
@@ -6167,6 +6215,9 @@
 	"nginxions.policy.enforcement.fullSchema": {
 		"defaultMessage": "The whole API: a route that is not in the files is refused too"
 	},
+	"nginxions.policy.exceptions-selected": {
+		"defaultMessage": "Selected: {count}"
+	},
 	"nginxions.policy.export": {
 		"defaultMessage": "Export"
 	},
@@ -6690,19 +6741,19 @@
 		"defaultMessage": "Rate limits"
 	},
 	"nginxions.policy.rule.customResponse": {
-		"defaultMessage": "Response"
+		"defaultMessage": "Block response"
 	},
 	"nginxions.policy.rule.exceptions": {
 		"defaultMessage": "Exceptions"
 	},
 	"nginxions.policy.rule.mode": {
-		"defaultMessage": "Mode"
+		"defaultMessage": "Default mode"
 	},
 	"nginxions.policy.rule.sourceIdentifiers": {
-		"defaultMessage": "Source identifiers"
+		"defaultMessage": "How to identify clients"
 	},
 	"nginxions.policy.rule.threatPreventionPractices": {
-		"defaultMessage": "Practices"
+		"defaultMessage": "Threat protection profile"
 	},
 	"nginxions.policy.rule.triggers": {
 		"defaultMessage": "Logging"
@@ -8724,22 +8775,22 @@
 		"defaultMessage": "Signatures uploaded, ClamAV restarts with them"
 	},
 	"nginxions.waf.host-description": {
-		"defaultMessage": "The WAF analyses every request to this host with machine learning. Start in Detect-Learn: the model learns your normal traffic and only logs attacks; switch to Prevent-Learn when the events look right."
+		"defaultMessage": "Detection mode records suspicious requests. Review the events before enabling blocking."
 	},
 	"nginxions.waf.host-enabled": {
 		"defaultMessage": "Protect with open-appsec"
 	},
 	"nginxions.waf.host-policy": {
-		"defaultMessage": "Policy objects"
+		"defaultMessage": "Protection rules"
 	},
 	"nginxions.waf.host-policy.custom": {
-		"defaultMessage": "Own objects"
+		"defaultMessage": "Customize for this host"
 	},
 	"nginxions.waf.host-policy.default": {
-		"defaultMessage": "As the base policy"
+		"defaultMessage": "Use the default rules"
 	},
 	"nginxions.waf.host-policy.hint": {
-		"defaultMessage": "Attack protection, request limits, answer and exceptions of this host (Agents → open-appsec). Exceptions of the base policy apply too."
+		"defaultMessage": "Set this host’s mode above. Default policy exceptions apply alongside host exceptions."
 	},
 	"nginxions.waf.host-policy.template": {
 		"defaultMessage": "Template: {name}"
