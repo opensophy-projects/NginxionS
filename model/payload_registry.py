@@ -38,15 +38,40 @@ SKIP_DIRS = {"images", "docs", "screenshots", "assets", "wordlists", "passwords"
              "bypass", "bypasses", "wp-content", "wp-plugins", "joomla", "drupal",
              "magnet", "torrent", "irc", "ftp", "protocols", "api-docs"}
 # File patterns that are likely wordlists, not attack payloads
-NOISE_FILENAME_PATTERNS = (r".*passwords.*", r".*shells.*", r".*wordlist.*", r".*list\.txt$",
-                           ".*dotxt\\.txt$", ".*requirements\\.txt$", ".*gemspec",
-                           ".*manifest\\.json$", ".*composer\\.json$", ".*package\\.json$",
-                           ".*nginx\\.conf$", ".*httpd\\.conf$", ".*apache\\.conf$",
-                           ".*web\\.xml$", ".*pyproject\\.toml$", ".*setup\\.py$",
-                           "*.cfg", "*.ini", "*.yaml", "*.yml", "*.toml",
-                           "Dockerfile*", "docker-compose*",
-                           "*.sql", "backup*", "dump*", "archive*",
-                           "readme*", "license*", "changelog*")
+# Every entry is a regular expression consumed by re.search below; glob-style
+# entries are expressed as anchored regexes so "*" never appears at position 0.
+NOISE_FILENAME_PATTERNS = (
+    r".*passwords.*",
+    r".*shells.*",
+    r".*wordlist.*",
+    r".*list\.txt$",
+    r".*dotxt\.txt$",
+    r".*requirements\.txt$",
+    r".*gemspec",
+    r".*manifest\.json$",
+    r".*composer\.json$",
+    r".*package\.json$",
+    r".*nginx\.conf$",
+    r".*httpd\.conf$",
+    r".*apache\.conf$",
+    r".*web\.xml$",
+    r".*pyproject\.toml$",
+    r".*setup\.py$",
+    r"\.cfg$",
+    r"\.ini$",
+    r"\.yaml$",
+    r"\.yml$",
+    r"\.toml$",
+    r"^dockerfile",
+    r"^docker-compose",
+    r"\.sql$",
+    r"^backup",
+    r"^dump",
+    r"^archive",
+    r"^readme",
+    r"^license",
+    r"^changelog",
+)
 
 # payloads shorter than this are noise (single punctuation etc.) and would
 # cause false positives on legitimate traffic
