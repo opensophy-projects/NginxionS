@@ -158,7 +158,7 @@ flowchart LR
 В дереве перечислены файлы NginxionS и основные каталоги включённых upstream-компонентов. Правки в их коде помечены
 `NginxionS:`. Тесты, стили компонентов, миграции, патчи и фикстуры можно искать рядом с кодом по указанным каталогам.
 При изменении структуры обновляйте этот раздел. `scripts/check-tree.mjs` сверяет имена файлов в `deploy/`, `scripts/`,
-`.github/`, `docs/`, `model/`, `readme/` и в модулях NginxionS в backend и frontend.
+`.github/`, `docs/`, `model/`, `readme/`, `training/` и в модулях NginxionS в backend и frontend.
 
 Снимки исходных репозиториев для справки находятся в [ветке `rfrns`](https://github.com/opensophy-projects/NginxionS/tree/rfrns).
 Сборка использует код из текущего checkout. Версии исходников open-appsec записаны в [`deploy/openappsec/sources.env`](deploy/openappsec/sources.env).
@@ -183,6 +183,7 @@ flowchart LR
   - `workflows/upstream-issues.yml` — каждый час: issue openappsec (5 репозиториев агента) копируются сюда как issue, их закрытие и открытие повторяется (`scripts/upstream-issues.mjs`)
   - `workflows/training.yml` — обучение модели WAF: ветки `training/**`, `[train]` в коммите или кнопка; модель,
     её карточка и сравнение со штатной — в артефакте `waf-model` (`docs/MODEL.md`)
+  - `workflows/model-archives.yml` — проверка закреплённой модели WAF и сборка установочного архива поколения 2
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
     в еженедельном прогоне — ещё и опубликованные образы (`docs/DEVSECOPS.md`)
   - `workflows/offline-bundle.yml` — сборка офлайн-бандла, установка и проверка на отдельном раннере
@@ -346,6 +347,14 @@ flowchart LR
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
 - `test_model.py` — тесты: формат, данные, полный цикл на синтетике
+
+### `training/` — каталог поколений WAF
+
+- `README.md` — где скачать архив и как установить модель
+- `generations/1/`, `generations/3/` — места для первой модели и кандидатов третьего поколения с инструкциями
+- `generations/2/` — `source.json` с коммитом и SHA-256 исходной модели, `open-appsec-advanced-model.tgz` для импорта и `SHA256SUMS`
+- `package_generation.py` — экспорт закреплённой модели и упаковка кандидата с результатами CI
+- `test_package_generation.py` — тесты контрольных сумм, формата архива и результатов оценки
 
 ### `docs/` — документация
 

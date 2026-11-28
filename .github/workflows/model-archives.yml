@@ -1,0 +1,45 @@
+name: WAF model archives
+
+on:
+  pull_request:
+    paths:
+      - training/**
+      - .github/workflows/model-archives.yml
+  push:
+    branches: [work]
+    paths:
+      - training/**
+      - .github/workflows/model-archives.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generation-2:
+    name: Verify and package generation 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: training
+      - name: Fetch the pinned model revision
+        run: |
+          commit=$(python3 -c 'import json; print(json.load(open("training/generations/2/source.json"))["commit"])')
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags --depth=1 --filter=blob:none origin "$commit"
+      - name: Test model archives
+        run: python3 -m unittest discover -s training
+      - name: Export the baseline
+        run: |
+          python3 training/package_generation.py baseline --out model-work/generation-2
+          cd model-work/generation-2
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: waf-model-generation-2
+          path: model-work/generation-2/
+          if-no-files-found: error
+          retention-days: 90

@@ -191,6 +191,7 @@ class TrainingCycleTest(unittest.TestCase):
                 evaluate.main(args)
             result = json.loads((d / "metrics.json").read_text("utf-8"))
             self.assertEqual(ok.exception.code, 0, result["checks"])
+            self.assertEqual(result["model_sha256"], card["sha256"])
             self.assertEqual(result["parity"]["share"], 1.0)
             self.assertGreater(result["candidate"]["balanced_accuracy"], result["stock"]["balanced_accuracy"])
 

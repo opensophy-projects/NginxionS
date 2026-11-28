@@ -14,6 +14,7 @@ const ROOTS = [
 	"nginxions/frontend/src/nginxions",
 	"readme",
 	"scripts",
+	"training",
 ];
 const SKIP_DIRS = new Set(["__pycache__", "node_modules", "migrations", "patches", "examples"]);
 const skipFile = (name) =>

@@ -19,12 +19,13 @@ Release gate (all of them):
 
 import argparse
 import glob
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from waapmodel import Model, load_waap_data, read_dump  # noqa: E402
+from waapmodel import Model, read_dump  # noqa: E402
 
 
 def metrics(samples, verdicts, ids):
@@ -105,7 +106,8 @@ def main(argv=None):
 
     stock, stock_cat = metrics(samples, verdicts(args.stock), test)
     new, new_cat = metrics(samples, verdicts(args.candidate), test)
-    model = Model.from_scores(load_waap_data(args.model)["waap_scores"])
+    model_data = Path(args.model).read_bytes()
+    model = Model.from_scores(json.loads(model_data.decode("utf-8"))["waap_scores"])
     new_rows = read_dump(sorted(glob.glob(str(Path(args.dump) / "*.jsonl"))))
     par = parity(model, new_rows)
     stock_seen = {sid for sid in read_dump(sorted(glob.glob(str(Path(args.stock_dump) / "*.jsonl"))))
@@ -131,7 +133,8 @@ def main(argv=None):
     passed = all(c["ok"] for c in checks)
     card = json.loads(Path(args.card).read_text(encoding="utf-8")) if args.card else None
 
-    result = {"passed": passed, "checks": checks, "stock": stock, "candidate": new, "parity": par,
+    result = {"passed": passed, "model_sha256": hashlib.sha256(model_data).hexdigest(),
+              "checks": checks, "stock": stock, "candidate": new, "parity": par,
               "inspected": inspected,
               "by_category": {k: {"stock": stock_cat.get(k), "candidate": v} for k, v in new_cat.items()},
               "card": card}
