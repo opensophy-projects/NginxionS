@@ -62,8 +62,8 @@ jobs:
           for f in legitimate malicious; do
             curl -sSfL --retry 5 --retry-all-errors -o "data/$f.zip" "$WCP_DATA/$f.zip"
           done
-          # the false positives of mgm-web-attack-payloads from the reference sources (branch main)
-          git fetch --quiet --depth 1 "https://github.com/$GH_REPO.git" main
+          # the false positives of mgm-web-attack-payloads from the reference sources (current branch)
+          git fetch --quiet --depth 1 "https://github.com/$GH_REPO.git" "$GITHUB_REF_NAME"
           git archive FETCH_HEAD mgm-web-attack-payloads-main/nuclei/payloads | tar -x -C data
 
           # unified attack payload registry for the 3rd generation model (label 1 attacks)
