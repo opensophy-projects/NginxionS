@@ -104,7 +104,9 @@ def main(argv=None):
     with open(args.samples, encoding="utf-8") as f:
         for line in f:
             s = json.loads(line)
-            samples[s["id"]] = {k: s[k] for k in ("label", "split", "source", "category", "url", "method")}
+            samples[s["id"]] = {"label": s["label"], "split": s["split"], "source": s["source"],
+                                "category": s["category"], "url": s.get("url", ""),
+                                "method": s.get("method", "")}
     test = [sid for sid, s in samples.items() if s["split"] == "test"]
 
     def load_verdicts(path):
