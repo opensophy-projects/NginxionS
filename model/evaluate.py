@@ -21,6 +21,7 @@ Release gate (all of them):
 import argparse
 import glob
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -203,25 +204,11 @@ def main(argv=None):
 
     lines += ["", "Отложенная часть (сайты и полезные нагрузки, которых модель не видела), решения настоящего агента:", ""]
 
-    lines += ["<details><summary>По каждому запросу (первые 100 / отложенная часть)</summary>", ""]
-    lines += ["| id | источник | категория | метка | " +
-              " | ".join(name for name, _ in cols) + " | URL |",
-              "|---|---|---|---|" + "|".join(":---:" for _ in cols) + "|---|"]
-    # NginxionS: limit detail report to first 100 for GitHub summary (1MB size limit)
-    for i, sid in enumerate(sorted(test)):
-        if i >= 100:
-            break
-        s = samples[sid]
-        cells = [verdict_symbol(stock_v.get(sid))]
-        if previous_v is not None:
-            cells.append(verdict_symbol(previous_v.get(sid)))
-        cells.append(verdict_symbol(new_v.get(sid)))
-        url = (s.get("url") or "")[:80]
-        lines.append(f"| {sid} | {s['source']} | {s['category']} | {s['label']} | " +
-                     " | ".join(cells) + f" | {url} |")
-    if len(test) > 100:
-        lines.append(f"| ... | ... | ... | ... | ... |")
-    lines += ["", "</details>", ""]
+    # NginxionS: GitHub summary has 1MB size limit; detailed report with 610k rows is 18MB
+    # Link to full logs instead
+    run_id = os.environ.get('GITHUB_RUN_ID', '#')
+    lines += [f"📊 **Детальный отчёт по каждому запросу**: см. [лог CI](https://github.com/opensophy-projects/NginxionS/actions/runs/{run_id})",
+              ""]
 
     if par["examples"]:
         lines += ["Расхождения оценки агента и тренера (первые):", "", "```json",
