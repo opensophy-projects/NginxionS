@@ -1,5 +1,5 @@
 # Training of the WAF model of NginxionS (docs/MODEL.md): a push to a branch training/<anything>, a push whose commit
-# message holds [train], or the Run workflow button.
+# message holds [training], or the Run workflow button.
 # Builds the images of the branch, sends the labelled set through the real agent with the stock model, trains a new
 # model, installs it like an administrator, sends the held-out part through it and decides whether it may be released
 # (scripts/train-model.sh). The model, its card and the report are in the artifact "waf-model"; the report is also in
@@ -7,7 +7,7 @@
 name: Training
 
 on:
-  # every branch: the job below runs on training/** and on [train] only
+  # every branch: the job below runs on training/** and on [training] only
   push:
   workflow_dispatch:
     inputs:
@@ -35,7 +35,7 @@ jobs:
     name: Train and evaluate the WAF model
     if: >-
       github.event_name != 'push' || startsWith(github.ref, 'refs/heads/training/') ||
-      contains(github.event.head_commit.message, '[train]')
+      contains(github.event.head_commit.message, '[training]')
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
