@@ -141,5 +141,7 @@ SHA-256 базы из отчёта с манифестом поколения 2.
 ```bash
 python3 -m unittest discover -s model
 mkdir -p model-work
-python3 model/datasets.py --cases model/legitimate-http --out model-work/http-cases.jsonl
+python3 model/check_verdict_cases.py model/verdict-cases.txt --requests-out model-work/http-cases.jsonl
 ```
+
+Команда проверяет примеры вердиктов и экспортирует размеченные обычные запросы в JSONL. Формат записей и расположение отчётов CI описаны в [карте покрытия HTTP](../training/HTTP-COVERAGE.md).

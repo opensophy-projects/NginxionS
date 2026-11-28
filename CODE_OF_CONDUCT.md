@@ -343,12 +343,11 @@ flowchart LR
 - `waapmodel.py` — формат модели агента (`waap.data`) и её оценка, вычисленная так же, как в агенте
 - `train.py` — обучение: разреженная логистическая регрессия по признакам агента, порог, `waap.data` и `.tgz`
 - `evaluate.py`, `test_evaluate.py` — сравнение пар вердиктов, проверка оценок и SHA-256 файлов с агента
-- `verdict-cases.txt`, `check_verdict_cases.py` — текстовые фикстуры HTTP-статусов и проверка работы оценщика в CI
+- `verdict-cases.txt`, `check_verdict_cases.py` — обычные HTTP-запросы, их экспорт в Training и проверка оценщика на примерах статусов
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
 - `test_model.py` — тесты формата, данных и цикла на синтетических признаках
 - `feature_dataset.py`, `test_feature_dataset.py` — проверка и подготовка наблюдений для офлайн-обучения
-- `legitimate-http/` — случаи обычного HTTP: `http-path.json`, `http-query.json`, `http-header.json`, `http-cookie.json`, `http-json.json`, `http-form.json`, `http-multipart.json`, `http-xml.json`
 
 ### `training/` — каталог поколений WAF
 

@@ -1,3 +1,97 @@
+# Обычные HTTP-запросы для артефакта Training. Запрос целиком в одной строке.
+# Формат: request ID категория {"method":"GET","url":"/путь"}
+# Укажите уникальный ID и категорию http-path, http-query, http-header,
+# http-cookie, http-json, http-form, http-multipart, http-xml или http-binary.
+# Необязательные поля JSON: headers (объект строк) и data (тело).
+# Пример: request catalog-search http-query {"method":"GET","url":"/catalog?q=books"}
+# Пример с телом:
+# request catalog-filter http-json {"method":"POST","url":"/catalog","headers":{"Content-Type":"application/json"},"data":{"page":2}}
+# Training экспортирует эти строки с label=0. В них нет измеренных HTTP-статусов.
+
+# Примеры из набора Training.
+request http-cookie-preferences http-cookie {"method":"GET","url":"/preferences","headers":{"Cookie":"theme=dark; locale=ru-RU"}}
+request http-cookie-catalog-filters http-cookie {"method":"GET","url":"/catalog","headers":{"Cookie":"filters=color%3Dblue%26size%3Dmedium; currency=EUR"}}
+request http-cookie-recent-section http-cookie {"method":"GET","url":"/docs","headers":{"Cookie":"last_section=guide.intro; compact=true"}}
+request http-form-feedback http-form {"method":"POST","url":"/feedback","headers":{"Content-Type":"application/x-www-form-urlencoded"},"data":"name=O%27Brien&message=Thanks%20for%20the%20guide%21"}
+request http-form-account-preferences http-form {"method":"POST","url":"/account/preferences","headers":{"Content-Type":"application/x-www-form-urlencoded"},"data":"locale=ru-RU&topics=books&topics=science"}
+request http-form-cart-item http-form {"method":"POST","url":"/cart","headers":{"Content-Type":"application/x-www-form-urlencoded"},"data":"id=SKU-42.2026&count=2&gift=true"}
+request http-header-accept-language http-header {"method":"GET","url":"/catalog","headers":{"Accept-Language":"ru-RU,ru;q=0.9,en;q=0.7"}}
+request http-header-etag http-header {"method":"GET","url":"/images/logo.png","headers":{"If-None-Match":"\"revision-2026-a\""}}
+request http-header-range http-header {"method":"GET","url":"/reports/weekly","headers":{"Range":"bytes=0-511"}}
+request http-json-nested-search http-json {"method":"POST","url":"/api/search","headers":{"Content-Type":"application/json"},"data":{"query":"Poetry & prose","filters":{"lang":["ru","en"],"pages":[1,2]},"preview":true}}
+request http-json-unicode-notes http-json {"method":"POST","url":"/api/notes","headers":{"Content-Type":"application/json"},"data":{"title":"Меню на неделю","markdown":"**Список**\n- чай\n- кофе"}}
+request http-json-patch-order http-json {"method":"PATCH","url":"/api/orders/42","headers":{"Content-Type":"application/json"},"data":{"reference":"PO-2026.42","currency":"EUR","amount":12.5,"note":null}}
+request http-multipart-avatar-description http-multipart {"method":"POST","url":"/profile/avatar","headers":{"Content-Type":"multipart/form-data; boundary=fixture42"},"data":"--fixture42\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\nНовый аватар\r\n--fixture42--\r\n"}
+request http-multipart-text-file http-multipart {"method":"POST","url":"/documents","headers":{"Content-Type":"multipart/form-data; boundary=fixture42"},"data":"--fixture42\r\nContent-Disposition: form-data; name=\"file\"; filename=\"report.txt\"\r\nContent-Type: text/plain\r\n\r\nWeekly report\r\n--fixture42--\r\n"}
+request http-multipart-csv-file http-multipart {"method":"POST","url":"/documents","headers":{"Content-Type":"multipart/form-data; boundary=fixture42"},"data":"--fixture42\r\nContent-Disposition: form-data; name=\"file\"; filename=\"catalog.csv\"\r\nContent-Type: text/csv\r\n\r\nitem,price\r\nbook,10\r\n--fixture42--\r\n"}
+request http-path-unicode http-path {"method":"GET","url":"/help/ru/%D1%82%D0%B5%D1%81%D1%82"}
+request http-path-filename-spaces http-path {"method":"GET","url":"/media/Team%20notes%20v2.pdf"}
+request http-path-item-reference http-path {"method":"GET","url":"/api/v1/order-items/SKU-42.2026"}
+request http-query-apostrophe http-query {"method":"GET","url":"/search?q=O%27Brien%20%26%20Sons"}
+request http-query-cpp-search http-query {"method":"GET","url":"/search?q=C%2B%2B%20Reference"}
+request http-query-repeated-tags http-query {"method":"GET","url":"/search?tag=books&tag=science&limit=20"}
+request http-xml-book-catalog http-xml {"method":"POST","url":"/library/import","headers":{"Content-Type":"application/xml"},"data":"<?xml version=\"1.0\"?><catalog><book id=\"42\">Poetry &amp; prose</book></catalog>"}
+request http-xml-inventory http-xml {"method":"POST","url":"/inventory","headers":{"Content-Type":"application/xml"},"data":"<inventory><item sku=\"P-42\" available=\"true\"/></inventory>"}
+request http-xml-sitemap http-xml {"method":"PUT","url":"/sitemap","headers":{"Content-Type":"application/xml"},"data":"<urlset><url><loc>https://example.org/about</loc></url></urlset>"}
+
+# Шаблоны обычной нагрузки из scripts/test-soak.sh.
+# В часовом отчёте суммируются повторения. Тело загрузки здесь фиксированное.
+request soak-root http-path {"method":"GET","url":"/"}
+request soak-index http-path {"method":"GET","url":"/index.html"}
+request soak-script http-path {"method":"GET","url":"/static/app.js"}
+request soak-logo http-path {"method":"GET","url":"/img/logo.png"}
+request soak-page-0 http-query {"method":"GET","url":"/api/items?page=0"}
+request soak-page-1 http-query {"method":"GET","url":"/api/items?page=1"}
+request soak-page-2 http-query {"method":"GET","url":"/api/items?page=2"}
+request soak-page-3 http-query {"method":"GET","url":"/api/items?page=3"}
+request soak-page-4 http-query {"method":"GET","url":"/api/items?page=4"}
+request soak-page-5 http-query {"method":"GET","url":"/api/items?page=5"}
+request soak-page-6 http-query {"method":"GET","url":"/api/items?page=6"}
+request soak-page-7 http-query {"method":"GET","url":"/api/items?page=7"}
+request soak-page-8 http-query {"method":"GET","url":"/api/items?page=8"}
+request soak-page-9 http-query {"method":"GET","url":"/api/items?page=9"}
+request soak-page-10 http-query {"method":"GET","url":"/api/items?page=10"}
+request soak-page-11 http-query {"method":"GET","url":"/api/items?page=11"}
+request soak-page-12 http-query {"method":"GET","url":"/api/items?page=12"}
+request soak-page-13 http-query {"method":"GET","url":"/api/items?page=13"}
+request soak-page-14 http-query {"method":"GET","url":"/api/items?page=14"}
+request soak-page-15 http-query {"method":"GET","url":"/api/items?page=15"}
+request soak-page-16 http-query {"method":"GET","url":"/api/items?page=16"}
+request soak-page-17 http-query {"method":"GET","url":"/api/items?page=17"}
+request soak-page-18 http-query {"method":"GET","url":"/api/items?page=18"}
+request soak-page-19 http-query {"method":"GET","url":"/api/items?page=19"}
+request soak-page-20 http-query {"method":"GET","url":"/api/items?page=20"}
+request soak-page-21 http-query {"method":"GET","url":"/api/items?page=21"}
+request soak-page-22 http-query {"method":"GET","url":"/api/items?page=22"}
+request soak-page-23 http-query {"method":"GET","url":"/api/items?page=23"}
+request soak-page-24 http-query {"method":"GET","url":"/api/items?page=24"}
+request soak-page-25 http-query {"method":"GET","url":"/api/items?page=25"}
+request soak-page-26 http-query {"method":"GET","url":"/api/items?page=26"}
+request soak-page-27 http-query {"method":"GET","url":"/api/items?page=27"}
+request soak-page-28 http-query {"method":"GET","url":"/api/items?page=28"}
+request soak-page-29 http-query {"method":"GET","url":"/api/items?page=29"}
+request soak-page-30 http-query {"method":"GET","url":"/api/items?page=30"}
+request soak-page-31 http-query {"method":"GET","url":"/api/items?page=31"}
+request soak-page-32 http-query {"method":"GET","url":"/api/items?page=32"}
+request soak-page-33 http-query {"method":"GET","url":"/api/items?page=33"}
+request soak-page-34 http-query {"method":"GET","url":"/api/items?page=34"}
+request soak-page-35 http-query {"method":"GET","url":"/api/items?page=35"}
+request soak-page-36 http-query {"method":"GET","url":"/api/items?page=36"}
+request soak-page-37 http-query {"method":"GET","url":"/api/items?page=37"}
+request soak-page-38 http-query {"method":"GET","url":"/api/items?page=38"}
+request soak-page-39 http-query {"method":"GET","url":"/api/items?page=39"}
+request soak-page-40 http-query {"method":"GET","url":"/api/items?page=40"}
+request soak-page-41 http-query {"method":"GET","url":"/api/items?page=41"}
+request soak-page-42 http-query {"method":"GET","url":"/api/items?page=42"}
+request soak-page-43 http-query {"method":"GET","url":"/api/items?page=43"}
+request soak-page-44 http-query {"method":"GET","url":"/api/items?page=44"}
+request soak-page-45 http-query {"method":"GET","url":"/api/items?page=45"}
+request soak-page-46 http-query {"method":"GET","url":"/api/items?page=46"}
+request soak-page-47 http-query {"method":"GET","url":"/api/items?page=47"}
+request soak-page-48 http-query {"method":"GET","url":"/api/items?page=48"}
+request soak-page-49 http-query {"method":"GET","url":"/api/items?page=49"}
+request soak-binary-upload http-binary {"method":"POST","url":"/upload","headers":{"Content-Type":"application/octet-stream"},"data":"NginxionS upload fixture"}
+
 # Фикстуры для проверки оценщика WAF. Статусы в примерах заданы вручную.
 # Добавьте одну строку на сценарий, разделяя поля пробелами.
 # ID  метка  HTTP-поколение-2  HTTP-кандидат  итог-поколение-2  итог-кандидат

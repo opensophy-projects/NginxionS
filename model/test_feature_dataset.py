@@ -7,17 +7,20 @@ import unittest
 from pathlib import Path
 
 import datasets
+from check_verdict_cases import check_cases
 from feature_dataset import SURFACES, prepare, write_rows
 
 
 class HTTPFixtureTest(unittest.TestCase):
     def test_ordinary_http_fixtures_cover_all_surfaces_without_duplicates(self):
-        cases = list(datasets.cases(Path(__file__).parent / "legitimate-http"))
-        self.assertEqual({case["category"] for case in cases}, {f"http-{s}" for s in SURFACES})
+        _, cases = check_cases(Path(__file__).with_name("verdict-cases.txt"))
+        self.assertEqual({case["category"] for case in cases}, {f"http-{s}" for s in SURFACES | {"binary"}})
         self.assertTrue(all(case["label"] == 0 and case["url"].startswith("/") for case in cases))
         requests = {json.dumps({key: case[key] for key in ("method", "url", "headers", "data")},
                                sort_keys=True) for case in cases}
         self.assertEqual(len(requests), len(cases))
+        soak_pages = {case["url"] for case in cases if case["id"].startswith("soak-page-")}
+        self.assertEqual(soak_pages, {f"/api/items?page={page}" for page in range(50)})
 
 
 class FeatureDatasetTest(unittest.TestCase):

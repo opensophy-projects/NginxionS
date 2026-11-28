@@ -40,15 +40,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Prepare and check the ordinary HTTP cases
+      - name: Test the model tooling
         run: |
           python3 -m unittest discover -s model
           mkdir -p model-work
-          python3 model/datasets.py --cases model/legitimate-http --out model-work/http-cases.jsonl
-      - name: Check recorded verdict cases
+      - name: Check verdict fixtures and export ordinary HTTP cases
         shell: bash
         run: |
-          python3 model/check_verdict_cases.py model/verdict-cases.txt \
+          python3 model/check_verdict_cases.py model/verdict-cases.txt --requests-out model-work/http-cases.jsonl \
             | tee -a model-work/verdict-cases.md "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
