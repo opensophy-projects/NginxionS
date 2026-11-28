@@ -332,6 +332,7 @@ flowchart LR
 - `sarif-accepted.mjs` — убирает из SARIF принятые риски и подавленные в коде находки перед загрузкой в Code scanning
 - `update-ips-signatures.mjs` — сигнатуры IPS агента из правил виртуальных патчей хаба CrowdSec (`openappsec/agent/nginxions/ips-protections.json`; коммит хаба — `CROWDSEC_HUB_REF` в `deploy/openappsec/sources.env`)
 - `upgrade-from-npmos.sh` — перенос томов стека времён названия NPMOS (`npmos_*`) в NginxionS: копия томов, имена секретов, роль и база Postgres
+- `test-no-payloads.sh` — контрольный прогон обучения без дополнительного реестра
 - `train-model.sh` — цикл обучения модели WAF на настоящем агенте: штатная модель, обучение, установка новой как
   в GUI, сравнение и решение о выпуске (`docs/MODEL.md`)
 
@@ -345,6 +346,8 @@ flowchart LR
 - `evaluate.py` — сравнение со штатной моделью по решениям агента, проверка совпадения оценок, решение о выпуске
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
+- `sweep.py` — сравнение порогов по сохранённым оценкам и меткам запросов
+- `diagnose.py` — диагностика подготовки реестра
 - `test_model.py` — тесты: формат, данные, полный цикл на синтетике
 - `payload_registry.py` — единый реестр атакующих пейлоадов из клонированных репозиториев
   (`PayloadsAllTheThings`, `IntruderPayloads` и др.): дедупликация по SHA-256, исключение пейлоадов из
