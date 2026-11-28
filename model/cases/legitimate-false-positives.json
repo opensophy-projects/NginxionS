@@ -1,0 +1,16 @@
+{
+  "label": 0,
+  "category": "legitimate-fp",
+  "requests": [
+    {"method": "GET", "url": "/search?q=select+best+products", "headers": {"User-Agent": "Mozilla/5.0"}, "data": ""},
+    {"method": "GET", "url": "/api/users?filter=name%3D%27John%27", "headers": {}, "data": ""},
+    {"method": "POST", "url": "/upload", "headers": {"Content-Type": "application/x-www-form-urlencoded"}, "data": "filename=document.pdf&content=SELECT%20column%20FROM%20table"},
+    {"method": "GET", "url": "/products?category=books%27%20AND%20popular%3D1", "headers": {}, "data": ""},
+    {"method": "GET", "url": "/search?q=<script>alert(1)</script>&safe=true", "headers": {}, "data": ""},
+    {"method": "GET", "url": "/api/query?sql=SELECT%20*%20FROM%20users%20WHERE%201%3D1", "headers": {}, "data": ""},
+    {"method": "POST", "url": "/form", "headers": {}, "data": "text=union+all+select+1,2,3&verified=yes"},
+    {"method": "GET", "url": "/page?ref=;ls+-la;", "headers": {}, "data": ""},
+    {"method": "GET", "url": "/search?q=drop%20table%20test", "headers": {"X-Forwarded-For": "1.1.1.1"}, "data": ""},
+    {"method": "POST", "url": "/api", "headers": {}, "data": "{\"query\":\"select * from test where id > 0 or 1=1\"}"}
+  ]
+}

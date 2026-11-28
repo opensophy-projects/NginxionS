@@ -21,8 +21,8 @@ on:
         description: Max TNR drop allowed in pp (0.001 = 0.1%, 0.005 = 0.5%). Stricter = less false blocks.
         default: "0.005"
       l2:
-        description: L2 regularization (lower = more sensitive to attacks, higher = more stable). Default 1.0.
-        default: "0.5"
+        description: L2 regularization (lower = more sensitive to attacks, higher = more stable). Default 0.3.
+        default: "0.3"
       max_tpr_drop:
         description: Max TPR drop allowed in pp (0.005 = 0.5% OK, 0.0 = must improve). Lower = must catch more attacks.
         default: "0.005"
@@ -35,10 +35,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.15' }}
-  LEGIT_WEIGHT: ${{ inputs.legit_weight || '1.0' }}
+  LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.3' }}
+  LEGIT_WEIGHT: ${{ inputs.legit_weight || '1.5' }}
   MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.0065' }}
-  L2: ${{ inputs.l2 || '0.5' }}
+  L2: ${{ inputs.l2 || '0.3' }}
   MAX_TPR_DROP: ${{ inputs.max_tpr_drop || '0.005' }}
   WCP_DATA: https://downloads.openappsec.io/waf-comparison-project
 

