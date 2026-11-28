@@ -38,7 +38,7 @@ SKIP_DIRS = {"images", "docs", "screenshots", "assets", "wordlists", "passwords"
              "bypass", "bypasses", "wp-content", "wp-plugins", "joomla", "drupal",
              "magnet", "torrent", "irc", "ftp", "protocols", "api-docs"}
 # File patterns that are likely wordlists, not attack payloads
-NOISE_FILENAME_PATTERNS = (".*passwords.*", ".*shells.*", ".*wordlist.*", ".*list\.txt$",
+NOISE_FILENAME_PATTERNS = (r".*passwords.*", r".*shells.*", r".*wordlist.*", r".*list\.txt$",
                            ".*dotxt\\.txt$", ".*requirements\\.txt$", ".*gemspec",
                            ".*manifest\\.json$", ".*composer\\.json$", ".*package\\.json$",
                            ".*nginx\\.conf$", ".*httpd\\.conf$", ".*apache\\.conf$",
