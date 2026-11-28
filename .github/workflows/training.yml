@@ -81,7 +81,7 @@ jobs:
               --out data/payloads.jsonl
           python3 model/datasets.py --legit data/legitimate.zip --legit-fraction "$LEGIT_FRACTION" \
             --malicious data/malicious.zip --mgm data/mgm-web-attack-payloads/nuclei/payloads \
-            --out data/samples.jsonl
+            --payloads data/payloads.jsonl --out data/samples.jsonl
           rm data/legitimate.zip
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:

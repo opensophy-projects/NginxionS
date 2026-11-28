@@ -32,7 +32,15 @@ COMMENT_MARKERS = ("#", "//", "--", "/*")
 NOISE_PREFIXES = ("ACTIVE", "PASSIVE")
 
 SKIP_NAMES = {"readme.txt", "license.txt", "changelog.txt", "contributing.txt"}
-SKIP_DIRS = {"images", "docs", "screenshots", "assets"}
+# Directories known to contain wordlists/passwords/shells - NOT web attack payloads
+SKIP_DIRS = {"images", "docs", "screenshots", "assets", "wordlists", "passwords", "shells", "webshells",
+             "exploits", "exploitdb", "cves", "cve", "downloads", "samples", "examples",
+             "bypass", "bypasses", "wp-content", "wp-plugins", "joomla", "drupal",
+             "magnet", "torrent", "irc", "ftp", "protocols", "api-docs"}
+# File patterns that are likely wordlists, not attack payloads
+NOISE_FILENAME_PATTERNS = (".*passwords.*", ".*shells.*", ".*wordlist.*", ".*list\.txt$",
+                           ".*dotxt\\.txt$", ".*requirements\\.txt$", ".*gemspec",
+                           ".*manifest\\.json$", ".*composer\\.json$", ".*package\\.json$")
 
 # payloads shorter than this are noise (single punctuation etc.) and would
 # cause false positives on legitimate traffic
@@ -78,9 +86,20 @@ def payload_hash(payload: str) -> str:
 def iter_text_files(root: Path):
     """Yield (repo_name, path) for *.txt files under cloned repos, skipping noise."""
     for repo_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        # Skip known noise directories (wordlists, passwords, exploits, etc.)
+        if repo_dir.name.lower() in SKIP_DIRS:
+            continue
         for path in sorted(repo_dir.rglob("*.txt")):
             name = path.name.lower()
             if name in SKIP_NAMES:
+                continue
+            # Skip files with noise patterns in name (wordlists, etc.)
+            skip_file = False
+            for pattern in NOISE_FILENAME_PATTERNS:
+                if re.search(pattern, name, re.IGNORECASE):
+                    skip_file = True
+                    break
+            if skip_file:
                 continue
             parts = path.relative_to(repo_dir).parts
             if any(p.lower() in SKIP_DIRS for p in parts):
