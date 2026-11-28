@@ -346,6 +346,10 @@ flowchart LR
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
 - `test_model.py` — тесты: формат, данные, полный цикл на синтетике
+- `payload_registry.py` — единый реестр атакующих пейлоадов из клонированных репозиториев
+  (`PayloadsAllTheThings`, `IntruderPayloads` и др.): дедупликация по SHA-256, исключение пейлоадов из
+  `mgm false-positives` (label 0), фильтрация шума, выдача GET+POST форм с `label = 1` (обучение 3-го поколения)
+- `cases/` — собственные обходы и ложные срабатывания (формат в `cases/README.md`)
 
 ### `docs/` — документация
 
