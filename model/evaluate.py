@@ -174,7 +174,7 @@ def main(argv=None):
         cols.append(("Предыдущее поколение", previous))
     cols.append(("Новая модель", new))
 
-    header = "| | " + " | ".join(name for _, name in cols) + " |"
+    header = "| | " + " | ".join(name for name, _ in cols) + " |"
     sep = "|---|" + "|".join("---" for _ in cols) + "|"
     lines += [header, sep]
 
