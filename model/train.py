@@ -18,12 +18,13 @@ that request are left out (neither label is certain for them).
 Threshold: the agent blocks a request when the final score of a value reaches the threshold of the configured
 confidence; the final score also weighs the source and learning. The threshold is measured on the stock model's
 run (which max score separates the blocked requests from the passed ones) and the intercept is set so that the
-new model is best (balanced accuracy) at that threshold on the training part.
+new model meets the TNR target on grouped out-of-fold predictions from the training part.
 
   python3 model/train.py --samples samples.jsonl --dump dump --verdicts verdicts.jsonl --base waap.data --out out/
 """
 
 import argparse
+from collections import Counter
 import copy
 import datetime
 import glob
@@ -39,6 +40,8 @@ import numpy as np
 from scipy import optimize, sparse
 
 sys.path.insert(0, str(Path(__file__).parent))
+from evaluate import usable
+from sweep import operating_point
 from waapmodel import (  # noqa: E402
     DEFAULT_COMBI_COEF,
     DEFAULT_KEYWORD_COEF,
@@ -75,7 +78,7 @@ def calibrate(samples, rows, verdicts):
     verdicts (1.0: the verdict is exactly 'max score >= threshold')"""
     pairs = []
     for sid, v in verdicts.items():
-        if v["status"] == 0 or sid not in samples:
+        if sid not in samples or not usable(v):
             continue
         score = max((r["score"] for r in rows.get(sid, [])), default=0.0)
         pairs.append((score, bool(v["blocked"])))
@@ -84,7 +87,7 @@ def calibrate(samples, rows, verdicts):
     pairs.sort()
     total_blocked = sum(b for _, b in pairs)
     # threshold between pairs[i-1] and pairs[i]: everything from i on is predicted blocked
-    best_t, best_ok = 10.0, len(pairs) - total_blocked
+    best_t, best_ok = math.nextafter(pairs[-1][0], math.inf), len(pairs) - total_blocked
     passed_ok, blocked_after = 0, total_blocked
     for i, (score, blocked) in enumerate(pairs):
         if i == 0 or score != pairs[i - 1][0]:
@@ -165,108 +168,57 @@ def fit(X, offset, nnz, y, w, l2, prior=None):
     return res.x[:n], res.x[n], res.x[n + 1]
 
 
-def request_max(groups, z):
-    """max log-odds of each request: groups = [(label, [row index])]"""
-    return [(label, max((z[i] for i in idx), default=-math.inf)) for label, idx in groups]
+def group_folds(samples):
+    """GroupKFold with up to five folds, balanced by the number of requests."""
+    counts = Counter(s["group"] for s in samples.values())
+    loads = [0] * min(5, len(counts))
+    if len(loads) < 2:
+        raise ValueError("Calibration needs at least two independent training groups")
+    folds = {}
+    for group in sorted(counts, key=lambda g: (-counts[g], g)):
+        fold = min(range(len(loads)), key=loads.__getitem__)
+        loads[fold] += counts[group]
+        folds[group] = fold
+    return folds
 
 
-def best_shift(per_request, z_t):
-    """the shift of the intercept that maximizes balanced accuracy at the threshold z_t"""
-    pos = sorted(m for label, m in per_request if label == 1)
-    neg = sorted(m for label, m in per_request if label == 0)
-    if not pos or not neg:
-        return 0.0, None
-    candidates = {0.0}
-    for m in pos + neg:
-        if math.isfinite(m):
-            candidates.add(z_t - m + 1e-6)
-    best = (-1.0, 0.0)
-    pos_a, neg_a = np.array(pos), np.array(neg)
-    for d in sorted(candidates):
-        tpr = float(np.mean(pos_a + d >= z_t))
-        tnr = float(np.mean(neg_a + d < z_t))
-        ba = (tpr + tnr) / 2
-        # on a tie the smaller shift (fewer false positives)
-        if ba > best[0] + 1e-12:
-            best = (ba, d)
-    return best[1], best[0]
-
-
-def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--samples", required=True)
-    ap.add_argument("--dump", required=True, help="directory of the feature dump of the stock model's run")
-    ap.add_argument("--verdicts", required=True, help="verdicts of the stock model's run")
-    ap.add_argument("--base", required=True, help="waap.data of the image (the model of the image: the advanced "
-                    "model of the image; a linear base model is the start of the training)")
-    ap.add_argument("--l2", type=float, default=1.0, help="L2 regularization (default 1.0)")
-    ap.add_argument("--name", default=datetime.date.today().isoformat(), help="model version suffix")
-    ap.add_argument("--out", required=True, help="output directory")
-    args = ap.parse_args(argv)
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-
-    samples = load_samples(args.samples)
-    rows = read_dump(sorted(glob.glob(str(Path(args.dump) / "*.jsonl"))))
-    verdicts = load_verdicts(args.verdicts)
-    base_doc = load_waap_data(args.base)
-    base = Model.from_scores(base_doc["waap_scores"])
-
-    threshold, agreement = calibrate(samples, rows, verdicts)
-    z_t = logit(threshold)
-    print(f"threshold: max score {threshold:.3f} (rule explains {agreement:.2%} of the stock verdicts)",
-          file=sys.stderr)
-
+def fit_model(base, samples, rows, l2):
     # values of the training part and their labels
     data = Data(base)
-    values, y, weight, groups = [], [], [], []
+    values, y, weight = [], [], []
     unseen_attacks = 0
-    n_pos = sum(1 for s in samples.values() if s["split"] == "train" and s["label"] == 1)
-    n_neg = sum(1 for s in samples.values() if s["split"] == "train" and s["label"] == 0)
+    n_pos = sum(1 for s in samples.values() if s["label"] == 1)
+    n_neg = sum(1 for s in samples.values() if s["label"] == 0)
     for sid, s in samples.items():
-        if s["split"] != "train":
-            continue
         rs = rows.get(sid, [])
         if s["label"] == 1:
             if not rs:
                 unseen_attacks += 1
-                groups.append((1, []))
                 continue
             top = max(rs, key=lambda r: r["score"])
-            groups.append((1, [len(values)]))
             values.append((top["keywords"], top["combinations"]))
             y.append(1)
             weight.append(1.0)
         else:
-            idx = []
             for r in rs:
-                idx.append(len(values))
                 values.append((r["keywords"], r["combinations"]))
                 y.append(0)
                 # every legitimate request weighs as much as an attack in total; classes balanced
                 weight.append(n_pos / max(n_neg, 1) / len(rs))
-            groups.append((0, idx))
-    if not values:
-        raise SystemExit("no values with keywords in the training part")
+    if len(set(y)) != 2:
+        raise ValueError("Both classes need feature observations in each fitting fold")
     indptr, indices, offset, nnz = data.build(values)
     X = data.matrix(indptr, indices)
     y, weight = np.array(y), np.array(weight)
     print(f"training: {X.shape[0]} values, {X.shape[1]} features, {int(y.sum())} attacks "
-          f"({unseen_attacks} attacks without keywords: no model can see them)", file=sys.stderr)
+          f"({unseen_attacks} attacks without feature observations)", file=sys.stderr)
 
     prior = None
     if base.linear:
         # start from the base model: its coefficient of each feature, its intercept and log_nnz_coef
         prior = [base.coef(f, f not in data.seen_as_keyword) for f in sorted(data.index, key=data.index.get)]
         prior += [base.stats.get("intercept", 0.0), base.stats.get("log_nnz_coef", 0.0)]
-        print(f"start: the base model ({base_doc.get('model_version')})", file=sys.stderr)
-    coef, intercept, log_nnz = fit(X, offset, nnz, y, weight, args.l2, prior)
-    z = X @ coef + intercept + log_nnz * nnz + offset
-    shift, train_ba = best_shift(request_max(groups, z), z_t)
-    intercept += shift
-    print(f"intercept {intercept:.4f} (shift {shift:+.4f}), log_nnz_coef {log_nnz:.4f}, "
-          f"train balanced accuracy at the threshold {train_ba}", file=sys.stderr)
-
+    coef, intercept, log_nnz = fit(X, offset, nnz, y, weight, l2, prior)
     # the model: every feature of the stock model and every feature seen in training
     model = Model(copy.deepcopy(base.entries), {
         "false_positives": base.stats.get("false_positives", 0),
@@ -294,6 +246,53 @@ def main(argv=None):
         # the agent takes score 0 and coef 0 of a pair for "not in the model": new_score is never 0
         entry["new_score"] = round(10.0 / (1.0 + math.exp(-c)), 8) or 1e-8
 
+    stats = {"values": int(X.shape[0]), "features": int(X.shape[1]), "attacks": int(y.sum()),
+             "legitimate": int(X.shape[0] - y.sum()), "attacks_without_keywords": unseen_attacks, "l2": l2}
+    return model, learned, stats
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--samples", required=True)
+    ap.add_argument("--dump", required=True, help="directory of the feature dump of the stock model's run")
+    ap.add_argument("--verdicts", required=True, help="verdicts of the stock model's run")
+    ap.add_argument("--base", required=True, help="waap.data of the image (the model of the image: the advanced "
+                    "model of the image; a linear base model is the start of the training)")
+    ap.add_argument("--l2", type=float, default=1.0, help="L2 regularization (default 1.0)")
+    ap.add_argument("--name", default=datetime.date.today().isoformat(), help="model version suffix")
+    ap.add_argument("--out", required=True, help="output directory")
+    args = ap.parse_args(argv)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    samples = load_samples(args.samples)
+    rows = read_dump(sorted(glob.glob(str(Path(args.dump) / "*.jsonl"))))
+    verdicts = load_verdicts(args.verdicts)
+    base_doc = load_waap_data(args.base)
+    base = Model.from_scores(base_doc["waap_scores"])
+
+    train = {sid: s for sid, s in samples.items() if s["split"] == "train"
+             and usable(verdicts.get(sid))}
+    folds = group_folds(train)
+    if any(s["group"] in folds for s in samples.values() if s["split"] == "test"):
+        raise ValueError("A group appears in both training and test")
+    margins = []
+    for fold in sorted(set(folds.values())):
+        fitting = {sid: s for sid, s in train.items() if folds[s["group"]] != fold}
+        fold_model, _, _ = fit_model(base, fitting, rows, args.l2)
+        threshold, _ = calibrate(fitting, rows, verdicts)
+        for sid, s in train.items():
+            if folds[s["group"]] == fold:
+                score = max((fold_model.log_odds(r["keywords"], r["combinations"])
+                             for r in rows.get(sid, [])), default=-math.inf)
+                margins.append((s["label"], score - logit(threshold)))
+    point = operating_point(margins, 0.99)
+    threshold, agreement = calibrate(train, rows, verdicts)
+    model, learned, stats = fit_model(base, train, rows, args.l2)
+    shift = -point["cut"]
+    model.stats["intercept"] += shift
+    print(f"Out-of-fold calibration: {point}; intercept shift {shift:+.5f}", file=sys.stderr)
+
     doc = copy.deepcopy(base_doc)
     doc["model_version"] = f"NginxionS {args.name}"
     doc["waap_scores"] = model.to_scores()
@@ -308,9 +307,9 @@ def main(argv=None):
     for part in ("train", "test"):
         tp = fn = tn = fp = 0
         for sid, s in samples.items():
-            if s["split"] != part:
+            if s["split"] != part or not usable(verdicts.get(sid)):
                 continue
-            m = max((model.score(r["keywords"], r["combinations"]) for r in rows.get(sid, [])), default=0.0)
+            m = max((model.score(r["keywords"], r["combinations"]) for r in rows.get(sid, [])), default=-math.inf)
             hit = m >= threshold
             if s["label"] == 1:
                 tp += hit
@@ -321,15 +320,15 @@ def main(argv=None):
         tpr = tp / max(tp + fn, 1)
         tnr = tn / max(tn + fp, 1)
         offline[part] = {"tpr": tpr, "tnr": tnr, "balanced_accuracy": (tpr + tnr) / 2, "attacks": tp + fn,
-                         "legitimate": tn + fp}
+                         "legitimate": tn + fp, "accuracy": (tp + tn) / max(tp + tn + fp + fn, 1), "fp": fp, "fn": fn}
     card = {
         "model_version": doc["model_version"],
         "trained": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "sha256": hashlib.sha256(waap.read_bytes()).hexdigest(),
         "threshold": {"max_score": threshold, "explains_stock_verdicts": agreement},
-        "training": {"values": int(X.shape[0]), "features": int(X.shape[1]), "attacks": int(y.sum()),
-                     "legitimate": int(X.shape[0] - y.sum()), "attacks_without_keywords": unseen_attacks, "l2": args.l2},
-        "params": {"intercept": float(intercept), "log_nnz_coef": float(log_nnz)},
+        "training": stats,
+        "calibration": {"folds": len(set(folds.values())), "requests": len(margins), "shift": shift, **point},
+        "params": {k: float(model.stats[k]) for k in ("intercept", "log_nnz_coef")},
         "offline": offline,
         "top_features": sorted(({"feature": f, "coef": round(learned[f], 4)} for f in learned),
                                key=lambda e: -abs(e["coef"]))[:40],

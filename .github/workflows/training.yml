@@ -9,6 +9,11 @@ name: Training
 on:
   # every branch: the job below runs on training/** and on [training] only
   push:
+  pull_request:
+    branches: [training/3rd-gen-payloads]
+    paths:
+      - model/**
+      - .github/workflows/training.yml
   workflow_dispatch:
     inputs:
       legit_fraction:
@@ -39,10 +44,25 @@ env:
   WCP_DATA: https://downloads.openappsec.io/waf-comparison-project
 
 jobs:
+  calibration-tests:
+    if: github.event_name == 'pull_request'
+    name: Test offline calibration and release criteria
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --require-hashes -r model/requirements.txt
+          .venv/bin/python -m unittest discover -s model
+
   train:
     name: Train and evaluate the WAF model
     if: >-
-      github.event_name != 'push' || startsWith(github.ref, 'refs/heads/training/') ||
+      github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/training/') ||
       contains(github.event.head_commit.message, '[training]')
     runs-on: ubuntu-latest
     timeout-minutes: 350

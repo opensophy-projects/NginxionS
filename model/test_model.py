@@ -100,9 +100,32 @@ class DatasetsTest(unittest.TestCase):
             self.assertEqual((s["label"], s["method"], s["data"], s["headers"]), (1, "POST", '{"k": "v"}', {"A": "1"}))
 
 
+class CalibrationTest(unittest.TestCase):
+    def test_tnr_floor_and_ties_use_all_requests(self):
+        from sweep import operating_point
+        rows = [(0, score) for score in range(100)] + [(1, 99), (1, 100), (1, -math.inf)]
+        point = operating_point(rows, 0.99)
+        self.assertEqual((point["cut"], point["tn"], point["fp"], point["fn"]), (99, 99, 1, 1))
+        self.assertAlmostEqual(point["accuracy"], 101 / 103)
+        self.assertFalse(point["meets_targets"])
+        tied = operating_point([(0, 6)] * 100 + [(1, 6)], 0.99)
+        self.assertEqual((tied["tp"], tied["fp"]), (0, 0))
+
+
 @unittest.skipUnless(HAVE_SCIPY, "numpy and scipy are needed (model/requirements.txt)")
 class TrainingCycleTest(unittest.TestCase):
     """The cycle on synthetic traffic: the stock agent's run, training, the new model's run, the gate."""
+
+    def test_group_and_holdout_isolation(self):
+        import train
+        groups = {str(i): {"group": str(i % 7)} for i in range(30)}
+        folds = train.group_folds(groups)
+        self.assertEqual(set(folds.values()), set(range(5)))
+        self.assertEqual(folds, train.group_folds(dict(reversed(groups.items()))))
+        rows = {"ordinary": [{"score": 1}], "blocked": [{"score": 7}], "held": [{"score": 2}]}
+        labels = {"ordinary": {"status": 200, "blocked": False}, "blocked": {"status": 403, "blocked": True},
+                  "held": {"status": 403, "blocked": True}}
+        self.assertEqual(train.calibrate({"ordinary": {}, "blocked": {}}, rows, labels), (7, 1))
 
     def test_cycle(self):
         self.cycle(linear=False)
@@ -191,6 +214,9 @@ class TrainingCycleTest(unittest.TestCase):
                 evaluate.main(args)
             result = json.loads((d / "metrics.json").read_text("utf-8"))
             self.assertEqual(ok.exception.code, 0, result["checks"])
+            self.assertTrue(all(p["tnr"] >= p["min_tnr"] for p in result["score_sweep"]))
+            self.assertEqual(card["calibration"]["folds"], 5)
+            self.assertEqual(card["calibration"]["requests"], sum(s["split"] == "train" for s in samples))
             self.assertEqual(result["parity"]["share"], 1.0)
             self.assertGreater(result["candidate"]["balanced_accuracy"], result["stock"]["balanced_accuracy"])
 

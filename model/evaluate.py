@@ -21,12 +21,18 @@ Release gate (all of them):
 import argparse
 import glob
 import json
+import math
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from sweep import operating_point
 from waapmodel import Model, load_waap_data, read_dump  # noqa: E402
+
+
+def usable(v):
+    return v is not None and (v["status"] == 403 or 200 <= v["status"] < 300)
 
 
 def metrics(samples, verdicts, ids):
@@ -35,7 +41,7 @@ def metrics(samples, verdicts, ids):
     for sid in ids:
         v = verdicts.get(sid)
         s = samples[sid]
-        if v is None or v["status"] == 0:
+        if not usable(v):
             total["no_answer"] += 1
             continue
         key = ("tp" if v["blocked"] else "fn") if s["label"] == 1 else ("fp" if v["blocked"] else "tn")
@@ -51,7 +57,9 @@ def summarize(c):
     tpr = c["tp"] / attacks if attacks else None
     tnr = c["tn"] / legit if legit else None
     ba = (tpr + tnr) / 2 if tpr is not None and tnr is not None else None
-    return {**c, "attacks": attacks, "legitimate": legit, "tpr": tpr, "tnr": tnr, "balanced_accuracy": ba}
+    accuracy = (c["tp"] + c["tn"]) / (attacks + legit) if attacks + legit else None
+    return {**c, "attacks": attacks, "legitimate": legit, "tpr": tpr, "tnr": tnr,
+            "accuracy": accuracy, "balanced_accuracy": ba}
 
 
 def parity(model, rows):
@@ -122,12 +130,16 @@ def main(argv=None):
     new_v = load_verdicts(args.candidate)
     previous_v = load_verdicts(args.previous) if args.previous else None
 
-    stock, stock_cat = metrics(samples, stock_v, test)
-    new, new_cat = metrics(samples, new_v, test)
+    paired = [sid for sid in test if usable(stock_v.get(sid)) and usable(new_v.get(sid))]
+    unpaired = len(test) - len(paired)
+    stock, stock_cat = metrics(samples, stock_v, paired)
+    new, new_cat = metrics(samples, new_v, paired)
+    for summary, verdicts in ((stock, stock_v), (new, new_v)):
+        summary["no_answer"] = sum(not usable(verdicts.get(sid)) for sid in test)
     previous = None
     previous_cat = {}
     if previous_v is not None:
-        previous, previous_cat = metrics(samples, previous_v, test)
+        previous, previous_cat = metrics(samples, previous_v, paired)
 
     model = Model.from_scores(load_waap_data(args.model)["waap_scores"])
     new_rows = read_dump(sorted(glob.glob(str(Path(args.dump) / "*.jsonl"))))
@@ -145,18 +157,32 @@ def main(argv=None):
           f'{pct(inspected)} of the held-out requests with keywords reached the agent with the new model')
     check("parity", par["share"] is not None and par["share"] >= 0.999,
           f'{par["matched"]}/{par["values"]} values scored by the agent as the trainer computes')
-    check("answers", new["no_answer"] <= max(10, len(test) // 1000), f'{new["no_answer"]} requests without an answer')
+    check("answers", unpaired <= max(10, len(test) // 1000),
+          f"{len(paired)}/{len(test)} requests with usable answers from both agents")
     check("balanced accuracy", (new["balanced_accuracy"] or 0) >= (stock["balanced_accuracy"] or 0),
           f'{pct(new["balanced_accuracy"])} vs {pct(stock["balanced_accuracy"])}')
     check("legitimate passed (TNR)", (new["tnr"] or 0) >= (stock["tnr"] or 0) - args.max_tnr_drop,
           f'{pct(new["tnr"])} vs {pct(stock["tnr"])} (drop allowed {args.max_tnr_drop * 100:.2f} pp)')
     check("attacks blocked (TPR)", (new["tpr"] or 0) >= (stock["tpr"] or 0) - args.max_tpr_drop,
           f'{pct(new["tpr"])} vs {pct(stock["tpr"])} (drop allowed {args.max_tpr_drop * 100:.2f} pp)')
+    for key, target in (("tnr", 0.99), ("tpr", 0.70), ("accuracy", 0.90)):
+        check(f"target {key}", new[key] is not None and new[key] >= target,
+              f"{pct(new[key])}, target >= {pct(target)}")
+    check("false blocks", new["fp"] < 644 and new["fp"] < stock["fp"],
+          f'{new["fp"]} false blocks, stock {stock["fp"]}, historical limit < 644')
+    check("missed attacks", new["fn"] < stock["fn"],
+          f'{new["fn"]} missed attacks, stock {stock["fn"]}')
     passed = all(c["ok"] for c in checks)
+    held_scores = [(samples[sid]["label"], max((r["score"] for r in new_rows.get(sid, [])),
+                                                default=-math.inf)) for sid in paired]
+    sweep = []
+    if new["attacks"] and new["legitimate"] and any(math.isfinite(v) for _, v in held_scores):
+        for target in (0.98, 0.985, 0.99, 0.992, 0.995):
+            sweep.append({"min_tnr": target, **operating_point(held_scores, target)})
     card = json.loads(Path(args.card).read_text(encoding="utf-8")) if args.card else None
 
     result = {"passed": passed, "checks": checks, "stock": stock, "previous": previous, "candidate": new,
-              "parity": par, "inspected": inspected,
+              "parity": par, "inspected": inspected, "paired": len(paired), "unpaired": unpaired, "score_sweep": sweep,
               "by_category": {k: {"stock": stock_cat.get(k), "previous": previous_cat.get(k),
                                   "candidate": v} for k, v in new_cat.items()},
               "card": card}
@@ -182,6 +208,7 @@ def main(argv=None):
     rows_def = [
         ("атаки заблокированы (TPR)", "tpr", True),
         ("легитимные пропущены (TNR)", "tnr", True),
+        ("точность (accuracy)", "accuracy", True),
         ("сбалансированная точность", "balanced_accuracy", True),
         ("ложные блокировки", "fp", False),
         ("пропущенные атаки", "fn", False),
@@ -193,13 +220,23 @@ def main(argv=None):
             cells.append(pct(v) if is_pct and v is not None else (count(v) if v is not None else "—"))
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
 
+    lines += ["", f"Сопоставлены ответы на {len(paired)} из {len(test)} запросов.", ""]
+    for c in checks:
+        lines.append(f"- {'✅' if c['ok'] else '❌'} {c['check']} — {c['detail']}")
+    if sweep:
+        lines += ["", "Диагностика по оценкам на отложенной выборке", "",
+                  "| Цель TNR | Расчётный TNR | Расчётный TPR | FP | FN |", "|---|---|---|---|---|"]
+        for point in sweep:
+            lines.append(f"| {pct(point['min_tnr'])} | {pct(point['tnr'])} | {pct(point['tpr'])} | "
+                         f"{point['fp']} | {point['fn']} |")
+
     if card:
         tr = card.get("training", {})
         lines += ["", "Готовность к новому поколению:",
                   f"- легальных запросов в обучении: {count(tr.get('legitimate'))}",
                   f"- нелегальных запросов в обучении: {count(tr.get('attacks'))}",
                   f"- признаков в модели: {count(tr.get('features'))}",
-                  f"- атак без ключевых слов (невидимы любой модели): {count(tr.get('attacks_without_keywords'))}",
+                  f"- обучающих атак без записанных признаков: {count(tr.get('attacks_without_keywords'))}",
                   ""]
 
     lines += ["", "Отложенная часть (сайты и полезные нагрузки, которых модель не видела), решения настоящего агента:", ""]
