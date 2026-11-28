@@ -151,7 +151,7 @@ find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "
 
 step "training"
 "$PYTHON" model/train.py --samples "$samples" --dump "$work/dump-stock" --verdicts "$work/verdicts-stock.jsonl" \
-  --base "$work/waap-stock.data" --name "$MODEL_NAME" --out "$work/out"
+  --base "$work/waap-stock.data" --name "$MODEL_NAME" --out "$work/out" --l2 "${L2:-0.5}"
 
 step "install the new model like an administrator (WAF -> Agent -> model), the agent restarts"
 curl -sS --fail-with-body --max-time 300 -k -b "$JAR" -X PUT -H 'Content-Type: application/octet-stream' \
@@ -182,4 +182,4 @@ step "comparison and the release gate"
 "$PYTHON" model/evaluate.py --samples "$samples" --stock "$work/verdicts-stock.jsonl" \
   --candidate "$work/verdicts-new.jsonl" --dump "$work/dump-new" --stock-dump "$work/dump-stock" --model "$work/out/waap.data" \
   --card "$work/out/model-card.json" --summary "$work/report.md" --out "$work/metrics.json" \
-  --max-tnr-drop "${MAX_TNR_DROP:-0.001}"
+  --max-tnr-drop "${MAX_TNR_DROP:-0.001}" --max-tpr-drop "${MAX_TPR_DROP:-0.0}"

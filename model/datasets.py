@@ -135,6 +135,8 @@ def main(argv=None):
     ap.add_argument("--legit", help="legitimate.zip of the WAF Comparison Project")
     ap.add_argument("--legit-fraction", type=float, default=0.15,
                     help="share of the legitimate requests taken (default 0.15, like the --fast mode of the WCP)")
+    ap.add_argument("--legit-weight", type=float, default=1.0,
+                    help="multiply legitimate requests by this factor (1.0 = no duplication, 2.0 = double)")
     ap.add_argument("--malicious", help="malicious.zip of the WAF Comparison Project")
     ap.add_argument("--mgm", help="nuclei/payloads of mgm-web-attack-payloads (its false-positives.txt are taken)")
     ap.add_argument("--payloads", help="unique attack payloads from model/payload_registry.py (label 1)")
@@ -160,12 +162,15 @@ def main(argv=None):
     with open(args.out, "w", encoding="utf-8") as out:
         for source in sources:
             for sample in source:
-                sample["split"] = "test" if unit("split", sample["group"]) < args.test_fraction else "train"
-                sample["id"] = f"s{n:07d}"
-                n += 1
-                key = (sample["source"], sample["split"])
-                counts[key] = counts.get(key, 0) + 1
-                out.write(json.dumps(sample, ensure_ascii=False) + "\n")
+                # NginxionS: apply legit-weight to duplicate legitimate requests
+                weight = args.legit_weight if sample["label"] == 0 else 1.0
+                for _ in range(int(weight)):
+                    sample["split"] = "test" if unit("split", sample["group"]) < args.test_fraction else "train"
+                    sample["id"] = f"s{n:07d}"
+                    n += 1
+                    key = (sample["source"], sample["split"])
+                    counts[key] = counts.get(key, 0) + 1
+                    out.write(json.dumps(sample, ensure_ascii=False) + "\n")
     for (source, split), count in sorted(counts.items()):
         print(f"{source:14} {split:5} {count}", file=sys.stderr)
     print(f"total {n}", file=sys.stderr)
