@@ -70,6 +70,8 @@ class PackagingTest(unittest.TestCase):
         checked = {
             "passed": True,
             "model_sha256": sha256(data),
+            "stock_model_sha256": sha256(reference),
+            "loaded_model_sha256": sha256(data),
             "checks": [{"check": name, "ok": True} for name in sorted(CHECKS)],
             "card": card,
             "stock": scores,
@@ -97,6 +99,8 @@ class PackagingTest(unittest.TestCase):
         reference, checked = self.existing_candidate()
         for change, message in (
             ({"model_sha256": "0" * 64}, "same file"),
+            ({"stock_model_sha256": "0" * 64}, "baseline must match generation 2"),
+            ({"loaded_model_sha256": "0" * 64}, "differs from the file on the agent"),
             ({"passed": False}, "passing evaluation"),
             ({"checks": checked["checks"][:-1]}, "passing evaluation"),
             ({"checks": [checked["checks"][0]] * len(CHECKS)}, "passing evaluation"),

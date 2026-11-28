@@ -20,7 +20,7 @@ python3 training/package_generation.py baseline --out model-work/generation-2
 
 ## Упаковать поколение 3
 
-Возьмите `out/waap.data`, `out/model-card.json` и `metrics.json` из одного успешного прогона CI. Для упаковки нужен отчёт с полем `model_sha256`, вычисленным при оценке. Путь к распакованному артефакту передайте в `--work`.
+Возьмите `out/waap.data`, `out/model-card.json` и `metrics.json` из одной успешной оценки на агенте. Оценщик записывает `model_sha256` кандидата, `loaded_model_sha256` файла с агента и `stock_model_sha256` базы поколения 2. Путь к папке с этими файлами передайте в `--work`. [Критерии оценки на агенте](../docs/MODEL.md#когда-модель-можно-выпускать)
 
 ```bash
 python3 training/package_generation.py candidate \

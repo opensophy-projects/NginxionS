@@ -140,6 +140,8 @@ for i in $(seq 1 90); do
   sleep 2
 done
 wait_verdicts
+docker cp "$("${compose[@]}" ps -q openappsec):/etc/cp/conf/waap/waap.data" "$work/waap-loaded.data"
+cmp -s "$work/waap-loaded.data" "$work/out/waap.data" || fail "the agent's candidate differs from the trained file"
 # the rows of the probes stay (sample "probe", not in the set): the agent keeps its files open, a file removed
 # now would take everything it writes after
 
@@ -153,4 +155,5 @@ mv "$NGINXIONS_FEATURES_DIR"/*.jsonl "$work/dump-new/" 2> /dev/null || fail "the
 step "comparison and the release gate"
 "$PYTHON" model/evaluate.py --samples "$samples" --stock "$work/verdicts-stock.jsonl" \
   --candidate "$work/verdicts-new.jsonl" --dump "$work/dump-new" --stock-dump "$work/dump-stock" --model "$work/out/waap.data" \
+  --stock-model "$work/waap-stock.data" --loaded-model "$work/waap-loaded.data" \
   --card "$work/out/model-card.json" --summary "$work/report.md" --out "$work/metrics.json"

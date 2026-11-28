@@ -21,6 +21,7 @@ CHECKS = {
     "balanced accuracy",
     "legitimate passed (TNR)",
     "attacks blocked (TPR)",
+    "model identity",
 }
 SIGNATURE_LISTS = ("words_regex_list", "pattern_regex_list", "specific_acuracy_keywords_regex_list")
 
@@ -110,6 +111,10 @@ def candidate(work, reference):
     if (card.get("sha256") != checksum or card.get("model_version") != label or metrics.get("card") != card
             or metrics.get("model_sha256") != checksum):
         raise ValueError("Candidate model, card and evaluation do not describe the same file")
+    if metrics.get("loaded_model_sha256") != checksum:
+        raise ValueError("Evaluated candidate differs from the file on the agent")
+    if metrics.get("stock_model_sha256") != source["sha256"]:
+        raise ValueError("Evaluation baseline must match generation 2")
     checks = metrics.get("checks")
     if (
         metrics.get("passed") is not True
@@ -120,7 +125,8 @@ def candidate(work, reference):
         or {check["check"] for check in checks} != CHECKS
     ):
         raise ValueError("Candidate has no complete passing evaluation")
-    summary = {"passed": True, "checks": sorted(CHECKS), "sha256": checksum}
+    summary = {"passed": True, "checks": sorted(CHECKS), "sha256": checksum,
+               "stock_model_sha256": source["sha256"]}
     fields = ("attacks", "legitimate", "tpr", "tnr", "balanced_accuracy")
     for key in ("stock", "candidate"):
         measured = metrics.get(key)

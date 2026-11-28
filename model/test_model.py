@@ -193,18 +193,20 @@ class TrainingCycleTest(unittest.TestCase):
             for r in dump:
                 score = model.score(r["keywords"], r["combinations"])
                 dump2.append({**r, "score": round(score, 6)})
-                verdicts2.append({"id": r["sample"], "status": 200, "blocked": score >= t})
+                verdicts2.append({"id": r["sample"], "status": 403 if score >= t else 200, "blocked": score >= t})
             (d / "dump2").mkdir()
             write(d / "dump2" / "1.jsonl", dump2)
             write(d / "new.jsonl", verdicts2)
             args = ["--samples", str(d / "samples.jsonl"), "--stock", str(d / "stock.jsonl"), "--candidate",
                     str(d / "new.jsonl"), "--dump", str(d / "dump2"), "--stock-dump", str(d / "dump"), "--model", str(d / "out" / "waap.data"),
+                    "--stock-model", str(d / "waap.data"), "--loaded-model", str(d / "out" / "waap.data"),
                     "--card", str(d / "out" / "model-card.json"), "--out", str(d / "metrics.json")]
             with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as ok:
                 evaluate.main(args)
             result = json.loads((d / "metrics.json").read_text("utf-8"))
             self.assertEqual(ok.exception.code, 0, result["checks"])
             self.assertEqual(result["model_sha256"], card["sha256"])
+            self.assertEqual(result["loaded_model_sha256"], card["sha256"])
             self.assertEqual(result["parity"]["share"], 1.0)
             self.assertGreater(result["candidate"]["balanced_accuracy"], result["stock"]["balanced_accuracy"])
 
