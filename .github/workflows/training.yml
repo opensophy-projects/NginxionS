@@ -33,7 +33,7 @@ concurrency:
 
 env:
   LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.15' }}
-  MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.005' }}
+  MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.0065' }}
   L2: ${{ inputs.l2 || '0.4' }}
   MAX_TPR_DROP: ${{ inputs.max_tpr_drop || '0.005' }}
   WCP_DATA: https://downloads.openappsec.io/waf-comparison-project

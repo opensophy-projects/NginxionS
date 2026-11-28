@@ -40,7 +40,13 @@ SKIP_DIRS = {"images", "docs", "screenshots", "assets", "wordlists", "passwords"
 # File patterns that are likely wordlists, not attack payloads
 NOISE_FILENAME_PATTERNS = (".*passwords.*", ".*shells.*", ".*wordlist.*", ".*list\.txt$",
                            ".*dotxt\\.txt$", ".*requirements\\.txt$", ".*gemspec",
-                           ".*manifest\\.json$", ".*composer\\.json$", ".*package\\.json$")
+                           ".*manifest\\.json$", ".*composer\\.json$", ".*package\\.json$",
+                           ".*nginx\\.conf$", ".*httpd\\.conf$", ".*apache\\.conf$",
+                           ".*web\\.xml$", ".*pyproject\\.toml$", ".*setup\\.py$",
+                           "*.cfg", "*.ini", "*.yaml", "*.yml", "*.toml",
+                           "Dockerfile*", "docker-compose*",
+                           "*.sql", "backup*", "dump*", "archive*",
+                           "readme*", "license*", "changelog*")
 
 # payloads shorter than this are noise (single punctuation etc.) and would
 # cause false positives on legitimate traffic
