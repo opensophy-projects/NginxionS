@@ -206,7 +206,7 @@ def main(argv=None):
     # ---------- детальный отчёт по каждому запросу ----------
     lines += ["<details><summary>По каждому запросу (отложенная часть)</summary>", ""]
     lines += ["| id | источник | категория | метка | " +
-              " | ".join(name for _, name in cols) + " | URL |",
+              " | ".join(name for name, _ in cols) + " | URL |",
               "|---|---|---|---|" + "|".join(":---:" for _ in cols) + "|---|"]
     for sid in sorted(test):
         s = samples[sid]
