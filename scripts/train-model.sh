@@ -142,8 +142,9 @@ if [ ! -d "$NGINXIONS_FEATURES_DIR" ]; then
 fi
 ls -la "$NGINXIONS_FEATURES_DIR" >&2 || fail "cannot list feature dump directory"
 # NginxionS: collect feature dump files (may be from multiple pids if agent restarted)
+openappsec_id="$("${compose[@]}" ps -q openappsec)"
 find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "$work/dump-stock/" \; 2>/dev/null || \
-  fail "the agent wrote no features (check: docker exec \$("${compose[@]}" ps -q openappsec) ls -la /var/log/nginxions-features)"
+  fail "the agent wrote no features (check: docker exec $openappsec_id ls -la /var/log/nginxions-features)"
 [ -n "$(find "$work/dump-stock" -name "*.jsonl" -type f -print -quit)" ] || fail "no feature files found in $work/dump-stock"
 
 step "training"
@@ -172,7 +173,7 @@ mkdir -p "$work/dump-new"
 ls -la "$NGINXIONS_FEATURES_DIR" >&2 || fail "cannot list feature dump directory after model installation"
 # NginxionS: collect feature dump files (may be from multiple pids if agent restarted)
 find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "$work/dump-new/" \; 2>/dev/null || \
-  fail "the agent wrote no features with the new model"
+  fail "the agent wrote no features with the new model (check: docker exec $openappsec_id ls -la /var/log/nginxions-features)"
 [ -n "$(find "$work/dump-new" -name "*.jsonl" -type f -print -quit)" ] || fail "no feature files found in $work/dump-new after model update"
 
 step "comparison and the release gate"
