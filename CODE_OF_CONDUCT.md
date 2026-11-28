@@ -343,6 +343,7 @@ flowchart LR
 - `waapmodel.py` — формат модели агента (`waap.data`) и её оценка, вычисленная так же, как в агенте
 - `train.py` — обучение: разреженная логистическая регрессия по признакам агента, порог, `waap.data` и `.tgz`
 - `evaluate.py`, `test_evaluate.py` — сравнение пар вердиктов, проверка оценок и SHA-256 файлов с агента
+- `verdict-cases.txt`, `check_verdict_cases.py` — текстовые фикстуры HTTP-статусов и проверка работы оценщика в CI
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
 - `test_model.py` — тесты формата, данных и цикла на синтетических признаках

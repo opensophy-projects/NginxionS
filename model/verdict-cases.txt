@@ -1,0 +1,27 @@
+# Фикстуры для проверки оценщика WAF. Статусы в примерах заданы вручную.
+# Добавьте одну строку на сценарий, разделяя поля пробелами.
+# ID  метка  HTTP-поколение-2  HTTP-кандидат  итог-поколение-2  итог-кандидат
+# Метка: 0 = обычный запрос, 1 = атака.
+# HTTP: 2xx = пропуск, 403 = блокировка, 0 = нет ответа.
+# Итог: tn = обычный запрос пропущен, fp = ложная блокировка,
+#       tp = атака заблокирована, fn = атака пропущена,
+#       unusable = ответ непригоден для сравнения.
+# Например, если обычный запрос получил 403 у поколения 2 и 200 у кандидата:
+# case-example 0 403 200 fp tn
+# Для атакующего сценария с блокировкой у обеих моделей:
+# case-attack 1 403 403 tp tp
+# В строки записывайте только ID, метки, статусы и ожидаемые итоги.
+
+ordinary-path        0  200  200  tn        tn
+ordinary-query       0  403  200  fp        tn
+ordinary-header      0  200  403  tn        fp
+ordinary-cookie      0  204  200  tn        tn
+ordinary-json        0  200  500  tn        unusable
+ordinary-form        0  200  201  tn        tn
+ordinary-multipart   0  201  201  tn        tn
+ordinary-xml         0  200  302  tn        unusable
+
+attack-blocked       1  403  403  tp        tp
+attack-missed        1  403  200  tp        fn
+attack-new-block     1  200  403  fn        tp
+attack-no-response   1  403  0    tp        unusable

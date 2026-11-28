@@ -38,13 +38,21 @@ def usable_verdict(verdict):
             and verdict.get("blocked") is (status == 403))
 
 
+def verdict_outcome(label, verdict):
+    if not usable_verdict(verdict):
+        return "unusable"
+    if label == 1:
+        return "tp" if verdict["blocked"] else "fn"
+    return "fp" if verdict["blocked"] else "tn"
+
+
 def metrics(samples, verdicts, ids):
     total = {"tp": 0, "fn": 0, "tn": 0, "fp": 0}
     by_category = {}
     for sid in ids:
         v = verdicts[sid]
         s = samples[sid]
-        key = ("tp" if v["blocked"] else "fn") if s["label"] == 1 else ("fp" if v["blocked"] else "tn")
+        key = verdict_outcome(s["label"], v)
         total[key] += 1
         cat = by_category.setdefault(f'{s["source"]}/{s["category"]}' if s["source"] != "wcp-legit" else
                                      "wcp-legit", {"tp": 0, "fn": 0, "tn": 0, "fp": 0})
