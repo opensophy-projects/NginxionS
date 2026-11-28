@@ -349,11 +349,7 @@ flowchart LR
 - `payload_registry.py` — единый реестр атакующих пейлоадов из клонированных репозиториев
   (`PayloadsAllTheThings`, `IntruderPayloads` и др.): дедупликация по SHA-256, исключение пейлоадов из
   `mgm false-positives` (label 0), фильтрация шума, выдача GET+POST форм с `label = 1` (обучение 3-го поколения)
-- `cases/README.md` — формат собственных обходов и ложных срабатываний
-- `legitimate-false-positives.json` — примеры легитимного трафика, который может выглядеть как атаки
-- `sqli-bypasses-prod.json` — примеры SQL-инъекций из продакшена
-- `xss-bypasses-prod.json` — примеры XSS-обходов из продакшена
-- `command-injection-prod.json` — примеры command injection из продакшена
+- `cases/README.md` — формат собственных обходов и ложных срабатываний (`model/cases/*.json`)
 
 ### `docs/` — документация
 
