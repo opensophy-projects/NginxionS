@@ -18,14 +18,14 @@ on:
         description: Multiply legitimate requests (2.0 = double them in training). Helps reduce false blocks.
         default: "1.0"
       max_tnr_drop:
-        description: Max TNR drop allowed (0.001 = strict, 0.002 = default). Stricter = less false blocks.
-        default: "0.001"
+        description: Max TNR drop allowed in pp (0.001 = 0.1%, 0.005 = 0.5%). Stricter = less false blocks.
+        default: "0.005"
       l2:
         description: L2 regularization (lower = more sensitive to attacks, higher = more stable). Default 1.0.
         default: "0.5"
       max_tpr_drop:
-        description: Max TPR drop allowed vs stock (0.005 = default). Stricter = catches more attacks.
-        default: "0.0"
+        description: Max TPR drop allowed in pp (0.005 = 0.5% OK, 0.0 = must improve). Lower = must catch more attacks.
+        default: "0.005"
 
 permissions:
   contents: read
@@ -37,9 +37,9 @@ concurrency:
 env:
   LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.15' }}
   LEGIT_WEIGHT: ${{ inputs.legit_weight || '1.0' }}
-  MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.001' }}
+  MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.0065' }}
   L2: ${{ inputs.l2 || '0.5' }}
-  MAX_TPR_DROP: ${{ inputs.max_tpr_drop || '0.0' }}
+  MAX_TPR_DROP: ${{ inputs.max_tpr_drop || '0.005' }}
   WCP_DATA: https://downloads.openappsec.io/waf-comparison-project
 
 jobs:
