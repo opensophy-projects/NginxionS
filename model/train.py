@@ -75,7 +75,7 @@ def calibrate(samples, rows, verdicts):
     verdicts (1.0: the verdict is exactly 'max score >= threshold')"""
     pairs = []
     for sid, v in verdicts.items():
-        if v["status"] == 0 or sid not in samples:
+        if v["status"] == 0 or samples.get(sid, {}).get("split") != "train":
             continue
         score = max((r["score"] for r in rows.get(sid, [])), default=0.0)
         pairs.append((score, bool(v["blocked"])))
@@ -203,6 +203,8 @@ def main(argv=None):
     ap.add_argument("--name", default=datetime.date.today().isoformat(), help="model version suffix")
     ap.add_argument("--out", required=True, help="output directory")
     args = ap.parse_args(argv)
+    if not math.isfinite(args.l2) or args.l2 < 0:
+        ap.error("--l2 must be a finite non-negative number")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 

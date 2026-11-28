@@ -1,0 +1,30 @@
+{
+  "label": 0,
+  "category": "http-xml",
+  "requests": [
+    {
+      "method": "POST",
+      "url": "/library/import",
+      "headers": {
+        "Content-Type": "application/xml"
+      },
+      "data": "<?xml version=\"1.0\"?><catalog><book id=\"42\">Poetry &amp; prose</book></catalog>"
+    },
+    {
+      "method": "POST",
+      "url": "/inventory",
+      "headers": {
+        "Content-Type": "application/xml"
+      },
+      "data": "<inventory><item sku=\"P-42\" available=\"true\"/></inventory>"
+    },
+    {
+      "method": "PUT",
+      "url": "/sitemap",
+      "headers": {
+        "Content-Type": "application/xml"
+      },
+      "data": "<urlset><url><loc>https://example.org/about</loc></url></urlset>"
+    }
+  ]
+}

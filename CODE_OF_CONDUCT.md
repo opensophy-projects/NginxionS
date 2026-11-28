@@ -181,8 +181,7 @@ flowchart LR
   - `workflows/security-weekly.yml` — каждую неделю: ветка `security/<дата>` от `work`, полный CI на ней, issue с
     отчётом, удаление веток старше 8 недель
   - `workflows/upstream-issues.yml` — каждый час: issue openappsec (5 репозиториев агента) копируются сюда как issue, их закрытие и открытие повторяется (`scripts/upstream-issues.mjs`)
-  - `workflows/training.yml` — обучение модели WAF: ветки `training/**`, `[train]` в коммите или кнопка; модель,
-    её карточка и сравнение со штатной — в артефакте `waf-model` (`docs/MODEL.md`)
+  - `workflows/training.yml` — проверка HTTP-фикстур на `work`, ветках `training/**` и в PR. Ручной запуск обучает кандидата на проверенных признаках (`docs/MODEL.md`)
   - `workflows/model-archives.yml` — проверка закреплённой модели WAF и сборка установочного архива поколения 2
   - `workflows/security.yml` — DevSecOps: SAST, секреты, SCA и SBOM исходников, IaC, workflow, качество кода;
     в еженедельном прогоне — ещё и опубликованные образы (`docs/DEVSECOPS.md`)
@@ -346,11 +345,14 @@ flowchart LR
 - `evaluate.py` — сравнение со штатной моделью по решениям агента, проверка совпадения оценок, решение о выпуске
 - `requirements.txt` — numpy и scipy для обучения, с хешами (`pip --require-hashes`)
 - `requirements.in` — их версии, из которых `uv pip compile --generate-hashes` делает `requirements.txt`
-- `test_model.py` — тесты: формат, данные, полный цикл на синтетике
+- `test_model.py` — тесты формата, данных и цикла на синтетических признаках
+- `feature_dataset.py`, `test_feature_dataset.py` — проверка и подготовка наблюдений для офлайн-обучения
+- `legitimate-http/` — случаи обычного HTTP: `http-path.json`, `http-query.json`, `http-header.json`, `http-cookie.json`, `http-json.json`, `http-form.json`, `http-multipart.json`, `http-xml.json`
 
 ### `training/` — каталог поколений WAF
 
 - `README.md` — где скачать архив и как установить модель
+- `HTTP-COVERAGE.md` — зоны HTTP, классы событий и случаи для проверки ложных блокировок
 - `generations/1/`, `generations/3/` — места для первой модели и кандидатов третьего поколения с инструкциями
 - `generations/2/` — `source.json` с коммитом и SHA-256 исходной модели, `open-appsec-advanced-model.tgz` для импорта и `SHA256SUMS`
 - `package_generation.py` — экспорт закреплённой модели и упаковка кандидата с результатами CI

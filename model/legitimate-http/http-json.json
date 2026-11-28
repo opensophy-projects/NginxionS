@@ -1,0 +1,51 @@
+{
+  "label": 0,
+  "category": "http-json",
+  "requests": [
+    {
+      "method": "POST",
+      "url": "/api/search",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "data": {
+        "query": "Poetry & prose",
+        "filters": {
+          "lang": [
+            "ru",
+            "en"
+          ],
+          "pages": [
+            1,
+            2
+          ]
+        },
+        "preview": true
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/notes",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "data": {
+        "title": "Меню на неделю",
+        "markdown": "**Список**\n- чай\n- кофе"
+      }
+    },
+    {
+      "method": "PATCH",
+      "url": "/api/orders/42",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "data": {
+        "reference": "PO-2026.42",
+        "currency": "EUR",
+        "amount": 12.5,
+        "note": null
+      }
+    }
+  ]
+}

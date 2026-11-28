@@ -73,9 +73,8 @@ scripts/test-airgap.sh
 | CrowdSec, ClamAV, Postgres | официальные образы, версии в `deploy/.env` | — |
 
 Модель агента в образе — продвинутая модель (`openappsec/agent/components/security_apps/waap/resources/waap.data`, лицензия внутри
-файла). Модель WAF NginxionS обучается из неё в CI на настоящем агенте (`training.yml`: ветки `training/**` или `[train]` в коммите) и
-выпускается, только если на отложенных сайтах и атаках она не хуже модели образа; устройство, данные и выпуск —
-`docs/MODEL.md`.
+файла). `training.yml` собирает случаи легитимного HTTP. Ручной прогон может обучить кандидата на проверенных
+признаках. Критерии оценки на агенте и упаковка модели описаны в `docs/MODEL.md`.
 
 Исходники open-appsec лежат в `openappsec/` и меняются прямо в коде (метка `NginxionS:`). Коммиты upstream, от которых они взяты, — в `deploy/openappsec/sources.env` (полные хэши, проверяется в CI). Обновление: `git subtree pull --prefix=openappsec/<каталог> https://github.com/openappsec/<репозиторий> <коммит> --squash`, конфликты — по меткам `NginxionS:`, новый коммит — в `sources.env`; при обновлении `agent/` обновите примеры политик в `nginxions/backend/nginxions/waf/objects/examples/`. Локальная сборка всех образов: `scripts/build-images.sh` (тег `local/<имя>:dev`), затем `NGINXIONS_REGISTRY=local NGINXIONS_VERSION=dev scripts/test-airgap.sh`. Долгие сборки (nginxions, openappsec) делаются в CI или разработчиком, не в сессии агента.
 

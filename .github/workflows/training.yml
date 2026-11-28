@@ -1,22 +1,28 @@
-# Training of the WAF model of NginxionS (docs/MODEL.md): a push to a branch training/<anything>, a push whose commit
-# message holds [train], or the Run workflow button.
-# Builds the images of the branch, sends the labelled set through the real agent with the stock model, trains a new
-# model, installs it like an administrator, sends the held-out part through it and decides whether it may be released
-# (scripts/train-model.sh). The model, its card and the report are in the artifact "waf-model"; the report is also in
-# the Summary of the run. Nothing is published: a model that passed is released by hand (docs/MODEL.md).
+# The regular run prepares the HTTP regression cases from this checkout.
+# Manual fitting uses reviewed feature observations and produces an offline candidate.
 name: Training
 
 on:
-  # every branch: the job below runs on training/** and on [train] only
   push:
+    branches: [work, 'training/**']
+    paths:
+      - model/**
+      - training/**
+      - .github/workflows/training.yml
+  pull_request:
+    paths:
+      - model/**
+      - training/**
+      - .github/workflows/training.yml
   workflow_dispatch:
     inputs:
-      legit_fraction:
-        description: Share of the legitimate requests of the WAF Comparison Project (1 = all, about 6 h)
-        default: "0.15"
+      feature_run:
+        description: Successful run ID in this repository with a reviewed waap-features artifact (optional)
+        type: string
       l2:
-        description: L2 regularization of the logistic regression
-        default: "1.0"
+        description: L2 regularization for a manual fit
+        type: string
+        default: '1.0'
 
 permissions:
   contents: read
@@ -25,100 +31,73 @@ concurrency:
   group: training-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.15' }}
-  L2: ${{ inputs.l2 || '1.0' }}
-  WCP_DATA: https://downloads.openappsec.io/waf-comparison-project
-
 jobs:
-  train:
-    name: Train and evaluate the WAF model
-    if: >-
-      github.event_name != 'push' || startsWith(github.ref, 'refs/heads/training/') ||
-      contains(github.event.head_commit.message, '[train]')
+  coverage:
+    name: Validate the HTTP coverage fixtures
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: versions
+      - name: Prepare and check the ordinary HTTP cases
         run: |
-          {
-            echo "VERSION=train-$(git rev-parse --short HEAD)"
-            echo "CROWDSEC_VERSION=$(sed -n 's/^CROWDSEC_VERSION=//p' deploy/.env)"
-          } >> "$GITHUB_ENV"
-      - name: trainer (Python) and its tests
+          python3 -m unittest discover -s model
+          mkdir -p model-work
+          python3 model/datasets.py --cases model/legitimate-http --out model-work/http-cases.jsonl
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: waf-http-coverage
+          if-no-files-found: error
+          path: |
+            model-work/http-cases.jsonl
+            training/HTTP-COVERAGE.md
+
+  fit:
+    name: Fit an offline WAF candidate
+    if: github.event_name == 'workflow_dispatch' && inputs.feature_run != ''
+    needs: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    env:
+      BASE_MODEL: openappsec/agent/components/security_apps/waap/resources/waap.data
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify the source run
+        env:
+          RUN_ID: ${{ inputs.feature_run }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,18}$ ]]
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion' | grep -qx success
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.feature_run }}
+          name: waap-features
+          path: model-work/input
+      - name: Prepare observations and fit
+        env:
+          L2: ${{ inputs.l2 }}
+        run: |
+          python3 model/feature_dataset.py --input model-work/input --base "$BASE_MODEL" --out model-work/prepared
           python3 -m venv .venv
           .venv/bin/pip install --quiet --require-hashes -r model/requirements.txt
           .venv/bin/python -m unittest discover -s model
-      - name: data
-        env:
-          GH_REPO: ${{ github.repository }}
-        run: |
-          mkdir -p data
-          # the WAF Comparison Project sets (legitimate.zip: 1.2 GB)
-          for f in legitimate malicious; do
-            curl -sSfL --retry 5 --retry-all-errors -o "data/$f.zip" "$WCP_DATA/$f.zip"
-          done
-          # the false positives of mgm-web-attack-payloads from the reference sources (branch main)
-          git fetch --quiet --depth 1 "https://github.com/$GH_REPO.git" main
-          git archive FETCH_HEAD mgm-web-attack-payloads-main/nuclei/payloads | tar -x -C data
-          python3 model/datasets.py --legit data/legitimate.zip --legit-fraction "$LEGIT_FRACTION" \
-            --malicious data/malicious.zip --mgm data/mgm-web-attack-payloads-main/nuclei/payloads \
-            --out data/samples.jsonl
-          rm data/legitimate.zip
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: env.BUILDKIT_STEP_LOG_MAX_SIZE=-1
-      - name: build nginxions
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: nginxions
-          build-contexts: attachment=openappsec/attachment
-          load: true
-          tags: local/nginxions:${{ env.VERSION }}
-          # the cache of the CI build; this workflow only reads it
-          cache-from: type=gha,scope=nginxions-amd64
-          build-args: |
-            CROWDSEC_VERSION=${{ env.CROWDSEC_VERSION }}
-            FLAGS=-march=x86-64-v2 -mtune=generic -fcf-protection=full
-      - name: build nginxions-openappsec
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: deploy/openappsec
-          build-contexts: |
-            openappsec=openappsec
-            control=nginxions/backend/nginxions/control
-          load: true
-          tags: local/nginxions-openappsec:${{ env.VERSION }}
-          cache-from: |
-            type=gha,scope=openappsec-train
-            type=gha,scope=openappsec-amd64
-          cache-to: type=gha,mode=max,scope=openappsec-train
-      - name: train and evaluate
-        env:
-          NGINXIONS_REGISTRY: local
-          NGINXIONS_VERSION: ${{ env.VERSION }}
-          PYTHON: .venv/bin/python
-          SAMPLES: data/samples.jsonl
-          MODEL_NAME: ${{ github.ref_name }}-${{ github.run_number }}
-        run: scripts/train-model.sh
-      - name: report
-        if: always()
-        run: |
-          if [ -s model-work/report.md ]; then cat model-work/report.md >> "$GITHUB_STEP_SUMMARY"
-          else echo "## Модель WAF: обучение не дошло до сравнения (см. журнал шага train and evaluate)" >> "$GITHUB_STEP_SUMMARY"; fi
+          .venv/bin/python model/train.py --samples model-work/prepared/samples.jsonl \
+            --dump model-work/prepared/dump --verdicts model-work/prepared/stock.jsonl \
+            --base "$BASE_MODEL" --out model-work/candidate --l2="$L2" --name="offline-$GITHUB_RUN_ID"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
         with:
-          name: waf-model
-          if-no-files-found: ignore
-          retention-days: 30
+          name: waf-model-offline-candidate
+          if-no-files-found: error
           path: |
-            model-work/out/
-            model-work/metrics.json
-            model-work/report.md
-            model-work/policy.json
-            model-work/verdicts-*.jsonl
+            model-work/candidate/waap.data
+            model-work/candidate/model-card.json
+            model-work/prepared/coverage.json

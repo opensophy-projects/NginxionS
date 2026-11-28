@@ -102,6 +102,19 @@ class DatasetsTest(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_SCIPY, "numpy and scipy are needed (model/requirements.txt)")
 class TrainingCycleTest(unittest.TestCase):
+    def test_calibration_uses_only_training_groups(self):
+        try:
+            import train
+        except ImportError as exc:
+            self.skipTest(str(exc))
+        samples = {
+            "train-pass": {"split": "train"}, "train-block": {"split": "train"},
+            "held-pass": {"split": "test"}, "held-block": {"split": "test"},
+        }
+        rows = {key: [{"score": score}] for key, score in zip(samples, (1.0, 7.0, 9.0, 2.0))}
+        verdicts = {key: {"status": 200, "blocked": key.endswith("-block")} for key in samples}
+        self.assertEqual(train.calibrate(samples, rows, verdicts), (7.0, 1.0))
+
     """The cycle on synthetic traffic: the stock agent's run, training, the new model's run, the gate."""
 
     def test_cycle(self):

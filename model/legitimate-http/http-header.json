@@ -1,0 +1,27 @@
+{
+  "label": 0,
+  "category": "http-header",
+  "requests": [
+    {
+      "method": "GET",
+      "url": "/catalog",
+      "headers": {
+        "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.7"
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/images/logo.png",
+      "headers": {
+        "If-None-Match": "\"revision-2026-a\""
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/reports/weekly",
+      "headers": {
+        "Range": "bytes=0-511"
+      }
+    }
+  ]
+}
