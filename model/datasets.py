@@ -113,6 +113,15 @@ def cases(root):
                    "group": f"case:{path.stem}", **norm(item)}
 
 
+def payloads(path):
+    """model/payload_registry.py output: unique attack payloads (label 1)."""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = json.loads(line)
+            yield {"label": int(s["label"]), "source": s["source"], "category": s["category"],
+                   "group": s["group"], **norm(s)}
+
+
 def norm(item):
     data = item.get("data") or ""
     if not isinstance(data, str):
@@ -128,6 +137,7 @@ def main(argv=None):
                     help="share of the legitimate requests taken (default 0.15, like the --fast mode of the WCP)")
     ap.add_argument("--malicious", help="malicious.zip of the WAF Comparison Project")
     ap.add_argument("--mgm", help="nuclei/payloads of mgm-web-attack-payloads (its false-positives.txt are taken)")
+    ap.add_argument("--payloads", help="unique attack payloads from model/payload_registry.py (label 1)")
     ap.add_argument("--cases", default=str(Path(__file__).parent / "cases"), help="our own cases (model/cases)")
     ap.add_argument("--test-fraction", type=float, default=0.3, help="share of the groups held out for the test")
     ap.add_argument("--out", required=True)
@@ -140,6 +150,8 @@ def main(argv=None):
         sources.append(malicious(args.malicious))
     if args.mgm:
         sources.append(mgm_false_positives(args.mgm))
+    if args.payloads and Path(args.payloads).is_file():
+        sources.append(payloads(args.payloads))
     if args.cases and Path(args.cases).is_dir():
         sources.append(cases(args.cases))
 

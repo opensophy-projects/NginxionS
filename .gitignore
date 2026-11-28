@@ -2,6 +2,8 @@
 __pycache__/
 /model-work/
 /data/
+# справочные снимки исходных репозиториев (ветка rfrns), не коммитить
+/rfrns/
 /.venv/
 
 # reports of local runs of the tests (scripts/test-*.sh)
