@@ -91,6 +91,8 @@ step "the stack (without CrowdSec: it would ban the runner for the attacks of th
 # NginxionS: test volume mount before starting containers
 touch "$NGINXIONS_FEATURES_DIR/test-mount-$$.txt" || fail "feature dump directory is not writable: $NGINXIONS_FEATURES_DIR"
 rm -f "$NGINXIONS_FEATURES_DIR/test-mount-$$.txt"
+# NginxionS: ensure directory has correct permissions for agent process
+chmod 777 "$NGINXIONS_FEATURES_DIR" || fail "cannot chmod feature dump directory: $NGINXIONS_FEATURES_DIR"
 "${compose[@]}" up -d --no-build nginxions openappsec test-upstream
 for i in $(seq 1 90); do
   state=$(docker inspect -f '{{.State.Health.Status}}' "$("${compose[@]}" ps -q nginxions)" 2> /dev/null || true)
