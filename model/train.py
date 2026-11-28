@@ -328,7 +328,7 @@ def main(argv=None):
         "sha256": hashlib.sha256(waap.read_bytes()).hexdigest(),
         "threshold": {"max_score": threshold, "explains_stock_verdicts": agreement},
         "training": {"values": int(X.shape[0]), "features": int(X.shape[1]), "attacks": int(y.sum()),
-                     "attacks_without_keywords": unseen_attacks, "l2": args.l2},
+                     "legitimate": int(X.shape[0] - y.sum()), "attacks_without_keywords": unseen_attacks, "l2": args.l2},
         "params": {"intercept": float(intercept), "log_nnz_coef": float(log_nnz)},
         "offline": offline,
         "top_features": sorted(({"feature": f, "coef": round(learned[f], 4)} for f in learned),

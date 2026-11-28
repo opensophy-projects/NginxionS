@@ -12,11 +12,11 @@ on:
   workflow_dispatch:
     inputs:
       legit_fraction:
-        description: Share of the legitimate requests of the WAF Comparison Project (1 = all, about 6 h)
+        description: Share of legitimate WCP requests (0.15 = default, faster training)
         default: "0.15"
-      l2:
-        description: L2 regularization of the logistic regression
-        default: "1.0"
+      max_tnr_drop:
+        description: Max TNR drop allowed (0.001 = strict, 0.002 = default). Stricter = less false blocks.
+        default: "0.001"
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ concurrency:
 
 env:
   LEGIT_FRACTION: ${{ inputs.legit_fraction || '0.15' }}
-  L2: ${{ inputs.l2 || '1.0' }}
+  MAX_TNR_DROP: ${{ inputs.max_tnr_drop || '0.001' }}
   WCP_DATA: https://downloads.openappsec.io/waf-comparison-project
 
 jobs:

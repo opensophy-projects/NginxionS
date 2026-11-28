@@ -181,4 +181,5 @@ find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "
 step "comparison and the release gate"
 "$PYTHON" model/evaluate.py --samples "$samples" --stock "$work/verdicts-stock.jsonl" \
   --candidate "$work/verdicts-new.jsonl" --dump "$work/dump-new" --stock-dump "$work/dump-stock" --model "$work/out/waap.data" \
-  --card "$work/out/model-card.json" --summary "$work/report.md" --out "$work/metrics.json"
+  --card "$work/out/model-card.json" --summary "$work/report.md" --out "$work/metrics.json" \
+  --max-tnr-drop "${MAX_TNR_DROP:-0.001}"
