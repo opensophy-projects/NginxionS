@@ -203,12 +203,14 @@ def main(argv=None):
 
     lines += ["", "Отложенная часть (сайты и полезные нагрузки, которых модель не видела), решения настоящего агента:", ""]
 
-    # ---------- детальный отчёт по каждому запросу ----------
-    lines += ["<details><summary>По каждому запросу (отложенная часть)</summary>", ""]
+    lines += ["<details><summary>По каждому запросу (первые 100 / отложенная часть)</summary>", ""]
     lines += ["| id | источник | категория | метка | " +
               " | ".join(name for name, _ in cols) + " | URL |",
               "|---|---|---|---|" + "|".join(":---:" for _ in cols) + "|---|"]
-    for sid in sorted(test):
+    # NginxionS: limit detail report to first 100 for GitHub summary (1MB size limit)
+    for i, sid in enumerate(sorted(test)):
+        if i >= 100:
+            break
         s = samples[sid]
         cells = [verdict_symbol(stock_v.get(sid))]
         if previous_v is not None:
@@ -217,6 +219,8 @@ def main(argv=None):
         url = (s.get("url") or "")[:80]
         lines.append(f"| {sid} | {s['source']} | {s['category']} | {s['label']} | " +
                      " | ".join(cells) + f" | {url} |")
+    if len(test) > 100:
+        lines.append(f"| ... | ... | ... | ... | ... |")
     lines += ["", "</details>", ""]
 
     if par["examples"]:
