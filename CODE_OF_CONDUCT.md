@@ -302,7 +302,7 @@ flowchart LR
 - `test-airgap.sh` — тест закрытого контура: поднимает стек без интернета и прогоняет `smoke.sh` (все группы или `SMOKE_GROUPS`), затем проверки после него
 - `ci-stack.sh` — один тест стека CI по имени (`smoke-waf`, `smoke-crowdsec`, `smoke-core`, `gui`, `waf-score`, `upgrade`, `chaos`, `cluster`, `dast`): матрица `stack` в `ci.yml` гонит их параллельно на своих машинах
 - `ci-level.mjs` (+ `ci-level.test.mjs`) — глубина прогона CI по событию, сообщению коммита и изменённым файлам: `fast`/`full`/`extended`, какие тесты стека (`[smoke:waf]`, `[dast]`…), нужен ли CodeQL C++ и Go (инкрементальный скан)
-- `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
+- `smoke-report.mjs` — отчёт smoke: группы, упавшие и самые долгие шаги, HTTP-ответы проверок WAF (`reports/smoke`, Summary прогона), `steps.json` для истории флейков
 - `flaky-report.mjs` (+ тест) — флейки smoke: по `steps.json` последних прогонов CI (ночной workflow) — какие шаги падали, какие падали и проходили на одном коммите, самые долгие
 - `fuzz.test.mjs` — фаззинг парсеров недоверенного ввода: конвертер правил Snort агента, экспертный фрагмент политики (YAML), объекты и импорт политики; `FUZZ_ITERATIONS` (300 в CI, 40 000 ночью), `FUZZ_SEED` повторяет случай
 - `check.sh` — быстрая часть CI на своей машине одной командой (`--changed` — только затронутое, `--install-hook` — git pre-push)

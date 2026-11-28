@@ -43,6 +43,13 @@ export const stepsOf = (rows, groups) => {
 
 const esc = (s) => String(s).replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 
+function httpOutcome(code) {
+	if (code === "403") return "Blocked";
+	if (/^2\d\d$/.test(code)) return "Allowed";
+	if (code === "000") return "No response";
+	return "Unexpected HTTP status";
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const groups = tsv("smoke-groups.tsv");
 	const steps = stepsOf(tsv("smoke-steps.tsv"), groups);
@@ -62,6 +69,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	if (failed.length) {
 		lines.push("### Failed steps", "", "| group | step | error |", "|---|---|---|");
 		for (const s of failed) lines.push(`| ${s.group} | ${esc(s.name)} | ${esc((s.error || "").slice(0, 300))} |`);
+		lines.push("");
+	}
+	const requests = tsv("smoke-http.tsv");
+	if (requests.length) {
+		lines.push("### WAF HTTP requests", "", "| Scenario | Request | HTTP | Result |", "|---|---|---|---|");
+		for (const [scenario, method, host, route, code] of requests) {
+			lines.push(`| ${esc(scenario)} | ${esc(`${method} http://${host}${route}`)} | ${esc(code)} | ${httpOutcome(code)} |`);
+		}
 		lines.push("");
 	}
 	lines.push("### Slowest steps", "", "| group | step | seconds |", "|---|---|---|");

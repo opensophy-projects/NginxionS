@@ -19,6 +19,7 @@ CURL="curl -sS --fail-with-body --max-time 30 -k -b $JAR -c $JAR"
 GROUPS_DIR="${GROUPS_DIR:-/smoke.d}"
 ALL_GROUPS="services waf hosts rbac events pki certs crowdsec migration"
 STEPS=/state/smoke-steps.tsv
+HTTP_CHECKS=/state/smoke-http.tsv
 GROUP=base
 
 # the step that ends where the next starts, or where its group ends: a failure is logged before the exit
@@ -72,6 +73,11 @@ expect() { [ "$1" = "$2" ] || fail "$3: expected $2, got $1"; }
 json() { tr -d ' \n'; }
 api_json() { $CURL -H 'Content-Type: application/json' "$@"; }
 status() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: test.local' "$HTTP$1"; }
+# The report gets the public route and scenario label only. Use the actual curl result, including transport errors.
+record_http_check() {
+  printf '    %s | %s %s%s | HTTP %s\n' "$1" "$2" test.local "$3" "${4:-000}"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" test.local "$3" "${4:-000}" >> "$HTTP_CHECKS"
+}
 SQLI="/?id=1%27%20OR%20%271%27=%271"
 wait_status() {
   for i in $(seq 1 60); do
@@ -128,6 +134,7 @@ ensure_waf_on() {
 
 : > "$STEPS" 2> /dev/null || true
 : > /state/smoke-groups.tsv 2> /dev/null || true
+: > "$HTTP_CHECKS"
 base_start=$(date +%s)
 
 step "admin API is up"

@@ -51,23 +51,34 @@ if $CURL "$ADMIN/api/nginxions/waf" | grep -q '"reachable": *true'; then
 
   step "WAF: prevent-learn blocks SQLi and XSS with 403, normal requests pass"
   for i in $(seq 1 60); do
-    [ "$(status "$SQLI")" = 403 ] && break
-    [ "$i" = 60 ] && fail "SQLi was not blocked (last status $(status "$SQLI"))"
+    observed=$(status "$SQLI" || true)
+    [ "$observed" = 403 ] && break
+    [ "$i" = 60 ] && break
     sleep 2
   done
+  record_http_check "SQLi in query" GET / "$observed"
+  expect "$observed" 403 "SQLi in query"
   # a request handled while the agent restarts a service (after a new policy) can pass: retried
   for i in $(seq 1 30); do
-    [ "$(status "$XSS")" = 403 ] && break
-    [ "$i" = 30 ] && fail "XSS was not blocked"
+    observed=$(status "$XSS" || true)
+    [ "$observed" = 403 ] && break
+    [ "$i" = 30 ] && break
     sleep 2
   done
-  [ "$(status "/?q=hello")" = 200 ] || fail "a normal request was blocked"
+  record_http_check "XSS in query" GET / "$observed"
+  expect "$observed" 403 "XSS in query"
+  observed=$(status '/?q=hello' || true)
+  record_http_check "Ordinary query" GET '/?q=hello' "$observed"
+  expect "$observed" 200 "ordinary query"
 
   step "WAF: the request headers of a browser pass (a stylesheet of Chrome: Sec-Fetch-Dest: style)"
   # the agent's model takes "style" for XSS: without the browser headers among its clean headers (its waap.data) every stylesheet of Chrome was refused
+  browser_error=0
   browser=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: test.local' -H 'Accept: text/css,*/*;q=0.1' \
     -H 'Sec-Fetch-Dest: style' -H 'Sec-Fetch-Mode: no-cors' -H 'Sec-Fetch-Site: same-origin' -H 'Priority: u=0' \
-    -H 'Sec-Ch-Ua-Mobile: ?0' -H 'Sec-Ch-Ua-Platform: "Linux"' "$HTTP/assets/index.css")
+    -H 'Sec-Ch-Ua-Mobile: ?0' -H 'Sec-Ch-Ua-Platform: "Linux"' "$HTTP/assets/index.css") || browser_error=$?
+  record_http_check "Browser stylesheet" GET /assets/index.css "$browser"
+  [ "$browser_error" = 0 ] || fail "a stylesheet request failed (curl exit $browser_error)"
   [ "$browser" = 403 ] && fail "a stylesheet request of a browser was blocked"
   # retried like the checks above: a request handled while the agent restarts a service passes (fail-open)
   for i in $(seq 1 30); do

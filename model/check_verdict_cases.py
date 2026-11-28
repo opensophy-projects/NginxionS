@@ -8,6 +8,13 @@ from evaluate import verdict_outcome
 CASE_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}")
 STATUS = re.compile(r"0|[1-5][0-9]{2}")
 OUTCOMES = {"tp", "tn", "fp", "fn", "unusable"}
+OUTCOME_LABELS = {
+    "tp": "Заблокирован (TP)",
+    "tn": "Пропущен (TN)",
+    "fp": "Ложная блокировка (FP)",
+    "fn": "Атака пропущена (FN)",
+    "unusable": "Ответ непригоден",
+}
 
 
 def check_cases(path):
@@ -51,14 +58,17 @@ def main():
         parser.exit(1, f"Verdict fixtures: {error}\n")
 
     print("## Проверка оценщика на заданных HTTP-статусах\n")
-    print("| Сценарий | Метка | Поколение 2 | Кандидат | Проверка |")
+    print("В этой таблице статусы взяты из файла с тестовыми примерами.\n")
+    print("| Сценарий | Тип | Поколение 2 | Кандидат | Проверка |")
     print("| --- | --- | --- | --- | --- |")
     failed = False
     for case_id, label, stock, candidate, expected, actual in rows:
         mismatch = expected != actual
         failed |= mismatch
-        result = f"Ожидалось {expected[0]} / {expected[1]}" if mismatch else "OK"
-        print(f"| {case_id} | {label} | {stock} → {actual[0]} | {candidate} → {actual[1]} | {result} |")
+        result = "Ожидалось " + " / ".join(OUTCOME_LABELS[key] for key in expected) if mismatch else "OK"
+        kind = "Обычный запрос" if label == "0" else "Атака"
+        left, right = (OUTCOME_LABELS[key] for key in actual)
+        print(f"| {case_id} | {kind} | {stock} → {left} | {candidate} → {right} | {result} |")
     return int(failed)
 
 

@@ -134,7 +134,7 @@ manager_fingerprint=$("${compose[@]}" exec -T nginxions sh -c '
 manager_fingerprint=${manager_fingerprint#*=}
 "${compose[@]}" run --pull never --rm -T -e MANAGER_FINGERPRINT="$manager_fingerprint" tester || smoke_status=$?
 mkdir -p reports/smoke
-for f in smoke-steps.tsv smoke-groups.tsv; do
+for f in smoke-steps.tsv smoke-groups.tsv smoke-http.tsv; do
   "${compose[@]}" run --pull never --rm -T --entrypoint cat tester "/state/$f" > "reports/smoke/$f" 2> /dev/null || true
 done
 command -v node > /dev/null && node scripts/smoke-report.mjs reports/smoke || true
