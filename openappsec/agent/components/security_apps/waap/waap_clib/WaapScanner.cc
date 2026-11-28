@@ -198,6 +198,12 @@ nginxionsDumpFeatures(IWaf2Transaction *transaction, const Waf2ScanResult &res, 
         if (stat(dir, &st) == 0 && S_ISDIR(st.st_mode)) {
             std::string path = std::string(dir) + "/" + std::to_string(getpid()) + ".jsonl";
             fd = open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+            if (fd < 0) {
+                // NginxionS: log if feature dump file cannot be opened
+                dbgWarning(D_WAAP_SCANNER) << "Failed to open feature dump file: " << path << " (" << strerror(errno) << ")";
+            } else {
+                dbgTrace(D_WAAP_SCANNER) << "Feature dump enabled: " << path;
+            }
         }
     }
     if (fd < 0) return;

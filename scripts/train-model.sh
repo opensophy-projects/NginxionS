@@ -124,7 +124,15 @@ grep -q '"waap_scores"' "$work/waap-stock.data" || fail "no stock model in the a
 step "the stock model: every request of the set"
 "$PYTHON" model/replay.py --samples "$samples" --workers "$WORKERS" --target "$SITE" --out "$work/verdicts-stock.jsonl"
 sleep 2
-mv "$NGINXIONS_FEATURES_DIR"/*.jsonl "$work/dump-stock/" 2> /dev/null || fail "the agent wrote no features (an agent without the feature dump?)"
+# NginxionS: check if feature dump directory is accessible and mounted
+if [ ! -d "$NGINXIONS_FEATURES_DIR" ]; then
+  fail "feature dump directory not found: $NGINXIONS_FEATURES_DIR (the volume may not be mounted)"
+fi
+ls -la "$NGINXIONS_FEATURES_DIR" >&2 || fail "cannot list feature dump directory"
+# NginxionS: collect feature dump files (may be from multiple pids if agent restarted)
+find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "$work/dump-stock/" \; 2>/dev/null || \
+  fail "the agent wrote no features (check: docker exec \$("${compose[@]}" ps -q openappsec) ls -la /var/log/nginxions-features)"
+[ -n "$(find "$work/dump-stock" -name "*.jsonl" -type f -print -quit)" ] || fail "no feature files found in $work/dump-stock"
 
 step "training"
 "$PYTHON" model/train.py --samples "$samples" --dump "$work/dump-stock" --verdicts "$work/verdicts-stock.jsonl" \
@@ -148,7 +156,12 @@ step "the new model: the held-out part"
   --out "$work/verdicts-new.jsonl"
 sleep 2
 mkdir -p "$work/dump-new"
-mv "$NGINXIONS_FEATURES_DIR"/*.jsonl "$work/dump-new/" 2> /dev/null || fail "the agent wrote no features with the new model"
+# NginxionS: check if feature dump directory is accessible
+ls -la "$NGINXIONS_FEATURES_DIR" >&2 || fail "cannot list feature dump directory after model installation"
+# NginxionS: collect feature dump files (may be from multiple pids if agent restarted)
+find "$NGINXIONS_FEATURES_DIR" -maxdepth 1 -name "*.jsonl" -type f -exec mv {} "$work/dump-new/" \; 2>/dev/null || \
+  fail "the agent wrote no features with the new model"
+[ -n "$(find "$work/dump-new" -name "*.jsonl" -type f -print -quit)" ] || fail "no feature files found in $work/dump-new after model update"
 
 step "comparison and the release gate"
 "$PYTHON" model/evaluate.py --samples "$samples" --stock "$work/verdicts-stock.jsonl" \
