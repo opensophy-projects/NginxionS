@@ -195,14 +195,18 @@ nginxionsDumpFeatures(IWaf2Transaction *transaction, const Waf2ScanResult &res, 
     if (fd == -2) {
         struct stat st;
         fd = -1;
-        if (stat(dir, &st) == 0 && S_ISDIR(st.st_mode)) {
+        // NginxionS: diagnostic logging for feature dump initialization
+        if (stat(dir, &st) != 0) {
+            dbgWarning(D_WAAP_SCANNER) << "Feature dump directory does not exist: " << dir << " (stat error: " << strerror(errno) << ")";
+        } else if (!S_ISDIR(st.st_mode)) {
+            dbgWarning(D_WAAP_SCANNER) << "Feature dump path exists but is not a directory: " << dir;
+        } else {
             std::string path = std::string(dir) + "/" + std::to_string(getpid()) + ".jsonl";
             fd = open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
             if (fd < 0) {
-                // NginxionS: log if feature dump file cannot be opened
-                dbgWarning(D_WAAP_SCANNER) << "Failed to open feature dump file: " << path << " (" << strerror(errno) << ")";
+                dbgWarning(D_WAAP_SCANNER) << "Failed to open feature dump file: " << path << " (error: " << strerror(errno) << ")";
             } else {
-                dbgTrace(D_WAAP_SCANNER) << "Feature dump enabled: " << path;
+                dbgTrace(D_WAAP_SCANNER) << "Feature dump enabled, writing to: " << path;
             }
         }
     }

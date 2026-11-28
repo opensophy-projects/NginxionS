@@ -88,6 +88,9 @@ cleanup() {
 trap cleanup EXIT
 
 step "the stack (without CrowdSec: it would ban the runner for the attacks of the set)"
+# NginxionS: test volume mount before starting containers
+touch "$NGINXIONS_FEATURES_DIR/test-mount-$$.txt" || fail "feature dump directory is not writable: $NGINXIONS_FEATURES_DIR"
+rm -f "$NGINXIONS_FEATURES_DIR/test-mount-$$.txt"
 "${compose[@]}" up -d --no-build nginxions openappsec test-upstream
 for i in $(seq 1 90); do
   state=$(docker inspect -f '{{.State.Health.Status}}' "$("${compose[@]}" ps -q nginxions)" 2> /dev/null || true)
@@ -122,6 +125,15 @@ docker cp "$("${compose[@]}" ps -q openappsec):/etc/cp/conf/waap/waap.data" "$wo
 grep -q '"waap_scores"' "$work/waap-stock.data" || fail "no stock model in the agent"
 
 step "the stock model: every request of the set"
+# NginxionS: verify volume is mounted in the container
+docker_check_mount=$(docker exec "$("${compose[@]}" ps -q openappsec)" test -d /var/log/nginxions-features && echo "mounted" || echo "NOT_MOUNTED")
+if [ "$docker_check_mount" != "mounted" ]; then
+  fail "feature dump directory not mounted in openappsec container (/var/log/nginxions-features)"
+fi
+# Check if directory is writable by the agent process
+docker exec "$("${compose[@]}" ps -q openappsec)" touch /var/log/nginxions-features/docker-write-test 2>/dev/null && \
+  docker exec "$("${compose[@]}" ps -q openappsec)" rm /var/log/nginxions-features/docker-write-test 2>/dev/null || \
+  fail "openappsec container cannot write to /var/log/nginxions-features (permissions issue)"
 "$PYTHON" model/replay.py --samples "$samples" --workers "$WORKERS" --target "$SITE" --out "$work/verdicts-stock.jsonl"
 sleep 2
 # NginxionS: check if feature dump directory is accessible and mounted
