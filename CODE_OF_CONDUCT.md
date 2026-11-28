@@ -350,6 +350,7 @@ flowchart LR
   (`PayloadsAllTheThings`, `IntruderPayloads` и др.): дедупликация по SHA-256, исключение пейлоадов из
   `mgm false-positives` (label 0), фильтрация шума, выдача GET+POST форм с `label = 1` (обучение 3-го поколения)
 - `cases/README.md` — формат собственных обходов и ложных срабатываний (`model/cases/*.json`)
+- `cases/*.json` — примеры реальных атак и ложных срабатываний (обучение, test-split='case:*')
 
 ### `docs/` — документация
 
